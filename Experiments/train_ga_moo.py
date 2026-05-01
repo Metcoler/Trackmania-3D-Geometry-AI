@@ -30,6 +30,7 @@ from Experiments.train_ga import (
     _evaluate_genome_worker,
     _init_worker,
     make_child_pool,
+    metric_stats,
     parse_list,
 )
 
@@ -40,10 +41,16 @@ def evaluate_individual(env: TM2DSimEnv, individual: Individual) -> dict:
 
 def apply_metrics_to_individual(individual: Individual, metrics: dict, selection_score: float) -> None:
     individual.fitness = float(selection_score)
-    individual.total_progress = float(metrics["progress"])
+    individual.discrete_progress = float(metrics["progress"])
+    individual.dense_progress = float(metrics.get("dense_progress", metrics["progress"]))
     individual.time = float(metrics["time"])
     individual.term = int(metrics["term"])
     individual.distance = float(metrics["distance"])
+    individual.reward = float(metrics.get("reward", metrics.get("fitness", 0.0)))
+    individual.evaluation_steps = int(metrics.get("steps", 0))
+    individual.evaluation_terminated = bool(metrics.get("terminated", False))
+    individual.evaluation_truncated = bool(metrics.get("truncated", False))
+    individual.evaluation_valid = True
 
 
 def objective_priority_indices(names: list[str], priority: str) -> list[int]:
@@ -193,6 +200,7 @@ def main() -> None:
     print(f"[TM2D MOO GA] pareto_tiebreak={args.pareto_tiebreak}")
 
     csv_path = run_dir / "generation_metrics.csv"
+    individual_csv_path = run_dir / "individual_metrics.csv"
     fieldnames = [
         "generation",
         "front0_size",
@@ -205,19 +213,66 @@ def main() -> None:
         "best_term",
         "best_reward",
         "best_scalar_fitness",
+        "best_distance",
+        "best_steps",
+        "finish_count",
+        "crash_count",
+        "timeout_count",
+        "virtual_time_sum",
+        "cumulative_virtual_time",
+        "virtual_steps_sum",
+        "cumulative_virtual_steps",
+        "generation_wall_seconds",
+        "cumulative_wall_seconds",
         "mean_progress",
         "mean_dense_progress",
         "mean_reward",
         "mean_time",
     ] + [f"best_obj_{name}" for name in objective_names] + [f"mean_obj_{name}" for name in objective_names]
+    for prefix in ("progress", "dense_progress", "time", "distance", "reward", "fitness", "steps"):
+        for field in metric_stats(prefix, [0.0]).keys():
+            if field not in fieldnames:
+                fieldnames.append(field)
 
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+    individual_fieldnames = [
+        "generation",
+        "rank",
+        "front_rank",
+        "crowding",
+        "front0",
+        "is_elite",
+        "is_parent",
+        "priority_score",
+        "progress",
+        "dense_progress",
+        "time",
+        "term",
+        "finished",
+        "crashed",
+        "timeout",
+        "distance",
+        "reward",
+        "fitness",
+        "steps",
+        "terminated",
+        "truncated",
+    ] + [f"obj_{name}" for name in objective_names]
+
+    with (
+        csv_path.open("w", newline="", encoding="utf-8") as handle,
+        individual_csv_path.open("w", newline="", encoding="utf-8") as individual_handle,
+    ):
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        individual_writer = csv.DictWriter(individual_handle, fieldnames=individual_fieldnames)
         writer.writeheader()
+        individual_writer.writeheader()
 
         worker_pool = None
         best_overall: Individual | None = None
         best_overall_key: tuple[float, ...] | None = None
+        training_wall_start = time.perf_counter()
+        cumulative_virtual_time = 0.0
+        cumulative_virtual_steps = 0
         if int(args.num_workers) > 1:
             worker_config = {
                 "map_name": args.map_name,
@@ -240,6 +295,7 @@ def main() -> None:
 
         try:
             for generation in range(1, args.generations + 1):
+                generation_wall_start = time.perf_counter()
                 if worker_pool is None:
                     metrics = [evaluate_individual(env, individual) for individual in population]
                 else:
@@ -288,6 +344,23 @@ def main() -> None:
                     best_overall_key = best_key
                     best_overall = best.copy()
 
+                progress_values = np.asarray([float(metric["progress"]) for metric in metrics], dtype=np.float64)
+                dense_progress_values = np.asarray(
+                    [float(metric["dense_progress"]) for metric in metrics],
+                    dtype=np.float64,
+                )
+                reward_values = np.asarray([float(metric["reward"]) for metric in metrics], dtype=np.float64)
+                fitness_values = np.asarray([float(metric["fitness"]) for metric in metrics], dtype=np.float64)
+                time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
+                distance_values = np.asarray([float(metric["distance"]) for metric in metrics], dtype=np.float64)
+                step_values = np.asarray([int(metric.get("steps", 0)) for metric in metrics], dtype=np.float64)
+                term_values = np.asarray([int(metric["term"]) for metric in metrics], dtype=np.int32)
+                virtual_time_sum = float(np.sum(time_values))
+                virtual_steps_sum = int(np.sum(step_values))
+                cumulative_virtual_time += virtual_time_sum
+                cumulative_virtual_steps += virtual_steps_sum
+                generation_wall_seconds = float(time.perf_counter() - generation_wall_start)
+                cumulative_wall_seconds = float(time.perf_counter() - training_wall_start)
                 row = {
                     "generation": generation,
                     "front0_size": len(ordering.fronts[0]) if ordering.fronts else 0,
@@ -300,16 +373,66 @@ def main() -> None:
                     "best_term": int(best_metric["term"]),
                     "best_reward": float(best_metric["reward"]),
                     "best_scalar_fitness": float(best_metric["fitness"]),
-                    "mean_progress": float(np.mean([metric["progress"] for metric in metrics])),
-                    "mean_dense_progress": float(np.mean([metric["dense_progress"] for metric in metrics])),
-                    "mean_reward": float(np.mean([metric["reward"] for metric in metrics])),
-                    "mean_time": float(np.mean([metric["time"] for metric in metrics])),
+                    "best_distance": float(best_metric["distance"]),
+                    "best_steps": int(best_metric.get("steps", 0)),
+                    "finish_count": int(np.sum(term_values > 0)),
+                    "crash_count": int(np.sum(term_values < 0)),
+                    "timeout_count": int(np.sum(term_values == 0)),
+                    "virtual_time_sum": virtual_time_sum,
+                    "cumulative_virtual_time": cumulative_virtual_time,
+                    "virtual_steps_sum": virtual_steps_sum,
+                    "cumulative_virtual_steps": int(cumulative_virtual_steps),
+                    "generation_wall_seconds": generation_wall_seconds,
+                    "cumulative_wall_seconds": cumulative_wall_seconds,
+                    "mean_progress": float(np.mean(progress_values)),
+                    "mean_dense_progress": float(np.mean(dense_progress_values)),
+                    "mean_reward": float(np.mean(reward_values)),
+                    "mean_time": float(np.mean(time_values)),
                 }
                 for objective_idx, name in enumerate(objective_names):
                     row[f"best_obj_{name}"] = float(best_objectives[objective_idx])
                     row[f"mean_obj_{name}"] = float(np.mean(ordered_objectives[:, objective_idx]))
+                row.update(metric_stats("progress", progress_values))
+                row.update(metric_stats("dense_progress", dense_progress_values))
+                row.update(metric_stats("time", time_values))
+                row.update(metric_stats("distance", distance_values))
+                row.update(metric_stats("reward", reward_values))
+                row.update(metric_stats("fitness", fitness_values))
+                row.update(metric_stats("steps", step_values))
                 writer.writerow(row)
                 handle.flush()
+
+                for rank, (individual, metric, objective_row) in enumerate(
+                    zip(population, metrics, ordered_objectives),
+                    start=1,
+                ):
+                    individual_row = {
+                        "generation": generation,
+                        "rank": rank,
+                        "front_rank": int(ordered_ranks[rank - 1]),
+                        "crowding": float(ordered_crowding[rank - 1]),
+                        "front0": int(int(ordered_ranks[rank - 1]) == 0),
+                        "is_elite": int(rank <= int(args.elite_count)),
+                        "is_parent": int(rank <= int(args.parent_count)),
+                        "priority_score": float(individual.fitness),
+                        "progress": float(metric["progress"]),
+                        "dense_progress": float(metric["dense_progress"]),
+                        "time": float(metric["time"]),
+                        "term": int(metric["term"]),
+                        "finished": int(int(metric["term"]) > 0),
+                        "crashed": int(int(metric["term"]) < 0),
+                        "timeout": int(int(metric["term"]) == 0),
+                        "distance": float(metric["distance"]),
+                        "reward": float(metric["reward"]),
+                        "fitness": float(metric["fitness"]),
+                        "steps": int(metric.get("steps", 0)),
+                        "terminated": int(bool(metric.get("terminated", False))),
+                        "truncated": int(bool(metric.get("truncated", False))),
+                    }
+                    for objective_idx, name in enumerate(objective_names):
+                        individual_row[f"obj_{name}"] = float(objective_row[objective_idx])
+                    individual_writer.writerow(individual_row)
+                individual_handle.flush()
 
                 print(
                     f"gen={generation:04d} front0={row['front0_size']:02d} "
@@ -337,6 +460,7 @@ def main() -> None:
     best_overall.policy.save(str(best_path), extra={"config": config})
     print(f"Saved best policy to {best_path}")
     print(f"Saved metrics to {csv_path}")
+    print(f"Saved individual metrics to {individual_csv_path}")
 
     if args.render_best:
         from Experiments.tm2d_viewer import TM2DViewer

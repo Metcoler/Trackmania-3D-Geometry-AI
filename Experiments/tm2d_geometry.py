@@ -340,11 +340,11 @@ class TM2DGeometry:
         return float(path_index / max(1, len(self.path_tiles_xz) - 1) * 100.0)
 
     def dense_progress_for_point(self, point: np.ndarray, path_index: int) -> float:
-        """Continuous progress along the current path segment.
+        """Continuous progress across the current path tile.
 
-        The live game progress is tile-discrete, but this local simulator can use
-        geometric progress between path tile centers. That gives reward/GA
-        experiments a signal before the car reaches the next 32x32 tile.
+        This mirrors `Car.dense_progress()`: the discrete path index advances at
+        tile boundaries, so dense progress must fill the whole current tile
+        span instead of only the center-to-center half segment.
         """
         point = np.asarray(point, dtype=np.float32)
         if len(self.path_points) <= 1:
@@ -352,15 +352,46 @@ class TM2DGeometry:
         idx0 = int(np.clip(path_index, 0, len(self.path_points) - 1))
         if idx0 >= len(self.path_points) - 1:
             return 100.0
-        start = self.path_points[idx0]
-        end = self.path_points[idx0 + 1]
-        segment = end - start
-        segment_len_sq = float(np.dot(segment, segment))
-        if segment_len_sq <= 1e-6:
-            fraction = 0.0
+
+        current = self.path_points[idx0].astype(np.float32, copy=False)
+        next_point = self.path_points[idx0 + 1].astype(np.float32, copy=False)
+        previous = (
+            self.path_points[idx0 - 1].astype(np.float32, copy=False)
+            if idx0 > 0
+            else None
+        )
+
+        exit_direction = _normalize_2d(next_point - current)
+        if previous is None:
+            entry_direction = exit_direction
         else:
-            fraction = float(np.dot(point - start, segment) / segment_len_sq)
-        fraction = float(np.clip(fraction, 0.0, 1.0))
+            entry_direction = _normalize_2d(current - previous, fallback=exit_direction)
+
+        half_tile = MAP_BLOCK_SIZE * 0.5
+        entry = current - entry_direction * half_tile
+        exit_point = current + exit_direction * half_tile
+
+        def project_segment(p: np.ndarray, start: np.ndarray, end: np.ndarray) -> tuple[float, float, float]:
+            segment = end - start
+            segment_len_sq = float(np.dot(segment, segment))
+            if segment_len_sq <= 1e-6:
+                return 0.0, 0.0, float(np.linalg.norm(p - start))
+            segment_len = float(math.sqrt(segment_len_sq))
+            t = float(np.dot(p - start, segment) / segment_len_sq)
+            t = float(np.clip(t, 0.0, 1.0))
+            closest = start + segment * t
+            distance = float(np.linalg.norm(p - closest))
+            return t, segment_len, distance
+
+        entry_t, entry_len, entry_dist = project_segment(point, entry, current)
+        exit_t, exit_len, exit_dist = project_segment(point, current, exit_point)
+        total_len = entry_len + exit_len
+        if total_len <= 1e-6:
+            fraction = 0.0
+        elif entry_dist <= exit_dist:
+            fraction = float(np.clip((entry_t * entry_len) / total_len, 0.0, 1.0))
+        else:
+            fraction = float(np.clip((entry_len + exit_t * exit_len) / total_len, 0.0, 1.0))
         dense_index = float(idx0) + fraction
         return float(dense_index / max(1, len(self.path_points) - 1) * 100.0)
 

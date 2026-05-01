@@ -617,9 +617,9 @@ class Car:
         )
     
 
-        delta_tile = self.update_path_state()
-        data['map_progress'] = delta_tile
-        data['total_progress'] = (self.path_tile_index / (len(self.game_map.path_tiles)-1)) * 100
+        self.update_path_state()
+        data['discrete_progress'] = self.discrete_progress()
+        data['dense_progress'] = self.dense_progress()
         try:
             self.next_tiles = self.game_map.path_tiles[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
             self.next_instructions = self.game_map.path_instructions[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
@@ -729,6 +729,102 @@ class Car:
             self.path_tile_index = 0
             return 0
         return 0
+
+    def discrete_progress(self) -> float:
+        path_len = len(self.game_map.path_tiles)
+        if path_len <= 1:
+            return 100.0
+        index = float(np.clip(self.path_tile_index, 0, path_len - 1))
+        return float((index / float(path_len - 1)) * 100.0)
+
+    def dense_progress(self) -> float:
+        """Progress projected across the current path tile.
+
+        `discrete_progress` changes only when the car enters
+        the next path tile. The dense value should therefore fill the whole
+        interval from the current tile boundary to the next tile boundary. A
+        center-to-center projection would only reach 50% before the discrete
+        tile index advances.
+        """
+
+        path_tiles = self.game_map.path_tiles
+        path_len = len(path_tiles)
+        discrete = self.discrete_progress()
+        if path_len <= 1:
+            return discrete
+
+        idx = int(np.clip(self.path_tile_index, 0, path_len - 1))
+        if idx >= path_len - 1:
+            return 100.0
+
+        current_center = Map.tile_coordinate_to_point(path_tiles[idx], dy=0)
+        next_center = Map.tile_coordinate_to_point(path_tiles[idx + 1], dy=0)
+        previous_center = (
+            Map.tile_coordinate_to_point(path_tiles[idx - 1], dy=0)
+            if idx > 0
+            else None
+        )
+        current_xz = np.asarray([current_center[0], current_center[2]], dtype=np.float64)
+        next_xz = np.asarray([next_center[0], next_center[2]], dtype=np.float64)
+        previous_xz = (
+            np.asarray([previous_center[0], previous_center[2]], dtype=np.float64)
+            if previous_center is not None
+            else None
+        )
+        car_xz = np.asarray([self.position[0], self.position[2]], dtype=np.float64)
+
+        exit_direction = next_xz - current_xz
+        exit_norm = float(np.linalg.norm(exit_direction))
+        if exit_norm <= 1e-9:
+            return discrete
+        exit_direction = exit_direction / exit_norm
+
+        if previous_xz is None:
+            entry_direction = exit_direction
+        else:
+            entry_direction = current_xz - previous_xz
+            entry_norm = float(np.linalg.norm(entry_direction))
+            if entry_norm <= 1e-9:
+                entry_direction = exit_direction
+            else:
+                entry_direction = entry_direction / entry_norm
+
+        # The tile index changes at tile boundaries, not at tile centers.
+        # Approximate the route inside the current tile as:
+        # entry boundary -> tile center -> exit boundary. This keeps straight
+        # tiles continuous and also behaves sensibly in 90-degree turns.
+        half_tile = MAP_BLOCK_SIZE * 0.5
+        entry_xz = current_xz - entry_direction * half_tile
+        exit_xz = current_xz + exit_direction * half_tile
+
+        def project_segment(point, start, end) -> tuple[float, float, float]:
+            segment = end - start
+            segment_len_sq = float(np.dot(segment, segment))
+            if segment_len_sq <= 1e-9:
+                return 0.0, 0.0, float(np.linalg.norm(point - start))
+            segment_len = float(np.sqrt(segment_len_sq))
+            t = float(np.dot(point - start, segment) / segment_len_sq)
+            t = float(np.clip(t, 0.0, 1.0))
+            closest = start + segment * t
+            distance = float(np.linalg.norm(point - closest))
+            return t, segment_len, distance
+
+        entry_t, entry_len, entry_dist = project_segment(car_xz, entry_xz, current_xz)
+        exit_t, exit_len, exit_dist = project_segment(car_xz, current_xz, exit_xz)
+        total_len = entry_len + exit_len
+        if total_len <= 1e-9:
+            return discrete
+
+        if entry_dist <= exit_dist:
+            local_distance = entry_t * entry_len
+        else:
+            local_distance = entry_len + exit_t * exit_len
+        fraction = float(np.clip(local_distance / total_len, 0.0, 1.0))
+        dense_index = float(idx) + fraction
+        dense = float((dense_index / float(path_len - 1)) * 100.0)
+
+        # Never let the dense value fall below the confirmed tile progress.
+        return float(max(discrete, dense))
         
 
     def decode_data_from_openplanet(self, packet: bytes):

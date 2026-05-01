@@ -2,6 +2,7 @@ import numpy as np
 from typing import Optional, Tuple
 
 from EvolutionPolicy import EvolutionPolicy, HiddenActivations, HiddenDims
+from RankingKey import evaluate_ranking_key, finite_or_large
 
 
 class Individual:
@@ -15,27 +16,9 @@ class Individual:
     TIME_WEIGHT = 10_000.0
     DISTANCE_WEIGHT = 1.0
     COMPARE_BY_RANKING_KEY = False
-    RANKING_KEY_MODE = "term_progress_time_distance"
-    RANKING_PROGRESS_SOURCE = "progress"
-    RANKING_PROGRESS_SOURCES = ("progress", "dense_progress")
-    RANKING_KEY_MODES = (
-        "term_progress_time_distance",
-        "progress",
-        "progress_time",
-        "progress_time_distance",
-        "finished_progress_time",
-        "progress_finished_time",
-        "progress_finished_time_distance",
-        "progress_finished_crashed_time",
-        "progress_finished_crashed_time_distance",
-        "finished_crashed_progress_time",
-        "crashed_finished_progress_time",
-        "finished_progress_crashed_time",
-        "finished_progress_crashed_time_distance",
-        "finished_progress_time_crashed",
-        "finished_progress_time_distance",
-        "progress_term_time_distance",
-    )
+    RANKING_KEY = "(term, progress, -time, -distance)"
+    RANKING_PROGRESS_SOURCE = "discrete_progress"
+    RANKING_PROGRESS_SOURCES = ("discrete_progress", "dense_progress")
 
     def __init__(
         self,
@@ -58,11 +41,16 @@ class Individual:
         )
 
         self.fitness: Optional[float] = None
-        self.total_progress: float = 0.0
+        self.discrete_progress: float = 0.0
         self.dense_progress: float = 0.0
         self.time: float = float("inf")
         self.term: int = -999
         self.distance: float = 0.0
+        self.reward: float = 0.0
+        self.evaluation_valid: bool = False
+        self.evaluation_steps: int = 0
+        self.evaluation_terminated: bool = False
+        self.evaluation_truncated: bool = False
 
     @property
     def genome(self) -> np.ndarray:
@@ -80,11 +68,16 @@ class Individual:
 
     def invalidate_evaluation(self) -> None:
         self.fitness = None
-        self.total_progress = 0.0
+        self.discrete_progress = 0.0
         self.dense_progress = 0.0
         self.time = float("inf")
         self.term = -999
         self.distance = 0.0
+        self.reward = 0.0
+        self.evaluation_valid = False
+        self.evaluation_steps = 0
+        self.evaluation_terminated = False
+        self.evaluation_truncated = False
 
     def act(self, obs: np.ndarray) -> np.ndarray:
         return self.policy.act(obs)
@@ -96,68 +89,60 @@ class Individual:
         time_value: float,
         distance: float,
     ) -> Tuple[float, ...]:
+        return Individual.ranking_key_from_values(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+        )
+
+    @staticmethod
+    def ranking_key_from_values(
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        discrete_progress: float | None = None,
+        dense_progress: float | None = None,
+    ) -> Tuple[float, ...]:
         term = int(term)
         progress = float(progress)
-        dist = float(distance)
-        t = float(time_value)
-
-        if not np.isfinite(t):
-            t = 10**9
-        if not np.isfinite(dist):
-            dist = 10**9
+        discrete = progress if discrete_progress is None else float(discrete_progress)
+        dense = progress if dense_progress is None else float(dense_progress)
+        dist = finite_or_large(float(distance))
+        t = finite_or_large(float(time_value))
 
         finished = 1.0 if term > 0 else 0.0
         crashed = 1.0 if term < 0 else 0.0
-
-        mode = str(Individual.RANKING_KEY_MODE)
-        if mode == "term_progress_time_distance":
-            return (float(term), progress, -t, -dist)
-        if mode == "progress":
-            return (progress,)
-        if mode == "progress_time_distance":
-            return (progress, -t, -dist)
-        if mode == "progress_time":
-            return (progress, -t)
-        if mode == "finished_progress_time":
-            return (finished, progress, -t)
-        if mode == "progress_finished_time":
-            return (progress, finished, -t)
-        if mode == "progress_finished_time_distance":
-            return (progress, finished, -t, -dist)
-        if mode == "progress_finished_crashed_time":
-            return (progress, finished, -crashed, -t)
-        if mode == "progress_finished_crashed_time_distance":
-            return (progress, finished, -crashed, -t, -dist)
-        if mode == "finished_crashed_progress_time":
-            return (finished, -crashed, progress, -t)
-        if mode == "crashed_finished_progress_time":
-            return (-crashed, finished, progress, -t)
-        if mode == "finished_progress_crashed_time":
-            return (finished, progress, -crashed, -t)
-        if mode == "finished_progress_crashed_time_distance":
-            return (finished, progress, -crashed, -t, -dist)
-        if mode == "finished_progress_time_crashed":
-            return (finished, progress, -t, -crashed)
-        if mode == "finished_progress_time_distance":
-            return (finished, progress, -t, -dist)
-        if mode == "progress_term_time_distance":
-            return (progress, float(term), -t, -dist)
-        raise ValueError(f"Unknown Individual.RANKING_KEY_MODE: {mode}")
+        metrics = {
+            "term": float(term),
+            "finished": finished,
+            "crashed": crashed,
+            "progress": progress,
+            "ranking_progress": progress,
+            "discrete_progress": discrete,
+            "dense_progress": dense,
+            "time": t,
+            "distance": dist,
+        }
+        return evaluate_ranking_key(Individual.RANKING_KEY, metrics)
 
     def ranking_progress(self) -> float:
         source = str(Individual.RANKING_PROGRESS_SOURCE)
-        if source == "progress":
-            return float(self.total_progress)
+        if source == "discrete_progress":
+            return float(self.discrete_progress)
         if source == "dense_progress":
             return float(self.dense_progress)
         raise ValueError(f"Unknown Individual.RANKING_PROGRESS_SOURCE: {source}")
 
     def ranking_key(self) -> Tuple[float, ...]:
-        return self.ranking_key_for(
+        return self.ranking_key_from_values(
             term=self.term,
             progress=self.ranking_progress(),
             time_value=self.time,
             distance=self.distance,
+            discrete_progress=self.discrete_progress,
+            dense_progress=self.dense_progress,
         )
 
     @classmethod
@@ -175,7 +160,7 @@ class Individual:
             distance=distance,
         )
 
-        if cls.RANKING_KEY_MODE == "term_progress_time_distance" and len(key) == 4:
+        if cls.RANKING_KEY == "(term, progress, -time, -distance)" and len(key) == 4:
             term_key, progress_key, neg_time_key, neg_dist = key
             time_key = -neg_time_key
             dist = -neg_dist
@@ -651,7 +636,7 @@ class Individual:
         return (
             "Individual("
             f"term={self.term}, "
-            f"progress={self.total_progress:.1f}, "
+            f"discrete_progress={self.discrete_progress:.1f}, "
             f"dense_progress={self.dense_progress:.1f}, "
             f"distance={self.distance:.1f}, "
             f"time={self.time:.2f}, "
@@ -669,11 +654,16 @@ class Individual:
             hidden_activation=self.policy.hidden_activation,
         )
         new.fitness = self.fitness
-        new.total_progress = self.total_progress
+        new.discrete_progress = self.discrete_progress
         new.dense_progress = self.dense_progress
         new.time = self.time
         new.term = self.term
         new.distance = self.distance
+        new.reward = self.reward
+        new.evaluation_valid = self.evaluation_valid
+        new.evaluation_steps = self.evaluation_steps
+        new.evaluation_terminated = self.evaluation_terminated
+        new.evaluation_truncated = self.evaluation_truncated
         return new
 
     def mutate(self, mutation_prob: float = 0.1, sigma: float = 0.1) -> None:

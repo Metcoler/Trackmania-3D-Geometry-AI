@@ -488,9 +488,9 @@ class TM2DSimEnv:
             "dy": 0.0,
             "dz": float(forward[1]),
             "time": float(self.time),
-            "total_progress": float(progress),
+            "discrete_progress": float(progress),
             "dense_progress": float(dense_progress),
-            "map_progress": 0.0,
+            "done": 1.0 if int(self.term) > 0 else 0.0,
             "slip_mean": slip_mean,
             "slip_fl": slip_mean,
             "slip_fr": slip_mean,
@@ -612,18 +612,23 @@ class TM2DSimEnv:
                         "position": self.position.copy(),
                         "heading": float(self.heading),
                         "lasers": np.asarray(info.get("laser_endpoints_2d"), dtype=np.float32).copy(),
-                        "progress": float(info.get("total_progress", 0.0)),
+                        "progress": float(info.get("discrete_progress", 0.0)),
                         "dense_progress": float(info.get("dense_progress", 0.0)),
                     }
                 )
             if terminated or truncated:
                 break
         term = int(info.get("term", 0 if truncated else -1))
-        progress = float(info.get("total_progress", 0.0))
+        progress = float(info.get("discrete_progress", 0.0))
         dense_progress = float(info.get("dense_progress", progress))
         time_value = float(info.get("time", self.time))
         distance = float(info.get("distance", self.distance))
-        fitness = Individual.compute_scalar_fitness_for(term, progress, time_value, distance)
+        fitness_progress = (
+            dense_progress
+            if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
+            else progress
+        )
+        fitness = Individual.compute_scalar_fitness_for(term, fitness_progress, time_value, distance)
         result = {
             "term": term,
             "progress": progress,

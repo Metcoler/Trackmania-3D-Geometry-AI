@@ -77,9 +77,9 @@ def build_debug_panel(frame: int, data_dictionary, instructions, observation, mi
     fps = float(current_fps)
     current_error = float(data_dictionary.get("segment_heading_error", 0.0))
     next_error = float(data_dictionary.get("next_segment_heading_error", 0.0))
-    total_progress = float(data_dictionary.get("total_progress", 0.0))
+    discrete_progress = float(data_dictionary.get("discrete_progress", 0.0))
+    dense_progress = float(data_dictionary.get("dense_progress", discrete_progress))
     path_tile_index = int(car.path_tile_index)
-    map_progress = float(data_dictionary.get("map_progress", 0.0))
     speed = float(data_dictionary.get("speed", 0.0))
     side_speed = float(data_dictionary.get("side_speed", 0.0))
     game_time = float(data_dictionary.get("time", 0.0))
@@ -111,9 +111,9 @@ def build_debug_panel(frame: int, data_dictionary, instructions, observation, mi
         f"mode={'3D' if encoder.vertical_mode else '2D'}  "
         f"fps={fps:6.2f}  "
         f"time={game_time:6.2f}s  "
-        f"progress={total_progress:6.2f}%  "
+        f"disc={discrete_progress:6.2f}%  "
+        f"dense={dense_progress:6.2f}%  "
         f"path_idx={path_tile_index:03d}  "
-        f"map_step={map_progress:+.0f}  "
         f"speed={speed:7.2f}  "
         f"side={side_speed:7.2f}  "
         f"seg_err={current_error:+.3f}  "
@@ -182,7 +182,8 @@ def print_live_debug(frame: int, data_dictionary, instructions, observation, mir
 def build_dashboard_lines(frame: int, data_dictionary, instructions, observation) -> list[str]:
     fps = float(current_fps)
     game_time = float(data_dictionary.get("time", 0.0))
-    progress = float(data_dictionary.get("total_progress", 0.0))
+    discrete_progress = float(data_dictionary.get("discrete_progress", 0.0))
+    dense_progress = float(data_dictionary.get("dense_progress", discrete_progress))
     speed = float(data_dictionary.get("speed", 0.0))
     side_speed = float(data_dictionary.get("side_speed", 0.0))
     segment_error = float(data_dictionary.get("segment_heading_error", 0.0))
@@ -215,7 +216,8 @@ def build_dashboard_lines(frame: int, data_dictionary, instructions, observation
 
     lines = [
         f"frame={frame:06d} fps={fps:5.1f} time={game_time:6.2f}s "
-        f"prog={progress:6.2f}% idx={path_tile_index:03d} "
+        f"disc={discrete_progress:6.2f}% dense={dense_progress:6.2f}% "
+        f"idx={path_tile_index:03d} "
         f"spd={speed:7.2f} side={side_speed:7.2f}",
         f"heading_err={segment_error:+.3f}/{next_error:+.3f} "
         f"instr={instructions_text} surface={surface_text} height={height_text} wet={wetness:.2f}",
@@ -273,7 +275,7 @@ if __name__ == "__main__":
     map_name = "surface_test"
     map_name = "height_test"
     map_name = "pallete2"
-    #map_name = "AI Training #5"
+    map_name = "AI Training #5"
     vizualize = True
     vertical_mode = True
 

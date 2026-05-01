@@ -45,7 +45,43 @@ The sandbox intentionally reuses the main project pieces where possible:
 - `Experiments/visualize_tm2d.py` opens a small tkinter visualizer for the projected map, car, and lidar rays.
 - `Experiments/calibrate_tm2d_physics.py` reads supervised `attempt_*.npz` files and estimates simple 2D physics parameters from recorded `speed`, `game_times`, `distances`, and `gas/brake/steer` actions.
 
+Metric-parity note:
+
+- `TM2DSimEnv` mirrors the live `Car.get_data()` metric names for reward work:
+  `discrete_progress`, `dense_progress`, `done`, `time`, and `distance`.
+- `done` in the 2D env follows the OpenPlanet meaning used by live TM: it is
+  `1.0` only for finish, not for every terminated rollout.
+- Historical aliases such as `total_progress`, `tile_progress`,
+  `block_progress`, and `map_progress` were removed from the current runtime
+  data flow. Old logs/checkpoints may still contain those names, but new code
+  should use only `discrete_progress` for confirmed path-tile progress and
+  `dense_progress` for projected between-tile progress.
+- 2D rollout diagnostic `fitness` now uses `dense_progress` when
+  `Individual.RANKING_PROGRESS_SOURCE == "dense_progress"`, matching
+  `EvolutionTrainer._evaluate_single_rollout()`.
+- The remaining intentional mismatch is termination physics: local 2D uses
+  road-containment collision (`center` or `corners`), while live TM uses
+  lidar contact, stall, wall-ride, heading-error, timeout, and OpenPlanet
+  finish signals. Reward functions that work locally should therefore be
+  re-tested with the strictest local settings before being trusted in live TM.
+
 Default experiment outputs go to ignored `Experiments/runs/`.
+
+Local 2D GA logging is intentionally research-grade now. `train_ga.py` and
+`train_ga_moo.py` write:
+
+- `generation_metrics.csv`: one row per generation with best/mean metrics plus
+  distribution statistics (`min`, `p10`, `p25`, `median`, `mean`, `std`, `p75`,
+  `p90`, `max`) for progress, dense progress, time, distance, reward, fitness,
+  and rollout steps.
+- `individual_metrics.csv`: one row per individual per generation with rank,
+  elite/parent flags, cached-evaluation flag where applicable, progress,
+  dense progress, time, term, finished/crashed/timeout booleans, distance,
+  reward, fitness, steps, and selection-specific values such as ranking keys
+  or Pareto objectives.
+- Virtual experience counters: generation and cumulative virtual driving time
+  plus rollout step counts, so thesis plots can show both wall-clock training
+  cost and how many simulated driving hours the algorithm consumed.
 
 Performance notes for the sandbox:
 
@@ -285,9 +321,11 @@ it stores rollout metrics on each `Individual`, leaves `fitness=None`, and lets
 `best_fitness` column in CSV should then be read only as a diagnostic plot
 value, not as the actual selection mechanism.
 
-Tuple ranking candidates are intentionally configured through
-`--ranking-key-mode`, not through `--reward-mode`. The current local GA
-ranking modes include:
+Tuple ranking candidates are intentionally configured separately from
+`--reward-mode`. The current syntax is an explicit tuple expression via
+`--ranking-key`; old `--ranking-key-mode` names were removed from the active
+workflow because they hid the real lexicographic comparison behind strings like
+`progress_term_time_distance`. Historical aliases were:
 
 ```text
 term_progress_time_distance              = (term, progress, -time, -distance)
@@ -305,22 +343,50 @@ finished_progress_crashed_time           = (finished, progress, -crashed, -time)
 finished_progress_crashed_time_distance  = (finished, progress, -crashed, -time, -distance)
 finished_progress_time_crashed           = (finished, progress, -time, -crashed)
 finished_progress_time_distance          = (finished, progress, -time, -distance)
+progress_term_time                       = (progress, term, -time)
 progress_term_time_distance              = (progress, term, -time, -distance)  # legacy comparison
+```
+
+Current explicit syntax:
+
+```python
+ranking_key = "(dense_progress, term, -time, -distance)"
+```
+
+`RankingKey.py` parses this without using `eval`: it accepts a comma-separated
+tuple of known metric names and an optional unary `-`. Legacy underscore names
+now raise an error with an example tuple, so new experiments should be
+self-documenting in their command line and `config.json`.
+
+Allowed metric names:
+
+```text
+term, finished, crashed, progress, ranking_progress,
+discrete_progress, dense_progress, time, distance
 ```
 
 The `progress` slot in these tuple modes can now be selected with
 `--ranking-progress-source`:
 
 ```text
-progress       = discrete checkpoint/path-tile progress in percent
-dense_progress = geometric progress projected onto the current path segment, also in percent
+discrete_progress = confirmed checkpoint/path-tile progress in percent
+dense_progress    = geometric progress projected onto the current path segment, also in percent
 ```
+
+Naming note:
+The runtime metric cleanup intentionally removed the old aliases
+`total_progress`, `tile_progress`, `block_progress`, and `map_progress`. They
+were useful during the transition, but they made reward discussions ambiguous.
+Current code should read `discrete_progress` or `dense_progress` explicitly.
+Some persisted artifacts still keep older field names such as checkpoint
+`progresses`/`best_progress` for compatibility with existing files; those are
+storage compatibility names, not live observation keys.
 
 This lets us test a very simple dense-progress ranking without creating a new
 reward function. For example:
 
 ```powershell
-python Experiments\train_ga.py --map-name "AI Training #5" --fitness-mode ranking --ranking-key-mode progress_time --ranking-progress-source dense_progress
+python Experiments\train_ga.py --map-name "AI Training #5" --fitness-mode ranking --ranking-key "(dense_progress, -time)"
 ```
 
 This ranks agents as:
@@ -343,23 +409,47 @@ selection rather than scalar fitness:
 
 ```python
 Individual.COMPARE_BY_RANKING_KEY = True
-Individual.RANKING_KEY_MODE = "progress_term_time_distance"
-Individual.RANKING_PROGRESS_SOURCE = "progress"
+Individual.RANKING_KEY = "(dense_progress, term, -time, -distance)"
+Individual.RANKING_PROGRESS_SOURCE = "dense_progress"
 ```
 
 The effective selection tuple is:
 
 ```python
-return (progress, term, -time, -distance)
+return (dense_progress, term, -time, -distance)
 ```
 
 Interpretation:
-Progress is the primary objective. `term` is only a tie-break when two agents
-reach the same progress bucket, so a timeout can no longer beat a much farther
-crash just because `term=0 > -1`. Time and distance remain later tie-breakers.
-This experiment is meant to test the hypothesis suggested by the local tuple
-comparison, where `progress_term_time_distance` solved the map while the old
-`term_progress_time_distance` got stuck around early progress.
+Dense progress is the primary objective. `term` is only a tie-break when two
+agents reach effectively the same route position, so a timeout can no longer
+beat a much farther crash just because `term=0 > -1`. Time and distance remain
+later tie-breakers. This is the real Trackmania version of the local simulator
+result where dense progress was much more robust than discrete tile progress.
+`discrete_progress` is logged as the confirmed path-tile progress and
+`dense_progress` as the smoother projected progress. `generation_summary.csv`
+logs both `best_dense_progress` and `mean_dense_progress`. New real GA run
+directory names include the progress source, for example
+`_dense_progress_term_neg_time_neg_distance`, to avoid mixing these results
+with older discrete-progress runs.
+
+Elite evaluation cache:
+Live Trackmania evaluation is expensive and non-headless, so unchanged elite
+copies are no longer re-driven every generation. `Individual.copy()` preserves
+the previous rollout metrics and `evaluation_valid=True`; genome changes
+through mutation reset that flag. `EvolutionTrainer.evaluate_population()` skips
+valid non-mirrored individuals and logs the count as `cached_evaluations` in
+`generation_summary.csv`. This should save roughly the elite fraction of live
+evaluation time when mirror evaluation is disabled. It intentionally does not
+reuse metrics for mirrored/evaluate-both-mirrors rollouts.
+
+The same cache is also implemented in the local 2D GA sandbox. In
+`Experiments/train_ga.py`, unchanged valid elites are converted back to cached
+metric dictionaries before worker payloads are built, so process-based
+parallelism remains simple: workers only receive genomes that really need a new
+rollout. `generation_metrics.csv` logs `cached_evaluations`. A smoke run with
+`--num-workers 2`, `--population-size 6`, and `--elite-count 2` confirmed the
+expected behavior: generation 1 cached `0` evaluations and generation 2 cached
+`2` evaluations.
 
 Here `finished = 1` only when `term > 0`, otherwise `0`; `crashed = 1` only
 when `term < 0`, otherwise `0`. Timeout is therefore no longer hidden inside a
@@ -387,10 +477,12 @@ path has `36` path tiles, so one discrete bucket is
 `100 / (36 - 1) = 2.857142857%`.
 
 `dense_progress`:
-This is a smoother local-simulator progress estimate between path tiles. It
-is still expressed in percent, but it can produce values between the discrete
-progress buckets. It was added because many random policies otherwise tie at
-exactly `0%`.
+This is a smoother progress estimate between path tiles. In the local
+simulator it comes from the projected route position; in real Trackmania it is
+computed in `Car.py` by projecting the car position onto the centerline segment
+from the current path tile to the next path tile. It is still expressed in
+percent, but it can produce values between the discrete progress buckets. It is
+clamped so it never goes below confirmed `discrete_progress`.
 
 `progress_norm`:
 This is normalized progress:

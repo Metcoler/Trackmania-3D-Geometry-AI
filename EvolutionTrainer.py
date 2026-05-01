@@ -11,6 +11,7 @@ from Car import Car
 from EvolutionPolicy import EvolutionPolicy
 from Individual import Individual
 from ObservationEncoder import ObservationEncoder
+from RankingKey import canonical_ranking_key_expression
 
 
 HiddenDims = Union[int, Sequence[int]]
@@ -30,6 +31,23 @@ def normalize_hidden_dims(hidden_dim: HiddenDims) -> Tuple[int, ...]:
 def hidden_dims_tag(hidden_dims: HiddenDims) -> str:
     dims = normalize_hidden_dims(hidden_dims)
     return "x".join(str(dim) for dim in dims)
+
+
+def safe_ranking_key_tag(ranking_key: str) -> str:
+    tag = canonical_ranking_key_expression(ranking_key)
+    replacements = {
+        "(": "",
+        ")": "",
+        ",": "",
+        "+": "",
+        "-": "neg_",
+        " ": "_",
+    }
+    for old, new in replacements.items():
+        tag = tag.replace(old, new)
+    while "__" in tag:
+        tag = tag.replace("__", "_")
+    return tag.strip("_")
 
 
 def normalize_hidden_activations(
@@ -76,7 +94,8 @@ class TrainingLogger:
         "individual_index",
         "term",
         "is_finish",
-        "total_progress",
+        "discrete_progress",
+        "dense_progress",
         "distance",
         "time",
         "fitness",
@@ -85,6 +104,7 @@ class TrainingLogger:
     SUMMARY_HEADERS = [
         "timestamp_utc",
         "generation",
+        "cached_evaluations",
         "dist_avg",
         "dist_best_gen",
         "dist_best_global",
@@ -96,6 +116,8 @@ class TrainingLogger:
         "timeout_rate",
         "best_term",
         "best_progress",
+        "best_dense_progress",
+        "mean_dense_progress",
         "best_distance",
         "best_time",
         "best_fitness",
@@ -193,7 +215,10 @@ class TrainingLogger:
 
         genomes = np.stack([ind.genome for ind in population]).astype(np.float32)
         progresses = np.array(
-            [float(ind.total_progress) for ind in population], dtype=np.float32
+            [float(ind.discrete_progress) for ind in population], dtype=np.float32
+        )
+        dense_progresses = np.array(
+            [float(ind.dense_progress) for ind in population], dtype=np.float32
         )
         times = np.array([float(ind.time) for ind in population], dtype=np.float32)
         terms = np.array([int(ind.term) for ind in population], dtype=np.int32)
@@ -207,6 +232,7 @@ class TrainingLogger:
             generation=np.array([generation], dtype=np.int32),
             genomes=genomes,
             progresses=progresses,
+            dense_progresses=dense_progresses,
             times=times,
             terms=terms,
             distances=distances,
@@ -244,7 +270,8 @@ class TrainingLogger:
         if best_individual is not None:
             payload.update(
                 best_genome=best_individual.genome.astype(np.float32),
-                best_progress=np.array([float(best_individual.total_progress)], dtype=np.float32),
+                best_progress=np.array([float(best_individual.discrete_progress)], dtype=np.float32),
+                best_dense_progress=np.array([float(best_individual.dense_progress)], dtype=np.float32),
                 best_time=np.array([float(best_individual.time)], dtype=np.float32),
                 best_term=np.array([int(best_individual.term)], dtype=np.int32),
                 best_distance=np.array([float(best_individual.distance)], dtype=np.float32),
@@ -271,7 +298,10 @@ class TrainingLogger:
         final_path = self.final_population_path
         genomes = np.stack([ind.genome for ind in population]).astype(np.float32)
         progresses = np.array(
-            [float(ind.total_progress) for ind in population], dtype=np.float32
+            [float(ind.discrete_progress) for ind in population], dtype=np.float32
+        )
+        dense_progresses = np.array(
+            [float(ind.dense_progress) for ind in population], dtype=np.float32
         )
         times = np.array([float(ind.time) for ind in population], dtype=np.float32)
         terms = np.array([int(ind.term) for ind in population], dtype=np.int32)
@@ -285,6 +315,7 @@ class TrainingLogger:
             generation=np.array([generation], dtype=np.int32),
             genomes=genomes,
             progresses=progresses,
+            dense_progresses=dense_progresses,
             times=times,
             terms=terms,
             distances=distances,
@@ -332,7 +363,8 @@ class TrainingLogger:
     ) -> str:
         payload = dict(
             genome=best.genome.astype(np.float32),
-            total_progress=float(best.total_progress),
+            discrete_progress=float(best.discrete_progress),
+            dense_progress=float(best.dense_progress),
             time=float(best.time),
             term=int(best.term),
             distance=float(best.distance),
@@ -364,7 +396,8 @@ class TrainingLogger:
         vertical_mode: bool = False,
     ) -> Dict:
         extra: Dict = dict(
-            total_progress=float(best.total_progress),
+            discrete_progress=float(best.discrete_progress),
+            dense_progress=float(best.dense_progress),
             time=float(best.time),
             term=int(best.term),
             distance=float(best.distance),
@@ -438,6 +471,7 @@ class EvolutionTrainer:
             for _ in range(pop_size)
         ]
         self.best_individual: Optional[Individual] = None
+        self.last_cached_evaluations: int = 0
 
         # Počet už vyhodnotených generácií.
         self.generation: int = 0
@@ -502,8 +536,11 @@ class EvolutionTrainer:
                 mirrored=True,
             )
             rollout_metrics = [normal_metrics, mirrored_metrics]
-            mean_progress = float(
-                np.mean([metrics["total_progress"] for metrics in rollout_metrics])
+            mean_discrete_progress = float(
+                np.mean([metrics["discrete_progress"] for metrics in rollout_metrics])
+            )
+            mean_dense_progress = float(
+                np.mean([metrics["dense_progress"] for metrics in rollout_metrics])
             )
             mean_time = float(np.mean([metrics["time"] for metrics in rollout_metrics]))
             mean_distance = float(
@@ -514,20 +551,22 @@ class EvolutionTrainer:
                 min(int(metrics["term"]) for metrics in rollout_metrics)
             )
 
-            individual.total_progress = mean_progress
+            individual.discrete_progress = mean_discrete_progress
+            individual.dense_progress = mean_dense_progress
             individual.time = mean_time
             individual.term = representative_term
             individual.distance = mean_distance
             individual.fitness = mean_fitness
+            individual.evaluation_valid = True
 
             if verbose and index is not None and total is not None:
                 normal_status = self._term_status_text(int(normal_metrics["term"]))
                 mirrored_status = self._term_status_text(int(mirrored_metrics["term"]))
                 print(
                     f"{index + 1}/{total} "
-                    f"N:{normal_status} {normal_metrics['total_progress']:.1f}%/{normal_metrics['time']:.2f}s | "
-                    f"M:{mirrored_status} {mirrored_metrics['total_progress']:.1f}%/{mirrored_metrics['time']:.2f}s | "
-                    f"AVG progress={mean_progress:.1f}% | time={mean_time:.2f}s | score={mean_fitness:.2f}"
+                    f"N:{normal_status} {normal_metrics['discrete_progress']:.1f}%/{normal_metrics['time']:.2f}s | "
+                    f"M:{mirrored_status} {mirrored_metrics['discrete_progress']:.1f}%/{mirrored_metrics['time']:.2f}s | "
+                    f"AVG progress={mean_discrete_progress:.1f}% | time={mean_time:.2f}s | score={mean_fitness:.2f}"
                 )
             return mean_fitness
 
@@ -535,18 +574,20 @@ class EvolutionTrainer:
             individual=individual,
             mirrored=mirrored,
         )
-        individual.total_progress = float(rollout_metrics["total_progress"])
+        individual.discrete_progress = float(rollout_metrics["discrete_progress"])
+        individual.dense_progress = float(rollout_metrics["dense_progress"])
         individual.time = float(rollout_metrics["time"])
         individual.term = int(rollout_metrics["term"])
         individual.distance = float(rollout_metrics["distance"])
         individual.fitness = float(rollout_metrics["fitness"])
+        individual.evaluation_valid = True
 
         if verbose and index is not None and total is not None:
             status = self._term_status_text(individual.term)
             mirror_tag = " [MIRROR]" if mirrored else ""
             print(
                 f"{index + 1}/{total} "
-                f"{status} | progress={individual.total_progress:.1f}% | "
+                f"{status} | progress={individual.discrete_progress:.1f}% | "
                 f"time={individual.time:.2f}s | score={individual.fitness:.2f}{mirror_tag}"
             )
 
@@ -585,7 +626,8 @@ class EvolutionTrainer:
             if terminated:
                 break
 
-        total_progress = float(last_info.get("total_progress", 0.0))
+        discrete_progress = float(last_info.get("discrete_progress", 0.0))
+        dense_progress = float(last_info.get("dense_progress", discrete_progress))
         t = float(last_info.get("time", 0.0))
         if t <= 0:
             t = 1e-3
@@ -598,12 +640,15 @@ class EvolutionTrainer:
 
         scalar = Individual.compute_scalar_fitness_for(
             term=term,
-            progress=total_progress,
+            progress=dense_progress
+            if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
+            else discrete_progress,
             time_value=t,
             distance=distance,
         )
         return dict(
-            total_progress=total_progress,
+            discrete_progress=discrete_progress,
+            dense_progress=dense_progress,
             time=t,
             term=term,
             distance=distance,
@@ -641,9 +686,11 @@ class EvolutionTrainer:
         verbose: bool = False,
         mirror_flags: Optional[np.ndarray] = None,
         evaluate_both_mirrors: bool = False,
+        reuse_valid_evaluations: bool = True,
     ) -> np.ndarray:
         n = len(self.population)
         fitnesses = np.zeros(n, dtype=np.float32)
+        cached_count = 0
         if evaluate_both_mirrors:
             mirror_flags = np.zeros(n, dtype=bool)
         elif mirror_flags is None:
@@ -653,6 +700,27 @@ class EvolutionTrainer:
                 f"mirror_flags length {len(mirror_flags)} does not match population size {n}."
             )
         for i, ind in enumerate(self.population):
+            can_reuse = (
+                reuse_valid_evaluations
+                and bool(getattr(ind, "evaluation_valid", False))
+                and not evaluate_both_mirrors
+                and not bool(mirror_flags[i])
+            )
+            if can_reuse:
+                cached_count += 1
+                if ind.fitness is not None and np.isfinite(float(ind.fitness)):
+                    fitnesses[i] = float(ind.fitness)
+                else:
+                    fitnesses[i] = float(ind.compute_scalar_fitness())
+                if verbose:
+                    status = self._term_status_text(ind.term)
+                    print(
+                        f"{i + 1}/{n} {status} | "
+                        f"progress={ind.discrete_progress:.1f}% | "
+                        f"dense={ind.dense_progress:.1f}% | "
+                        f"time={ind.time:.2f}s | cached"
+                    )
+                continue
             fitnesses[i] = self.evaluate_individual(
                 individual=ind,
                 index=i,
@@ -661,6 +729,7 @@ class EvolutionTrainer:
                 mirrored=bool(mirror_flags[i]),
                 evaluate_both_mirrors=evaluate_both_mirrors,
             )
+        self.last_cached_evaluations = cached_count
         return fitnesses
 
     def next_generation(
@@ -835,7 +904,8 @@ class EvolutionTrainer:
                     individual_index=idx,
                     term=int(ind.term),
                     is_finish=1 if int(ind.term) == 1 else 0,
-                    total_progress=float(ind.total_progress),
+                    discrete_progress=float(ind.discrete_progress),
+                    dense_progress=float(ind.dense_progress),
                     distance=float(ind.distance),
                     time=float(ind.time),
                     fitness=np.nan if ind.fitness is None else float(ind.fitness),
@@ -844,6 +914,10 @@ class EvolutionTrainer:
         self.logger.log_individual_batch(individual_rows)
 
         terms = np.array([int(ind.term) for ind in self.population], dtype=np.int32)
+        dense_progresses = np.array(
+            [float(ind.dense_progress) for ind in self.population],
+            dtype=np.float32,
+        )
         finish_rate = float((terms == 1).mean())
         crash_rate = float((terms < 0).mean())
         timeout_rate = float((terms == 0).mean())
@@ -851,6 +925,7 @@ class EvolutionTrainer:
         summary_row = dict(
             timestamp_utc=timestamp,
             generation=generation,
+            cached_evaluations=int(self.last_cached_evaluations),
             dist_avg=history["dist_avg"][-1],
             dist_best_gen=history["dist_best_gen"][-1],
             dist_best_global=history["dist_best_global"][-1],
@@ -861,7 +936,11 @@ class EvolutionTrainer:
             crash_rate=crash_rate,
             timeout_rate=timeout_rate,
             best_term=int(best_gen.term),
-            best_progress=float(best_gen.total_progress),
+            best_progress=float(best_gen.discrete_progress),
+            best_dense_progress=float(best_gen.dense_progress),
+            mean_dense_progress=(
+                float(dense_progresses.mean()) if len(dense_progresses) else 0.0
+            ),
             best_distance=float(best_gen.distance),
             best_time=float(best_gen.time),
             best_fitness=np.nan if best_gen.fitness is None else float(best_gen.fitness),
@@ -1010,7 +1089,7 @@ class EvolutionTrainer:
                     status = self._term_status_text(int(screened_best.term))
                     print(
                         f"Screening best: {status} | "
-                        f"progress={screened_best.total_progress:.1f}% | "
+                        f"progress={screened_best.discrete_progress:.1f}% | "
                         f"time={screened_best.time:.2f}s"
                     )
                     print(
@@ -1059,7 +1138,7 @@ class EvolutionTrainer:
             )
 
             progresses = np.array(
-                [float(ind.total_progress) for ind in self.population],
+                [float(ind.discrete_progress) for ind in self.population],
                 dtype=np.float32,
             )
             times_plot = np.array(
@@ -1074,7 +1153,7 @@ class EvolutionTrainer:
             time_avg = float(times_plot.mean())
 
             best_gen = max(self.population)
-            dist_best_gen = float(best_gen.total_progress)
+            dist_best_gen = float(best_gen.discrete_progress)
             time_best_gen = float(
                 best_gen.time if best_gen.term == 1 else dnf_time_for_plot
             )
@@ -1083,7 +1162,7 @@ class EvolutionTrainer:
             if best_improved:
                 best_so_far = best_gen.copy()
 
-            dist_best_global = float(best_so_far.total_progress)
+            dist_best_global = float(best_so_far.discrete_progress)
             time_best_global = float(
                 best_so_far.time if best_so_far.term == 1 else dnf_time_for_plot
             )
@@ -1254,6 +1333,7 @@ class EvolutionTrainer:
             )
 
         progresses = data["progresses"] if "progresses" in data.files else None
+        dense_progresses = data["dense_progresses"] if "dense_progresses" in data.files else None
         times = data["times"] if "times" in data.files else None
         terms = data["terms"] if "terms" in data.files else None
         distances = data["distances"] if "distances" in data.files else None
@@ -1268,6 +1348,14 @@ class EvolutionTrainer:
             if "current_mutation_sigma" in data.files
             else None
         )
+        restored_metrics_are_valid = bool(
+            assume_evaluated_generation
+            and progresses is not None
+            and dense_progresses is not None
+            and times is not None
+            and terms is not None
+            and distances is not None
+        )
 
         restored_population: List[Individual] = []
         for i in range(loaded_pop_size):
@@ -1281,7 +1369,11 @@ class EvolutionTrainer:
                 hidden_activation=self.hidden_activations,
             )
             if progresses is not None:
-                ind.total_progress = float(progresses[i])
+                ind.discrete_progress = float(progresses[i])
+            if dense_progresses is not None:
+                ind.dense_progress = float(dense_progresses[i])
+            else:
+                ind.dense_progress = float(ind.discrete_progress)
             if times is not None:
                 ind.time = float(times[i])
             if terms is not None:
@@ -1291,6 +1383,7 @@ class EvolutionTrainer:
             if fitnesses is not None:
                 val = float(fitnesses[i])
                 ind.fitness = None if np.isnan(val) else val
+            ind.evaluation_valid = restored_metrics_are_valid
             restored_population.append(ind)
 
         self.population = restored_population
@@ -1317,7 +1410,11 @@ class EvolutionTrainer:
                 hidden_activation=self.hidden_activations,
             )
             if "best_progress" in data.files:
-                best.total_progress = float(np.asarray(data["best_progress"]).reshape(-1)[0])
+                best.discrete_progress = float(np.asarray(data["best_progress"]).reshape(-1)[0])
+            if "best_dense_progress" in data.files:
+                best.dense_progress = float(np.asarray(data["best_dense_progress"]).reshape(-1)[0])
+            else:
+                best.dense_progress = float(best.discrete_progress)
             if "best_time" in data.files:
                 best.time = float(np.asarray(data["best_time"]).reshape(-1)[0])
             if "best_term" in data.files:
@@ -1327,6 +1424,7 @@ class EvolutionTrainer:
             if "best_fitness" in data.files:
                 bf = float(np.asarray(data["best_fitness"]).reshape(-1)[0])
                 best.fitness = None if np.isnan(bf) else bf
+            best.evaluation_valid = restored_metrics_are_valid
             self.best_individual = best
         else:
             self.best_individual = max(self.population).copy() if self.population else None
@@ -1373,10 +1471,11 @@ if __name__ == "__main__":
     #
     # With selection_fitness_mode="ranking", Individual.fitness remains a
     # log-friendly scalar, but population sorting uses Individual.ranking_key().
-    # This run tests: (progress, term, -time, -distance).
+    # This run tests: (dense_progress, term, -time, -distance).
     selection_fitness_mode = "ranking"  # scalar / ranking
-    ranking_key_mode = "progress_term_time_distance"
-    ranking_progress_source = "progress"
+    ranking_mode = "lexicographic"
+    ranking_key = "(dense_progress, term, -time, -distance)"
+    ranking_progress_source = "dense_progress"
 
     mutation_prob = 0.20
     mutation_prob_decay = 1.0
@@ -1406,7 +1505,7 @@ if __name__ == "__main__":
     start_idle_max_time = 2.0
     # Baseline run from scratch: stronger exploration first, then gradual annealing.
     Individual.COMPARE_BY_RANKING_KEY = selection_fitness_mode == "ranking"
-    Individual.RANKING_KEY_MODE = ranking_key_mode
+    Individual.RANKING_KEY = ranking_key
     Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
     
     # Train from checkpoint or supervised predtrainded model
@@ -1495,7 +1594,7 @@ if __name__ == "__main__":
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             f"_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
-            f"_{selection_fitness_mode}_{ranking_key_mode}"
+            f"_{selection_fitness_mode}_{safe_ranking_key_tag(ranking_key)}"
         )
         logger = TrainingLogger(run_name=run_name)
 
@@ -1577,7 +1676,9 @@ if __name__ == "__main__":
                 start_idle_max_time=start_idle_max_time,
                 selection_fitness_mode=selection_fitness_mode,
                 compare_by_ranking_key=bool(Individual.COMPARE_BY_RANKING_KEY),
-                ranking_key_mode=ranking_key_mode,
+                ranking_mode=ranking_mode,
+                ranking_key=ranking_key,
+                ranking_key_expression=canonical_ranking_key_expression(ranking_key),
                 ranking_progress_source=ranking_progress_source,
                 mutation_prob_decay=mutation_prob_decay,
                 mutation_prob_min=mutation_prob_min,
@@ -1589,7 +1690,7 @@ if __name__ == "__main__":
         if trainer.best_individual is not None:
             print(
                 f"\nBest overall: term={trainer.best_individual.term}, "
-                f"progress={trainer.best_individual.total_progress:.1f}%, "
+                f"progress={trainer.best_individual.discrete_progress:.1f}%, "
                 f"time={trainer.best_individual.time:.2f}s"
             )
         if logger is not None:

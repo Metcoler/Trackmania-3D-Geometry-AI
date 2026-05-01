@@ -215,7 +215,7 @@ class TrackmaniaSB3Env(gym.Env):
         )
 
     def _terminal_metrics(self, info: Dict[str, Any]) -> Dict[str, float]:
-        progress = float(info.get("total_progress", 0.0))
+        progress = float(info.get("discrete_progress", 0.0))
         time_value = float(info.get("time", 0.0))
         if time_value <= 0.0 or not np.isfinite(time_value):
             time_value = 0.0
@@ -413,7 +413,7 @@ class TrackmaniaSB3Env(gym.Env):
                 f"attempts={getattr(self.env, 'last_reset_attempts', '?')} "
                 f"reset_s={float(getattr(self.env, 'last_reset_seconds', 0.0)):.2f} "
                 f"time={float(info.get('time', 0.0)):.2f} "
-                f"progress={float(info.get('total_progress', 0.0)):.2f}% "
+                f"progress={float(info.get('discrete_progress', 0.0)):.2f}% "
                 f"distance={float(info.get('distance', 0.0)):.2f}"
             )
         return np.asarray(obs, dtype=np.float32), dict(info)

@@ -18,7 +18,7 @@ class AttemptSample:
     observation: np.ndarray
     action: np.ndarray
     game_time: float
-    total_progress: float
+    discrete_progress: float
     distance: float
 
 
@@ -28,7 +28,7 @@ class AttemptWriter:
         "saved",
         "num_frames",
         "finish_time",
-        "total_progress",
+        "discrete_progress",
         "distance",
         "path",
     ]
@@ -73,7 +73,7 @@ class AttemptWriter:
         observations = np.stack([sample.observation for sample in samples]).astype(np.float32)
         actions = np.stack([sample.action for sample in samples]).astype(np.float32)
         game_times = np.array([sample.game_time for sample in samples], dtype=np.float32)
-        total_progress = np.array([sample.total_progress for sample in samples], dtype=np.float32)
+        discrete_progress = np.array([sample.discrete_progress for sample in samples], dtype=np.float32)
         distances = np.array([sample.distance for sample in samples], dtype=np.float32)
 
         output_path = os.path.join(self.attempts_dir, f"attempt_{attempt_index:04d}.npz")
@@ -82,10 +82,10 @@ class AttemptWriter:
             observations=observations,
             actions=actions,
             game_times=game_times,
-            total_progress=total_progress,
+            discrete_progress=discrete_progress,
             distances=distances,
             finish_time=np.array([float(finish_info.get("time", 0.0))], dtype=np.float32),
-            finish_progress=np.array([float(finish_info.get("total_progress", 0.0))], dtype=np.float32),
+            finish_progress=np.array([float(finish_info.get("discrete_progress", 0.0))], dtype=np.float32),
             finish_distance=np.array([float(finish_info.get("distance", 0.0))], dtype=np.float32),
         )
         self._append_summary(
@@ -94,7 +94,7 @@ class AttemptWriter:
                 saved=1,
                 num_frames=len(samples),
                 finish_time=float(finish_info.get("time", 0.0)),
-                total_progress=float(finish_info.get("total_progress", 0.0)),
+                discrete_progress=float(finish_info.get("discrete_progress", 0.0)),
                 distance=float(finish_info.get("distance", 0.0)),
                 path=output_path,
             )
@@ -108,7 +108,7 @@ class AttemptWriter:
                 saved=0,
                 num_frames=len(samples),
                 finish_time=float(finish_info.get("time", 0.0)),
-                total_progress=float(finish_info.get("total_progress", 0.0)),
+                discrete_progress=float(finish_info.get("discrete_progress", 0.0)),
                 distance=float(finish_info.get("distance", 0.0)),
                 path="",
             )
@@ -170,7 +170,7 @@ if __name__ == "__main__":
             last_buttons["b"] = snapshot.button_b
 
             game_time = float(info.get("time", 0.0))
-            total_progress = float(info.get("total_progress", 0.0))
+            discrete_progress = float(info.get("discrete_progress", 0.0))
             total_distance = float(info.get("distance", 0.0))
             finished = bool(info.get("done", 0.0) == 1.0)
 
@@ -192,19 +192,19 @@ if __name__ == "__main__":
                         observation=observation,
                         action=action.copy(),
                         game_time=game_time,
-                        total_progress=total_progress,
+                        discrete_progress=discrete_progress,
                         distance=total_distance,
                     )
                 )
 
                 if b_pressed:
                     print(f"Attempt {attempt_index:04d} discarded by B restart.")
-                    writer.log_discard(attempt_index, attempt_samples, dict(time=game_time, total_progress=total_progress, distance=total_distance))
+                    writer.log_discard(attempt_index, attempt_samples, dict(time=game_time, discrete_progress=discrete_progress, distance=total_distance))
                     attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_reset"
                 elif finished:
-                    finish_info = dict(time=game_time, total_progress=total_progress, distance=total_distance)
+                    finish_info = dict(time=game_time, discrete_progress=discrete_progress, distance=total_distance)
                     print(
                         f"Attempt {attempt_index:04d} finished in {game_time:.2f}s. "
                         "Press A to save or B to discard."
@@ -212,7 +212,7 @@ if __name__ == "__main__":
                     state = "await_finish_confirmation"
                 elif game_time <= 0.0:
                     print(f"Attempt {attempt_index:04d} reset before finish. Discarded.")
-                    writer.log_discard(attempt_index, attempt_samples, dict(time=game_time, total_progress=total_progress, distance=total_distance))
+                    writer.log_discard(attempt_index, attempt_samples, dict(time=game_time, discrete_progress=discrete_progress, distance=total_distance))
                     attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_start"

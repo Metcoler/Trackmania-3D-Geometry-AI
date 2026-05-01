@@ -137,7 +137,7 @@ class TM2DSB3Env(gym.Env):
 
     def _episode_metrics(self, info: dict[str, Any]) -> dict[str, float]:
         term = int(info.get("term", 0))
-        progress = float(info.get("total_progress", 0.0))
+        progress = float(info.get("discrete_progress", 0.0))
         dense_progress = float(info.get("dense_progress", progress))
         time_value = float(info.get("time", 0.0))
         distance = float(info.get("distance", 0.0))

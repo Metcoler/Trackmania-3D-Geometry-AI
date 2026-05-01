@@ -46,6 +46,7 @@ class RacingGameEnviroment(gym.Env):
         start_idle_max_time: float = 5.0,
         start_idle_progress_epsilon: float = 0.5,
         start_idle_speed_threshold: float = 3.0,
+        live_status: bool = True,
     ) -> None:
         super().__init__()
         print("Creating the RacingGameEnviroment")
@@ -137,11 +138,17 @@ class RacingGameEnviroment(gym.Env):
         self.last_reset_seconds = 0.0
         self._post_finish_reset_pending = False
         self.current_dt_ratio = 1.0
+        self.live_status = bool(live_status)
+        self._live_status_last_wall_time = None
+        self._live_status_last_step = 0
+        self._live_status_fps = 0.0
+        self._live_status_width = 132
 
     def _clear_episode_runtime_state(self) -> None:
         self.current_step = 0
         self.obs_encoder.reset()
         self.current_dt_ratio = 1.0
+        self._reset_live_status()
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
         self.previous_observation = np.zeros(self.observation_space.shape, dtype=np.float32)
         self.previous_observation_info = (
@@ -156,6 +163,48 @@ class RacingGameEnviroment(gym.Env):
         self._wall_contact_since_time = None
         self._stuck_since_time = None
         self.car.reset()
+
+    def _reset_live_status(self) -> None:
+        self._live_status_last_wall_time = None
+        self._live_status_last_step = int(self.current_step)
+        self._live_status_fps = 0.0
+
+    def _update_live_status_fps(self) -> float:
+        now = time.monotonic()
+        if self._live_status_last_wall_time is None:
+            self._live_status_last_wall_time = now
+            self._live_status_last_step = int(self.current_step)
+            return 0.0
+
+        elapsed = max(1e-6, now - float(self._live_status_last_wall_time))
+        step_delta = max(0, int(self.current_step) - int(self._live_status_last_step))
+        instantaneous_fps = float(step_delta) / elapsed
+        if self._live_status_fps <= 0.0:
+            self._live_status_fps = instantaneous_fps
+        else:
+            self._live_status_fps = (0.85 * self._live_status_fps) + (0.15 * instantaneous_fps)
+        self._live_status_last_wall_time = now
+        self._live_status_last_step = int(self.current_step)
+        return float(self._live_status_fps)
+
+    def _print_live_status(self, info: dict, distances=None) -> None:
+        if not self.live_status:
+            return
+
+        fps = self._update_live_status_fps()
+        progress = float(info.get("dense_progress", info.get("discrete_progress", 0.0)))
+        game_time = float(info.get("time", 0.0))
+        speed = float(info.get("speed", 0.0))
+        parts = [
+            f"step={self.current_step:<6d}",
+            f"fps={fps:<6.1f}",
+            f"progress={progress:<7.3f}",
+            f"time={game_time:<7.2f}",
+            f"speed={speed:<7.2f}",
+        ]
+
+        line = " | ".join(parts)
+        print(line.ljust(self._live_status_width), end="\r")
 
     def _neutralize_controller(self) -> None:
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
@@ -195,7 +244,7 @@ class RacingGameEnviroment(gym.Env):
 
         current_distance = float(info.get("distance", 0.0))
         current_speed = abs(float(info.get("speed", 0.0)))
-        current_progress = float(info.get("total_progress", 0.0))
+        current_progress = float(info.get("discrete_progress", 0.0))
         near_fresh_start = (
             current_time <= self.RESET_CONFIRM_MAX_START_TIME_SECONDS
             and current_distance <= self.RESET_CONFIRM_MAX_START_DISTANCE
@@ -332,7 +381,7 @@ class RacingGameEnviroment(gym.Env):
         if self.race_terminated != 0:
             distances, instructions, info = self.previous_observation_info
             observation = self.previous_observation
-            print(self.current_step, ":",  self.race_terminated, " "*20,  end='\r')
+            self._print_live_status(info, distances)
             return observation, self.race_terminated, done, truncated, info
         else:
             safe_action = np.asarray(action, dtype=np.float32)
@@ -376,14 +425,14 @@ class RacingGameEnviroment(gym.Env):
             self.race_terminated = -1
         elif not timed_out:
             speed = float(info.get("speed", 0.0))
-            total_progress = float(info.get("total_progress", 0.0))
+            discrete_progress = float(info.get("discrete_progress", 0.0))
             current_time = float(info.get("time", 0.0))
 
             # Fast-fail: car is still essentially at start and not moving after a few seconds.
             # This avoids wasting evaluation time on dead individuals.
             if (
                 (current_time > self.start_idle_max_time)
-                and (total_progress <= self.start_idle_progress_epsilon)
+                and (discrete_progress <= self.start_idle_progress_epsilon)
                 and (speed < self.start_idle_speed_threshold)
                 and (not self.never_quit)
             ):
@@ -393,14 +442,14 @@ class RacingGameEnviroment(gym.Env):
                 reward = 0
                 info["touch_reason"] = "start_idle"
                 info["touch_count"] = int(self.touch_count)
-                print(self.current_step, ":", info["speed"], " "*20,  end='\r')
+                self._print_live_status(info, distances)
                 return observation, reward, done, truncated, info
 
             # Fast timeout: car already moved away from start but remains essentially stopped
             # for a while. This avoids waiting until the global max_time when the agent is dead.
             if (
                 (not self.never_quit)
-                and (total_progress > self.stall_progress_epsilon)
+                and (discrete_progress > self.stall_progress_epsilon)
                 and (speed < self.stuck_timeout_speed_threshold)
             ):
                 if self._stuck_since_time is None:
@@ -412,7 +461,7 @@ class RacingGameEnviroment(gym.Env):
                     reward = 0
                     info["touch_reason"] = "stuck_after_progress"
                     info["touch_count"] = int(self.touch_count)
-                    print(self.current_step, ":", info["speed"], " "*20,  end='\r')
+                    self._print_live_status(info, distances)
                     return observation, reward, done, truncated, info
             else:
                 self._stuck_since_time = None
@@ -426,7 +475,7 @@ class RacingGameEnviroment(gym.Env):
             # (using the same collision threshold as touch detection), terminate the episode.
             if (
                 (not self.never_quit)
-                and (total_progress > self.stall_progress_epsilon)
+                and (discrete_progress > self.stall_progress_epsilon)
                 and (min_distance < self.touch_distance_threshold)
             ):
                 if self._wall_contact_since_time is None:
@@ -440,7 +489,7 @@ class RacingGameEnviroment(gym.Env):
                     reward = 0
                     info["touch_count"] = int(self.touch_count)
                     info["touch_reason"] = "wall_ride"
-                    print(self.current_step, ":", info["speed"], " "*20,  end='\r')
+                    self._print_live_status(info, distances)
                     return observation, reward, done, truncated, info
             elif min_distance > self.touch_release_distance_threshold:
                 self._wall_contact_since_time = None
@@ -459,7 +508,7 @@ class RacingGameEnviroment(gym.Env):
             stall_touch_event = (
                 (speed < self.stall_speed_threshold)
                 and (float(info.get("time", 0.0)) > self.stall_min_time)
-                and (total_progress > self.stall_progress_epsilon)
+                and (discrete_progress > self.stall_progress_epsilon)
                 and (not self._stall_touch_latched)
                 and (not self.never_quit)
             )
@@ -488,7 +537,7 @@ class RacingGameEnviroment(gym.Env):
         
         
         
-        print(self.current_step, ":", info["speed"], " "*20,  end='\r')
+        self._print_live_status(info, distances)
         
         
         return observation, reward, done, truncated, info

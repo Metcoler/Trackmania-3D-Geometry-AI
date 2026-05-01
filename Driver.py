@@ -400,7 +400,7 @@ def replay_population(
                     f"  Episode {ep + 1}/{episodes_per_individual} | "
                     f"reward={total_reward:.3f} | "
                     f"term={getattr(env, 'race_terminated', 0)} | "
-                    f"progress={float(info.get('total_progress', 0.0)):.2f}% | "
+                    f"progress={float(info.get('discrete_progress', 0.0)):.2f}% | "
                     f"time={float(info.get('time', 0.0)):.2f}s | "
                     f"distance={float(info.get('distance', 0.0)):.2f}"
                 )
@@ -470,7 +470,7 @@ def drive_model(
         print(
             f"Replay finished | reward={total_reward:.3f} | "
             f"term={getattr(env, 'race_terminated', 0)} | "
-            f"progress={float(info.get('total_progress', 0.0)):.2f}% | "
+            f"progress={float(info.get('discrete_progress', 0.0)):.2f}% | "
             f"time={float(info.get('time', 0.0)):.2f}s | "
             f"distance={float(info.get('distance', 0.0)):.2f}"
         )

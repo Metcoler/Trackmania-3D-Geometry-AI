@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from EvolutionPolicy import normalize_hidden_activations, normalize_hidden_dims
 from Individual import Individual
+from RankingKey import canonical_ranking_key_expression
 
 from Experiments.tm2d_env import TM2DPhysicsConfig, TM2DRewardConfig, TM2DSimEnv
 
@@ -78,11 +79,15 @@ def evaluate_individual(env: TM2DSimEnv, individual: Individual, fitness_mode: s
 
 
 def apply_metrics_to_individual(individual: Individual, metrics: dict, fitness_mode: str) -> None:
-    individual.total_progress = float(metrics["progress"])
+    individual.discrete_progress = float(metrics["progress"])
     individual.dense_progress = float(metrics.get("dense_progress", metrics["progress"]))
     individual.time = float(metrics["time"])
     individual.term = int(metrics["term"])
     individual.distance = float(metrics["distance"])
+    individual.reward = float(metrics.get("reward", metrics.get("fitness", 0.0)))
+    individual.evaluation_steps = int(metrics.get("steps", 0))
+    individual.evaluation_terminated = bool(metrics.get("terminated", False))
+    individual.evaluation_truncated = bool(metrics.get("truncated", False))
     if fitness_mode == "reward":
         individual.fitness = float(metrics["reward"])
     elif fitness_mode == "scalar":
@@ -93,12 +98,124 @@ def apply_metrics_to_individual(individual: Individual, metrics: dict, fitness_m
         individual.fitness = None
     else:
         raise ValueError("fitness_mode must be scalar, reward, or ranking.")
+    individual.evaluation_valid = True
+
+
+def cached_metrics_from_individual(individual: Individual) -> dict:
+    fitness = (
+        float(individual.fitness)
+        if individual.fitness is not None and np.isfinite(float(individual.fitness))
+        else float(individual.compute_scalar_fitness())
+    )
+    return {
+        "progress": float(individual.discrete_progress),
+        "dense_progress": float(individual.dense_progress),
+        "time": float(individual.time),
+        "term": int(individual.term),
+        "distance": float(individual.distance),
+        "reward": float(individual.reward),
+        "fitness": fitness,
+        "steps": int(getattr(individual, "evaluation_steps", 0)),
+        "terminated": bool(getattr(individual, "evaluation_terminated", False)),
+        "truncated": bool(getattr(individual, "evaluation_truncated", False)),
+    }
+
+
+def metric_stats(prefix: str, values) -> dict[str, float]:
+    array = np.asarray(list(values), dtype=np.float64)
+    if array.size == 0:
+        array = np.asarray([0.0], dtype=np.float64)
+    return {
+        f"{prefix}_min": float(np.min(array)),
+        f"{prefix}_p10": float(np.percentile(array, 10)),
+        f"{prefix}_p25": float(np.percentile(array, 25)),
+        f"{prefix}_median": float(np.median(array)),
+        f"{prefix}_mean": float(np.mean(array)),
+        f"{prefix}_std": float(np.std(array)),
+        f"{prefix}_p75": float(np.percentile(array, 75)),
+        f"{prefix}_p90": float(np.percentile(array, 90)),
+        f"{prefix}_max": float(np.max(array)),
+    }
+
+
+def generation_metric_fieldnames() -> list[str]:
+    base_fields = [
+        "generation",
+        "best_fitness",
+        "best_progress",
+        "best_dense_progress",
+        "best_ranking_progress",
+        "best_time",
+        "best_term",
+        "best_distance",
+        "best_steps",
+        "best_reward",
+        "best_ranking_key",
+        "cached_evaluations",
+        "evaluated_count",
+        "population_size",
+        "finish_count",
+        "crash_count",
+        "timeout_count",
+        "terminated_count",
+        "truncated_count",
+        "virtual_time_sum",
+        "cumulative_virtual_time",
+        "virtual_steps_sum",
+        "cumulative_virtual_steps",
+        "generation_wall_seconds",
+        "cumulative_wall_seconds",
+        "mean_progress",
+        "mean_dense_progress",
+        "mean_ranking_progress",
+        "mean_reward",
+        "mean_time",
+    ]
+    stat_fields: list[str] = []
+    for prefix in (
+        "progress",
+        "dense_progress",
+        "ranking_progress",
+        "time",
+        "distance",
+        "reward",
+        "fitness",
+        "steps",
+    ):
+        stat_fields.extend(metric_stats(prefix, [0.0]).keys())
+    return base_fields + [field for field in stat_fields if field not in base_fields]
+
+
+def individual_metric_fieldnames() -> list[str]:
+    return [
+        "generation",
+        "rank",
+        "original_index",
+        "cached",
+        "is_elite",
+        "is_parent",
+        "fitness",
+        "ranking_key",
+        "ranking_progress",
+        "progress",
+        "dense_progress",
+        "time",
+        "term",
+        "finished",
+        "crashed",
+        "timeout",
+        "distance",
+        "reward",
+        "steps",
+        "terminated",
+        "truncated",
+    ]
 
 
 def _init_worker(config: dict) -> None:
     global _WORKER_ENV, _WORKER_CONFIG
     _WORKER_CONFIG = dict(config)
-    Individual.RANKING_KEY_MODE = str(config.get("ranking_key_mode", Individual.RANKING_KEY_MODE))
+    Individual.RANKING_KEY = str(config.get("ranking_key", Individual.RANKING_KEY))
     Individual.RANKING_PROGRESS_SOURCE = str(
         config.get("ranking_progress_source", Individual.RANKING_PROGRESS_SOURCE)
     )
@@ -223,15 +340,23 @@ def main() -> None:
     )
     parser.add_argument("--fitness-mode", choices=["scalar", "reward", "ranking"], default="scalar")
     parser.add_argument(
-        "--ranking-key-mode",
-        choices=list(Individual.RANKING_KEY_MODES),
-        default="term_progress_time_distance",
-        help="Tuple ordering used by Individual.__lt__ when --fitness-mode ranking.",
+        "--ranking-mode",
+        choices=["lexicographic"],
+        default="lexicographic",
+        help="Ranking strategy. Currently only lexicographic tuple comparison is supported.",
+    )
+    parser.add_argument(
+        "--ranking-key",
+        default="(term, progress, -time, -distance)",
+        help=(
+            "Lexicographic tuple expression, e.g. "
+            "'(dense_progress, term, -time, -distance)'. "
+        ),
     )
     parser.add_argument(
         "--ranking-progress-source",
         choices=list(Individual.RANKING_PROGRESS_SOURCES),
-        default="progress",
+        default="discrete_progress",
         help="Progress value used inside ranking tuples: discrete checkpoints or dense geometry.",
     )
     parser.add_argument("--collision-mode", choices=["center", "corners"], default="center")
@@ -267,8 +392,17 @@ def main() -> None:
 
     random.seed(args.seed)
     np.random.seed(args.seed)
-    Individual.RANKING_KEY_MODE = str(args.ranking_key_mode)
-    Individual.RANKING_PROGRESS_SOURCE = str(args.ranking_progress_source)
+    ranking_key = str(args.ranking_key)
+    ranking_key_expression = canonical_ranking_key_expression(ranking_key)
+    ranking_progress_source = str(args.ranking_progress_source)
+    if (
+        args.ranking_key is not None
+        and "dense_progress" in ranking_key_expression
+        and ranking_progress_source == "discrete_progress"
+    ):
+        ranking_progress_source = "dense_progress"
+    Individual.RANKING_KEY = ranking_key
+    Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
 
     hidden_dim = tuple(parse_list(args.hidden_dim, int))
     hidden_activation = tuple(parse_list(args.hidden_activation, str))
@@ -314,8 +448,10 @@ def main() -> None:
         "mutation_sigma": args.mutation_sigma,
         "fixed_fps": args.fixed_fps,
         "fitness_mode": args.fitness_mode,
-        "ranking_key_mode": args.ranking_key_mode,
-        "ranking_progress_source": args.ranking_progress_source,
+        "ranking_mode": args.ranking_mode,
+        "ranking_key": ranking_key,
+        "ranking_key_expression": ranking_key_expression,
+        "ranking_progress_source": ranking_progress_source,
         "reward_mode": args.reward_mode,
         "collision_mode": args.collision_mode,
         "obs_dim": env.obs_dim,
@@ -327,36 +463,31 @@ def main() -> None:
     (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     csv_path = run_dir / "generation_metrics.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "generation",
-                "best_fitness",
-                "best_progress",
-                "best_dense_progress",
-                "best_ranking_progress",
-                "best_time",
-                "best_term",
-                "best_reward",
-                "mean_progress",
-                "mean_dense_progress",
-                "mean_ranking_progress",
-                "mean_reward",
-                "mean_time",
-            ],
+    individual_csv_path = run_dir / "individual_metrics.csv"
+    with (
+        csv_path.open("w", newline="", encoding="utf-8") as handle,
+        individual_csv_path.open("w", newline="", encoding="utf-8") as individual_handle,
+    ):
+        writer = csv.DictWriter(handle, fieldnames=generation_metric_fieldnames())
+        individual_writer = csv.DictWriter(
+            individual_handle,
+            fieldnames=individual_metric_fieldnames(),
         )
         writer.writeheader()
+        individual_writer.writeheader()
 
         worker_pool = None
         best_overall: Individual | None = None
+        training_wall_start = time.perf_counter()
+        cumulative_virtual_time = 0.0
+        cumulative_virtual_steps = 0
         if int(args.num_workers) > 1:
             worker_config = {
                 "map_name": args.map_name,
                 "max_time": args.max_time,
                 "reward_mode": args.reward_mode,
-                "ranking_key_mode": args.ranking_key_mode,
-                "ranking_progress_source": args.ranking_progress_source,
+                "ranking_key": ranking_key,
+                "ranking_progress_source": ranking_progress_source,
                 "collision_mode": args.collision_mode,
                 "seed": args.seed,
                 "fixed_fps": args.fixed_fps,
@@ -375,20 +506,43 @@ def main() -> None:
 
         try:
             for generation in range(1, args.generations + 1):
+                generation_wall_start = time.perf_counter()
+                cached_evaluations = 0
+                cached_by_id: dict[int, bool] = {}
+                original_index_by_id: dict[int, int] = {
+                    id(individual): idx for idx, individual in enumerate(population)
+                }
                 if worker_pool is None:
-                    metrics = [
-                        evaluate_individual(env, individual, args.fitness_mode)
-                        for individual in population
-                    ]
+                    metrics = []
+                    for individual in population:
+                        if bool(getattr(individual, "evaluation_valid", False)):
+                            cached_evaluations += 1
+                            cached_by_id[id(individual)] = True
+                            metrics.append(cached_metrics_from_individual(individual))
+                        else:
+                            cached_by_id[id(individual)] = False
+                            metrics.append(
+                                evaluate_individual(env, individual, args.fitness_mode)
+                            )
                 else:
+                    metrics = [None for _ in population]
+                    for idx, individual in enumerate(population):
+                        if bool(getattr(individual, "evaluation_valid", False)):
+                            cached_evaluations += 1
+                            cached_by_id[id(individual)] = True
+                            metrics[idx] = cached_metrics_from_individual(individual)
+                        else:
+                            cached_by_id[id(individual)] = False
+
                     payloads = [
                         (idx, individual.genome.copy())
                         for idx, individual in enumerate(population)
+                        if metrics[idx] is None
                     ]
-                    metrics = [None for _ in population]
-                    for idx, metric in worker_pool.map(_evaluate_genome_worker, payloads):
-                        metrics[idx] = metric
-                        apply_metrics_to_individual(population[idx], metric, args.fitness_mode)
+                    if payloads:
+                        for idx, metric in worker_pool.map(_evaluate_genome_worker, payloads):
+                            metrics[idx] = metric
+                            apply_metrics_to_individual(population[idx], metric, args.fitness_mode)
                     metrics = [metric for metric in metrics if metric is not None]
 
                 population.sort(reverse=True)
@@ -398,40 +552,117 @@ def main() -> None:
                 best_fitness_for_plot = (
                     float(best.fitness)
                     if best.fitness is not None and np.isfinite(best.fitness)
-                    else float(best.compute_scalar_fitness())
+                        else float(best.compute_scalar_fitness())
                 )
+                progress_values = np.asarray([float(metric["progress"]) for metric in metrics], dtype=np.float64)
+                dense_progress_values = np.asarray(
+                    [float(metric["dense_progress"]) for metric in metrics],
+                    dtype=np.float64,
+                )
+                ranking_progress_values = np.asarray(
+                    [
+                        float(metric["dense_progress"])
+                        if ranking_progress_source == "dense_progress"
+                        else float(metric["progress"])
+                        for metric in metrics
+                    ],
+                    dtype=np.float64,
+                )
+                reward_values = np.asarray([float(metric["reward"]) for metric in metrics], dtype=np.float64)
+                fitness_values = np.asarray([float(metric["fitness"]) for metric in metrics], dtype=np.float64)
+                time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
+                distance_values = np.asarray([float(metric["distance"]) for metric in metrics], dtype=np.float64)
+                step_values = np.asarray([int(metric.get("steps", 0)) for metric in metrics], dtype=np.float64)
+                term_values = np.asarray([int(metric["term"]) for metric in metrics], dtype=np.int32)
+                virtual_time_sum = float(np.sum(time_values))
+                virtual_steps_sum = int(np.sum(step_values))
+                cumulative_virtual_time += virtual_time_sum
+                cumulative_virtual_steps += virtual_steps_sum
+                generation_wall_seconds = float(time.perf_counter() - generation_wall_start)
+                cumulative_wall_seconds = float(time.perf_counter() - training_wall_start)
                 row = {
                     "generation": generation,
                     "best_fitness": best_fitness_for_plot,
-                    "best_progress": float(best.total_progress),
-                    "best_dense_progress": float(max(metric["dense_progress"] for metric in metrics)),
+                    "best_progress": float(best.discrete_progress),
+                    "best_dense_progress": float(np.max(dense_progress_values)),
                     "best_ranking_progress": float(best.ranking_progress()),
                     "best_time": float(best.time),
                     "best_term": int(best.term),
-                    "best_reward": float(max(metric["reward"] for metric in metrics)),
-                    "mean_progress": float(np.mean([metric["progress"] for metric in metrics])),
-                    "mean_dense_progress": float(np.mean([metric["dense_progress"] for metric in metrics])),
-                    "mean_ranking_progress": float(
-                        np.mean(
-                            [
-                                metric["dense_progress"]
-                                if args.ranking_progress_source == "dense_progress"
-                                else metric["progress"]
-                                for metric in metrics
-                            ]
-                        )
-                    ),
-                    "mean_reward": float(np.mean([metric["reward"] for metric in metrics])),
-                    "mean_time": float(np.mean([metric["time"] for metric in metrics])),
+                    "best_distance": float(best.distance),
+                    "best_steps": int(getattr(best, "evaluation_steps", 0)),
+                    "best_reward": float(np.max(reward_values)),
+                    "best_ranking_key": json.dumps([float(value) for value in best.ranking_key()]),
+                    "cached_evaluations": int(cached_evaluations),
+                    "evaluated_count": int(len(population) - cached_evaluations),
+                    "population_size": int(len(population)),
+                    "finish_count": int(np.sum(term_values > 0)),
+                    "crash_count": int(np.sum(term_values < 0)),
+                    "timeout_count": int(np.sum(term_values == 0)),
+                    "terminated_count": int(sum(bool(metric.get("terminated", False)) for metric in metrics)),
+                    "truncated_count": int(sum(bool(metric.get("truncated", False)) for metric in metrics)),
+                    "virtual_time_sum": virtual_time_sum,
+                    "cumulative_virtual_time": cumulative_virtual_time,
+                    "virtual_steps_sum": virtual_steps_sum,
+                    "cumulative_virtual_steps": int(cumulative_virtual_steps),
+                    "generation_wall_seconds": generation_wall_seconds,
+                    "cumulative_wall_seconds": cumulative_wall_seconds,
+                    "mean_progress": float(np.mean(progress_values)),
+                    "mean_dense_progress": float(np.mean(dense_progress_values)),
+                    "mean_ranking_progress": float(np.mean(ranking_progress_values)),
+                    "mean_reward": float(np.mean(reward_values)),
+                    "mean_time": float(np.mean(time_values)),
                 }
+                row.update(metric_stats("progress", progress_values))
+                row.update(metric_stats("dense_progress", dense_progress_values))
+                row.update(metric_stats("ranking_progress", ranking_progress_values))
+                row.update(metric_stats("time", time_values))
+                row.update(metric_stats("distance", distance_values))
+                row.update(metric_stats("reward", reward_values))
+                row.update(metric_stats("fitness", fitness_values))
+                row.update(metric_stats("steps", step_values))
                 writer.writerow(row)
                 handle.flush()
+
+                for rank, individual in enumerate(population, start=1):
+                    fitness_for_plot = (
+                        float(individual.fitness)
+                        if individual.fitness is not None and np.isfinite(individual.fitness)
+                        else float(individual.compute_scalar_fitness())
+                    )
+                    timeout = int(individual.term == 0)
+                    individual_writer.writerow(
+                        {
+                            "generation": generation,
+                            "rank": rank,
+                            "original_index": int(original_index_by_id.get(id(individual), -1)),
+                            "cached": int(bool(cached_by_id.get(id(individual), False))),
+                            "is_elite": int(rank <= int(args.elite_count)),
+                            "is_parent": int(rank <= int(args.parent_count)),
+                            "fitness": fitness_for_plot,
+                            "ranking_key": json.dumps([float(value) for value in individual.ranking_key()]),
+                            "ranking_progress": float(individual.ranking_progress()),
+                            "progress": float(individual.discrete_progress),
+                            "dense_progress": float(individual.dense_progress),
+                            "time": float(individual.time),
+                            "term": int(individual.term),
+                            "finished": int(individual.term > 0),
+                            "crashed": int(individual.term < 0),
+                            "timeout": timeout,
+                            "distance": float(individual.distance),
+                            "reward": float(individual.reward),
+                            "steps": int(getattr(individual, "evaluation_steps", 0)),
+                            "terminated": int(bool(getattr(individual, "evaluation_terminated", False))),
+                            "truncated": int(bool(getattr(individual, "evaluation_truncated", False))),
+                        }
+                    )
+                individual_handle.flush()
                 print(
                     f"gen={generation:04d} best_fit={row['best_fitness']:.2f} "
                     f"best_prog={row['best_progress']:.2f}% "
                     f"best_dense={row['best_dense_progress']:.2f}% "
                     f"best_rank={row['best_ranking_progress']:.2f}% "
-                    f"best_time={row['best_time']:.2f}s mean_prog={row['mean_progress']:.2f}%"
+                    f"best_time={row['best_time']:.2f}s mean_prog={row['mean_progress']:.2f}% "
+                    f"cached={cached_evaluations}"
                 )
 
                 if generation < args.generations:
@@ -453,6 +684,7 @@ def main() -> None:
     best_overall.policy.save(str(best_path), extra={"config": config})
     print(f"Saved best policy to {best_path}")
     print(f"Saved metrics to {csv_path}")
+    print(f"Saved individual metrics to {individual_csv_path}")
 
     if args.render_best:
         from Experiments.tm2d_viewer import TM2DViewer

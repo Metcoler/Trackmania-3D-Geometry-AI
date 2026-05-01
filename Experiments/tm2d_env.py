@@ -57,7 +57,7 @@ class TM2DPhysicsConfig:
 class TM2DRewardConfig:
     mode: str = "progress_primary_delta"
     terminal_fitness_scale: float = 1_000_000.0
-    finish_bonus: float = Individual.TERM_WEIGHT / 1_000_000.0
+    finish_bonus: float = Individual.FINISHED_WEIGHT / 1_000_000.0
     pace_target_time: float | None = None
 
 
@@ -132,9 +132,16 @@ class TM2DSimEnv:
         self.distance = 0.0
         self.time = 0.0
         self.path_index = 0
-        self.term = 0
+        self.finished = 0
+        self.crashes = 0
         self.done = False
-        self.last_score = self._score_state(term=0, progress=0.0, time_value=0.0, distance=0.0)
+        self.last_score = self._score_state(
+            finished=0,
+            crashes=0,
+            progress=0.0,
+            time_value=0.0,
+            distance=0.0,
+        )
         self.last_yaw_rate = 0.0
         self.current_dt = self.obs_encoder.dt_ref
         self.previous_speed = None
@@ -193,41 +200,45 @@ class TM2DSimEnv:
 
         terminated = False
         truncated = False
-        term = 0
+        finished = 0
+        crashes = 0
         if not self._car_on_road():
             terminated = True
-            term = -1
+            crashes = 1
         elif self.path_index >= len(self.geometry.path_tiles_xz) - 1:
             terminated = True
-            term = 1
+            finished = 1
         elif self.time >= self.max_time:
             truncated = True
-            term = 0
         elif (
             self.time >= self.start_idle_max_time
             and progress <= self.start_idle_progress_epsilon
             and self.speed <= self.start_idle_speed_threshold
         ):
             terminated = True
-            term = -1
+            crashes = 1
 
         self.done = bool(terminated or truncated)
-        self.term = int(term)
+        self.finished = int(finished)
+        self.crashes = int(crashes)
         obs, info = self._build_observation()
         score_progress = float(info.get("dense_progress", progress))
         score = self._score_state(
-            term=term if self.done else 0,
+            finished=finished if self.done else 0,
+            crashes=crashes if self.done else 0,
             progress=score_progress,
             time_value=self.time,
             distance=self.distance,
         )
         reward = float(score - self.last_score)
         self.last_score = score
-        if self.done and term > 0 and self._uses_external_finish_bonus():
+        if self.done and finished > 0 and self._uses_external_finish_bonus():
             reward += float(self.reward_config.finish_bonus)
         info.update(
             {
-                "term": int(term),
+                "finished": int(finished),
+                "crashes": int(crashes),
+                "timeout": int(self.done and int(finished) == 0 and int(crashes) == 0),
                 "terminated": bool(terminated),
                 "truncated": bool(truncated),
                 "reward_score": float(score),
@@ -251,8 +262,10 @@ class TM2DSimEnv:
             width=self.physics.car_width,
         )
 
-    def _score_state(self, term: int, progress: float, time_value: float, distance: float) -> float:
+    def _score_state(self, finished: int, crashes: int, progress: float, time_value: float, distance: float) -> float:
         mode = str(self.reward_config.mode).strip().lower()
+        finished = 1 if int(finished) > 0 else 0
+        crashes = max(0, int(crashes))
         progress = float(progress)
         time_value = max(0.0, float(time_value))
         distance = float(distance)
@@ -268,22 +281,23 @@ class TM2DSimEnv:
             expected_progress = 100.0 * time_value / max(1e-6, float(pace_target))
             return 2.0 * progress - expected_progress
         if mode == "terminal_fitness":
-            if term == 0 and time_value < self.max_time:
+            if not self._is_terminal_score_state(finished, crashes, time_value):
                 return 0.0
             return (
-                Individual.compute_scalar_fitness_for(term, progress, time_value, distance)
+                Individual.compute_scalar_fitness_for(finished, crashes, progress, time_value, distance)
                 / max(1e-6, self.reward_config.terminal_fitness_scale)
             )
         if mode == "individual_dense":
             return (
-                Individual.compute_scalar_fitness_for(term, progress, time_value, distance)
+                Individual.compute_scalar_fitness_for(finished, crashes, progress, time_value, distance)
                 / max(1e-6, self.reward_config.terminal_fitness_scale)
             )
         if mode == "terminal_lexicographic":
-            if not self._is_terminal_score_state(term, time_value):
+            if not self._is_terminal_score_state(finished, crashes, time_value):
                 return 0.0
             return self._lexicographic_score(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -292,10 +306,11 @@ class TM2DSimEnv:
                 distance_mode="all",
             )
         if mode == "terminal_lexicographic_no_distance":
-            if not self._is_terminal_score_state(term, time_value):
+            if not self._is_terminal_score_state(finished, crashes, time_value):
                 return 0.0
             return self._lexicographic_score(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -304,10 +319,11 @@ class TM2DSimEnv:
                 distance_mode="none",
             )
         if mode == "terminal_lexicographic_progress20":
-            if not self._is_terminal_score_state(term, time_value):
+            if not self._is_terminal_score_state(finished, crashes, time_value):
                 return 0.0
             return self._lexicographic_score(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -317,7 +333,8 @@ class TM2DSimEnv:
             )
         if mode == "delta_lexicographic":
             return self._lexicographic_score(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -327,7 +344,8 @@ class TM2DSimEnv:
             )
         if mode == "delta_lexicographic_terminal":
             return self._lexicographic_score(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -337,7 +355,8 @@ class TM2DSimEnv:
             )
         if mode == "terminal_progress_time_efficiency":
             return Individual.compute_terminal_progress_time_efficiency_score_for(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -349,7 +368,8 @@ class TM2DSimEnv:
             )
         if mode == "delta_progress_time_efficiency":
             return Individual.compute_delta_progress_time_efficiency_score_for(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -361,7 +381,8 @@ class TM2DSimEnv:
             )
         if mode == "terminal_progress_time_safety":
             return Individual.compute_terminal_progress_time_safety_score_for(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -371,7 +392,8 @@ class TM2DSimEnv:
             )
         if mode == "delta_progress_time_safety":
             return Individual.compute_delta_progress_time_safety_score_for(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -381,7 +403,8 @@ class TM2DSimEnv:
             )
         if mode == "terminal_progress_time_block_penalty":
             return Individual.compute_terminal_progress_time_block_penalty_score_for(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -391,7 +414,8 @@ class TM2DSimEnv:
             )
         if mode == "delta_progress_time_block_penalty":
             return Individual.compute_delta_progress_time_block_penalty_score_for(
-                term=term,
+                finished=finished,
+                crashes=crashes,
                 progress=progress,
                 time_value=time_value,
                 distance=distance,
@@ -416,15 +440,16 @@ class TM2DSimEnv:
             "or progress_rate."
         )
 
-    def _is_terminal_score_state(self, term: int, time_value: float) -> bool:
-        return int(term) != 0 or float(time_value) >= self.max_time
+    def _is_terminal_score_state(self, finished: int, crashes: int, time_value: float) -> bool:
+        return int(finished) > 0 or int(crashes) > 0 or float(time_value) >= self.max_time
 
     def _progress_unit_norm(self) -> float:
         return 1.0 / max(1, len(self.geometry.path_tiles_xz) - 1)
 
     def _lexicographic_score(
         self,
-        term: int,
+        finished: int,
+        crashes: int,
         progress: float,
         time_value: float,
         distance: float,
@@ -441,12 +466,12 @@ class TM2DSimEnv:
         equally far agents by speed and then by path efficiency.
         """
 
-        terminal = self._is_terminal_score_state(term, time_value)
+        terminal = self._is_terminal_score_state(finished, crashes, time_value)
         progress_norm = float(np.clip(float(progress) / 100.0, 0.0, 1.0))
         tile_unit = self._progress_unit_norm()
 
         score = progress_norm
-        if terminal and int(term) > 0:
+        if terminal and int(finished) > 0:
             score += 1.0
         elif terminal and include_failure_term:
             score -= 1.0
@@ -455,7 +480,7 @@ class TM2DSimEnv:
             time_norm = float(np.clip(float(time_value) / max(1e-6, self.max_time), 0.0, 1.0))
             score += tile_unit * (1.0 - time_norm)
 
-        use_distance = distance_mode == "all" or (distance_mode == "finish" and terminal and int(term) > 0)
+        use_distance = distance_mode == "all" or (distance_mode == "finish" and terminal and int(finished) > 0)
         if use_distance and float(progress) >= float(ignore_time_below_progress):
             max_episode_distance = max(
                 1e-6,
@@ -490,7 +515,10 @@ class TM2DSimEnv:
             "time": float(self.time),
             "discrete_progress": float(progress),
             "dense_progress": float(dense_progress),
-            "done": 1.0 if int(self.term) > 0 else 0.0,
+            "done": 1.0 if int(self.finished) > 0 else 0.0,
+            "finished": int(self.finished),
+            "crashes": int(self.crashes),
+            "timeout": int(self.done and int(self.finished) == 0 and int(self.crashes) == 0),
             "slip_mean": slip_mean,
             "slip_fl": slip_mean,
             "slip_fr": slip_mean,
@@ -618,7 +646,10 @@ class TM2DSimEnv:
                 )
             if terminated or truncated:
                 break
-        term = int(info.get("term", 0 if truncated else -1))
+        finished = int(info.get("finished", int(getattr(self, "finished", 0))))
+        crashes = int(info.get("crashes", int(getattr(self, "crashes", 0))))
+        if terminated and finished <= 0 and crashes <= 0:
+            crashes = 1
         progress = float(info.get("discrete_progress", 0.0))
         dense_progress = float(info.get("dense_progress", progress))
         time_value = float(info.get("time", self.time))
@@ -628,9 +659,17 @@ class TM2DSimEnv:
             if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
             else progress
         )
-        fitness = Individual.compute_scalar_fitness_for(term, fitness_progress, time_value, distance)
+        fitness = Individual.compute_scalar_fitness_for(
+            finished,
+            crashes,
+            fitness_progress,
+            time_value,
+            distance,
+        )
         result = {
-            "term": term,
+            "finished": finished,
+            "crashes": crashes,
+            "timeout": int(bool(truncated) and finished <= 0 and crashes <= 0),
             "progress": progress,
             "dense_progress": dense_progress,
             "time": time_value,

@@ -45,7 +45,7 @@ class ObservationEncoder:
     def __init__(
         self,
         laser_max_distance: float = Car.LASER_MAX_DISTANCE,
-        path_instruction_abs_max: float = 4.0,
+        path_instruction_abs_max: float = 1.0,
         speed_abs_max: float = 1000.0,
         side_speed_abs_max: float = 1000.0,
         accel_abs_max: float = 80.0,

@@ -6,13 +6,16 @@ from typing import Mapping, Tuple
 
 
 RANKING_METRIC_NAMES = (
-    "term",
     "finished",
-    "crashed",
+    "crashes",
     "progress",
+    "progress_norm",
     "ranking_progress",
+    "ranking_progress_norm",
     "discrete_progress",
+    "discrete_progress_norm",
     "dense_progress",
+    "dense_progress_norm",
     "time",
     "distance",
 )
@@ -30,7 +33,7 @@ def canonical_ranking_key_expression(value: str) -> str:
         raise ValueError(
             "Legacy ranking key names are no longer supported. "
             "Use an explicit tuple, for example "
-            "'(dense_progress, term, -time, -distance)'."
+            "'(dense_progress, finished, -time, -crashes, -distance)'."
         )
     return expression
 

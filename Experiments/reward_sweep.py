@@ -62,15 +62,15 @@ def static_scenarios(env: TM2DSimEnv) -> list[dict]:
     max_time = float(env.max_time)
     path = float(env.geometry.estimated_path_length)
     return [
-        {"name": "idle_timeout", "term": 0, "progress": 0.0, "time": max_time, "distance": 0.0},
-        {"name": "early_kamikaze", "term": -1, "progress": 0.5 * bucket, "time": 2.0, "distance": 20.0},
-        {"name": "first_block_fast_crash", "term": -1, "progress": bucket, "time": 3.0, "distance": 42.0},
-        {"name": "first_block_slow_crash", "term": -1, "progress": bucket, "time": 10.0, "distance": 42.0},
-        {"name": "mid_fast_crash", "term": -1, "progress": 20.0, "time": 15.0, "distance": 320.0},
-        {"name": "mid_slow_crash", "term": -1, "progress": 20.0, "time": 30.0, "distance": 320.0},
-        {"name": "finish_fast_clean", "term": 1, "progress": 100.0, "time": 0.5 * max_time, "distance": path},
-        {"name": "finish_fast_messy", "term": 1, "progress": 100.0, "time": 0.5 * max_time, "distance": 1.35 * path},
-        {"name": "finish_slow_clean", "term": 1, "progress": 100.0, "time": max_time, "distance": path},
+        {"name": "idle_timeout", "finished": 0, "crashes": 0, "progress": 0.0, "time": max_time, "distance": 0.0},
+        {"name": "early_kamikaze", "finished": 0, "crashes": 1, "progress": 0.5 * bucket, "time": 2.0, "distance": 20.0},
+        {"name": "first_block_fast_crash", "finished": 0, "crashes": 1, "progress": bucket, "time": 3.0, "distance": 42.0},
+        {"name": "first_block_slow_crash", "finished": 0, "crashes": 1, "progress": bucket, "time": 10.0, "distance": 42.0},
+        {"name": "mid_fast_crash", "finished": 0, "crashes": 1, "progress": 20.0, "time": 15.0, "distance": 320.0},
+        {"name": "mid_slow_crash", "finished": 0, "crashes": 1, "progress": 20.0, "time": 30.0, "distance": 320.0},
+        {"name": "finish_fast_clean", "finished": 1, "crashes": 0, "progress": 100.0, "time": 0.5 * max_time, "distance": path},
+        {"name": "finish_fast_messy", "finished": 1, "crashes": 0, "progress": 100.0, "time": 0.5 * max_time, "distance": 1.35 * path},
+        {"name": "finish_slow_clean", "finished": 1, "crashes": 0, "progress": 100.0, "time": max_time, "distance": path},
     ]
 
 
@@ -83,7 +83,8 @@ def print_static_rankings(env: TM2DSimEnv, modes: list[str]) -> None:
         ranked = []
         for scenario in scenarios:
             score = env._score_state(
-                term=int(scenario["term"]),
+                finished=int(scenario["finished"]),
+                crashes=int(scenario["crashes"]),
                 progress=float(scenario["progress"]),
                 time_value=float(scenario["time"]),
                 distance=float(scenario["distance"]),
@@ -123,16 +124,17 @@ def print_policy_rollouts(map_name: str, max_time: float, modes: list[str], seed
                     float(metrics["dense_progress"]),
                     float(metrics["progress"]),
                     float(metrics["time"]),
-                    int(metrics["term"]),
+                    int(metrics["finished"]),
+                    int(metrics["crashes"]),
                     int(metrics["steps"]),
                 )
             )
         results.sort(reverse=True)
         print(f"\nmode={mode}")
-        for reward, name, dense, progress, time_value, term, steps in results:
+        for reward, name, dense, progress, time_value, finished, crashes, steps in results:
             print(
                 f"  reward={reward:10.4f} dense={dense:6.2f}% progress={progress:6.2f}% "
-                f"time={time_value:6.2f}s term={term:2d} steps={steps:4d}  {name}"
+                f"time={time_value:6.2f}s fin={finished:d} crashes={crashes:d} steps={steps:4d}  {name}"
             )
 
 

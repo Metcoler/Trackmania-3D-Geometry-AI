@@ -153,7 +153,6 @@ class TrackmaniaSB3Env(gym.Env):
             dt_ref=1.0 / 100.0,
             dt_ratio_clip=3.0,
             vertical_mode=vertical_mode,
-            surface_step_size=Car.SURFACE_STEP_SIZE,
             surface_probe_height=Car.SURFACE_PROBE_HEIGHT,
             surface_ray_lift=Car.SURFACE_RAY_LIFT,
             max_time=env_max_time,
@@ -220,17 +219,21 @@ class TrackmaniaSB3Env(gym.Env):
         if time_value <= 0.0 or not np.isfinite(time_value):
             time_value = 0.0
         distance = float(info.get("distance", 0.0))
-        term = int(getattr(self.env, "race_terminated", 0))
-        if info.get("done", 0.0) == 1.0 and term == 0:
-            term = 1
+        finished = int(info.get("finished", int(getattr(self.env, "finished", 0))))
+        crashes = int(info.get("crashes", int(getattr(self.env, "crashes", 0))))
+        if info.get("done", 0.0) == 1.0 and finished == 0:
+            finished = 1
         fitness = Individual.compute_scalar_fitness_for(
-            term=term,
+            finished=finished,
+            crashes=crashes,
             progress=progress,
             time_value=time_value,
             distance=distance,
         )
         return dict(
-            term=float(term),
+            finished=float(finished),
+            crashes=float(crashes),
+            timeout=float(int(finished <= 0 and crashes <= 0)),
             progress=progress,
             time=time_value,
             distance=distance,
@@ -239,7 +242,8 @@ class TrackmaniaSB3Env(gym.Env):
 
     def _lexicographic_score(self, metrics: Dict[str, float]) -> float:
         return Individual.compute_delta_lexicographic_score_for(
-            term=int(metrics["term"]),
+            finished=int(metrics["finished"]),
+            crashes=int(metrics["crashes"]),
             progress=float(metrics["progress"]),
             time_value=float(metrics["time"]),
             distance=float(metrics["distance"]),
@@ -251,7 +255,8 @@ class TrackmaniaSB3Env(gym.Env):
 
     def _terminal_lexicographic_score(self, metrics: Dict[str, float]) -> float:
         return Individual.compute_terminal_lexicographic_score_for(
-            term=int(metrics["term"]),
+            finished=int(metrics["finished"]),
+            crashes=int(metrics["crashes"]),
             progress=float(metrics["progress"]),
             time_value=float(metrics["time"]),
             distance=float(metrics["distance"]),
@@ -267,7 +272,8 @@ class TrackmaniaSB3Env(gym.Env):
         terminal_only: bool = False,
     ) -> float:
         return Individual.compute_progress_time_safety_score_for(
-            term=int(metrics["term"]),
+            finished=int(metrics["finished"]),
+            crashes=int(metrics["crashes"]),
             progress=float(metrics["progress"]),
             time_value=float(metrics["time"]),
             distance=float(metrics["distance"]),
@@ -283,7 +289,8 @@ class TrackmaniaSB3Env(gym.Env):
         terminal_only: bool = False,
     ) -> float:
         return Individual.compute_progress_time_block_penalty_score_for(
-            term=int(metrics["term"]),
+            finished=int(metrics["finished"]),
+            crashes=int(metrics["crashes"]),
             progress=float(metrics["progress"]),
             time_value=float(metrics["time"]),
             distance=float(metrics["distance"]),
@@ -305,14 +312,14 @@ class TrackmaniaSB3Env(gym.Env):
         pace_score = progress - expected_progress_by_time
         score = progress + pace_score
 
-        # Keep term out of the dense shaping. A crash should end the episode and
+        # Keep failure outcome out of the dense shaping. A crash should end the episode and
         # remove future progress opportunities, not erase credit for good driving
         # earlier in the same run. Finishing still gets the lexicographic finish
         # bonus from Individual's scoring scale.
         if terminated or truncated:
-            term = int(metrics["term"])
-            if term > 0:
-                score += Individual.TERM_WEIGHT / self.terminal_fitness_scale
+            finished = int(metrics["finished"])
+            if finished > 0:
+                score += Individual.FINISHED_WEIGHT / self.terminal_fitness_scale
                 score -= (
                     max(0.0, float(metrics["distance"]))
                     * Individual.DISTANCE_WEIGHT
@@ -482,7 +489,9 @@ class EpisodeMetricsCallback:
         return [
             "timestamp_utc",
             "episode",
-            "term",
+            "finished",
+            "crashes",
+            "timeout",
             "progress",
             "time",
             "distance",
@@ -508,7 +517,9 @@ class EpisodeMetricsCallback:
         row = dict(
             timestamp_utc=datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             episode=self.episode,
-            term=int(metrics.get("term", 0)),
+            finished=int(metrics.get("finished", 0)),
+            crashes=int(metrics.get("crashes", 0)),
+            timeout=int(metrics.get("timeout", 0)),
             progress=progress,
             time=float(metrics.get("time", 0.0)),
             distance=float(metrics.get("distance", 0.0)),
@@ -544,7 +555,8 @@ class EpisodeMetricsCallback:
         if self.verbose:
             print(
                 f"[SB3 SAC] ep={self.episode} progress={progress:.2f}% "
-                f"reward={episode_reward:.3f} term={int(row['term'])} "
+                f"reward={episode_reward:.3f} fin={int(row['finished'])} "
+                f"crashes={int(row['crashes'])} "
                 f"time={row['time']:.2f}s"
             )
 

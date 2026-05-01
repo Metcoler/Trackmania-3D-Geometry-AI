@@ -76,11 +76,11 @@ python Experiments/visualize_tm2d.py --map-name "AI Training #5" --model-path Ex
 - `pace_delta`: reproduces the stricter pace reward idea that can make fast early failure attractive.
 - `terminal_fitness`: uses `Individual.compute_scalar_fitness_for` only at terminal states.
 - `individual_dense`: uses `Individual.compute_scalar_fitness_for`, but feeds it continuous geometric progress along the current path segment. This is the conservative mode to try when discrete progress buckets leave most random agents tied at `0%`.
-- `terminal_lexicographic`: terminal-only bounded score: finish/fail term, progress, time tie-break, distance tie-break.
+- `terminal_lexicographic`: terminal-only bounded score: `finished`, progress, time tie-break, crash count, and distance tie-break.
 - `terminal_lexicographic_no_distance`: same terminal score without the distance tie-break.
 - `terminal_lexicographic_progress20`: terminal score that ignores time/distance tie-breaks below `20%` progress.
 - `delta_lexicographic`: dense bounded score with progress primary, time secondary, distance tertiary, and finish bonus; crash does not retroactively erase early progress.
-- `delta_lexicographic_terminal`: same dense score, but collision/timeout also add the failure term at episode end.
+- `delta_lexicographic_terminal`: same dense score, but collision/timeout also apply the terminal failure component at episode end.
 - `terminal_progress_time_efficiency`: terminal-only score where normalized progress is primary, time is only a progress-scaled tie-breaker, finish adds one full normalized completion unit, and distance only penalizes excess path length.
 - `delta_progress_time_efficiency`: potential-difference version of `terminal_progress_time_efficiency`, intended as the current clean SAC candidate because it keeps the same final ordering while giving incremental signal.
 - `progress_rate`: average progress rate style score. This is intentionally kept as a warning/negative-control mode because it can prefer fast early crashes.
@@ -98,10 +98,10 @@ Current `trackmania_racing` objectives are all maximized:
 - `progress`: continuous progress along the path, normalized to `[0, 1]`.
 - `finish`: `1` only when the agent reaches finish.
 - `speed_for_progress`: `progress * (1 - time / max_time)`, so time pressure only matters after real progress exists.
-- `safe_progress`: progress that only counts fully when the run did not end in a crash.
+- `safe_progress`: progress scaled by remaining crash budget, so one touch is tolerated when the experiment allows multiple touches but cleaner runs stay preferred.
 - `path_efficiency`: progress penalized by excess distance beyond the estimated path distance, so S-turns are discouraged without rewarding raw distance.
 
-The default within-front priority is `progress,finish,speed_for_progress,safe_progress,path_efficiency`. This mirrors the racing goal: first get farther, then finish, then get there sooner, then prefer non-crashing and cleaner trajectories. Use `--pareto-tiebreak crowding` if you want a more diversity-focused NSGA-II ordering.
+The default within-front priority is `finish,progress,speed_for_progress,safe_progress,path_efficiency`. This mirrors the racing goal: prefer a finish when a comparable solution exists, otherwise get farther, then get there sooner, then prefer non-crashing and cleaner trajectories. Use `--pareto-tiebreak crowding` if you want a more diversity-focused NSGA-II ordering.
 
 Local SAC defaults:
 

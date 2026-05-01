@@ -30,7 +30,6 @@ class RacingGameEnviroment(gym.Env):
         dt_ref: float = 1.0 / 100.0,
         dt_ratio_clip: float = 3.0,
         vertical_mode: bool = True,
-        surface_step_size: float = Car.SURFACE_STEP_SIZE,
         surface_probe_height: float = Car.SURFACE_PROBE_HEIGHT,
         surface_ray_lift: float = Car.SURFACE_RAY_LIFT,
         max_touches: int = 1,
@@ -103,7 +102,6 @@ class RacingGameEnviroment(gym.Env):
         self.car = Car(
             self.map,
             vertical_mode=self.vertical_mode,
-            surface_step_size=surface_step_size,
             surface_probe_height=surface_probe_height,
             surface_ray_lift=surface_ray_lift,
         )
@@ -115,6 +113,8 @@ class RacingGameEnviroment(gym.Env):
         self.max_time = max_time
         self.current_step = 0
         self.race_terminated = 0 
+        self.finished = 0
+        self.crashes = 0
         self.never_quit = never_quit
         self.max_touches = max(1, int(max_touches))
         self.touch_distance_threshold = float(touch_distance_threshold)
@@ -157,6 +157,8 @@ class RacingGameEnviroment(gym.Env):
             {"time": -1.0, "done": 0.0},
         )
         self.race_terminated = 0
+        self.finished = 0
+        self.crashes = 0
         self.touch_count = 0
         self._laser_touch_latched = False
         self._stall_touch_latched = False
@@ -210,6 +212,19 @@ class RacingGameEnviroment(gym.Env):
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
         self.controller.reset()
         self.controller.update()
+
+    def _annotate_outcome_info(self, info: dict, timed_out: bool = False) -> None:
+        self.finished = 1 if int(self.race_terminated) > 0 else 0
+        if self.touch_count > 0:
+            self.crashes = int(self.touch_count)
+        elif int(self.race_terminated) < 0:
+            self.crashes = abs(int(self.race_terminated))
+        else:
+            self.crashes = 0
+        info["finished"] = int(self.finished)
+        info["crashes"] = int(self.crashes)
+        info["timeout"] = int(bool(timed_out) and self.finished <= 0 and self.crashes <= 0)
+        info["max_crashes"] = int(self.max_touches)
 
     def _press_restart_button(self) -> None:
         self._neutralize_controller()
@@ -381,6 +396,7 @@ class RacingGameEnviroment(gym.Env):
         if self.race_terminated != 0:
             distances, instructions, info = self.previous_observation_info
             observation = self.previous_observation
+            self._annotate_outcome_info(info, timed_out=False)
             self._print_live_status(info, distances)
             return observation, self.race_terminated, done, truncated, info
         else:
@@ -409,6 +425,7 @@ class RacingGameEnviroment(gym.Env):
         reward = 0.0
         info["touch_count"] = int(self.touch_count)
         info["max_touches"] = int(self.max_touches)
+        self._annotate_outcome_info(info, timed_out=timed_out)
         
         if info["done"] == 1.0:
             self.controller.reset()
@@ -442,6 +459,7 @@ class RacingGameEnviroment(gym.Env):
                 reward = 0
                 info["touch_reason"] = "start_idle"
                 info["touch_count"] = int(self.touch_count)
+                self._annotate_outcome_info(info, timed_out=False)
                 self._print_live_status(info, distances)
                 return observation, reward, done, truncated, info
 
@@ -461,6 +479,7 @@ class RacingGameEnviroment(gym.Env):
                     reward = 0
                     info["touch_reason"] = "stuck_after_progress"
                     info["touch_count"] = int(self.touch_count)
+                    self._annotate_outcome_info(info, timed_out=False)
                     self._print_live_status(info, distances)
                     return observation, reward, done, truncated, info
             else:
@@ -489,6 +508,7 @@ class RacingGameEnviroment(gym.Env):
                     reward = 0
                     info["touch_count"] = int(self.touch_count)
                     info["touch_reason"] = "wall_ride"
+                    self._annotate_outcome_info(info, timed_out=False)
                     self._print_live_status(info, distances)
                     return observation, reward, done, truncated, info
             elif min_distance > self.touch_release_distance_threshold:
@@ -536,7 +556,7 @@ class RacingGameEnviroment(gym.Env):
 
         
         
-        
+        self._annotate_outcome_info(info, timed_out=timed_out)
         self._print_live_status(info, distances)
         
         

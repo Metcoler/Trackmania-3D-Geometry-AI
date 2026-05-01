@@ -7,8 +7,8 @@ import numpy as np
 
 
 TRACKMANIA_RACING_OBJECTIVES = [
-    "progress",
     "finish",
+    "progress",
     "speed_for_progress",
     "safe_progress",
     "path_efficiency",
@@ -45,7 +45,9 @@ def trackmania_racing_objectives(
     strong Pareto solution just because it is "safe" or quick to terminate.
     """
 
-    term = int(metrics.get("term", -1))
+    finished = 1.0 if int(metrics.get("finished", 0)) > 0 else 0.0
+    crashes = max(0.0, float(metrics.get("crashes", 0.0)))
+    max_crashes = max(1.0, float(metrics.get("max_crashes", metrics.get("max_touches", 1.0))))
     progress = max(
         float(metrics.get("progress", 0.0)),
         float(metrics.get("dense_progress", metrics.get("progress", 0.0))),
@@ -61,15 +63,14 @@ def trackmania_racing_objectives(
     excess_distance = max(0.0, distance - ideal_distance)
     excess_norm = float(np.clip(excess_distance / max_episode_distance, 0.0, 1.0))
 
-    finish = 1.0 if term > 0 else 0.0
     speed_for_progress = progress_norm * (1.0 - time_norm)
-    safe_progress = progress_norm if term >= 0 else 0.0
+    safe_progress = progress_norm * (1.0 - float(np.clip(crashes / max_crashes, 0.0, 1.0)))
     path_efficiency = progress_norm * (1.0 - excess_norm)
 
     return np.asarray(
         [
+            finished,
             progress_norm,
-            finish,
             speed_for_progress,
             safe_progress,
             path_efficiency,

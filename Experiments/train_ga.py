@@ -82,7 +82,8 @@ def apply_metrics_to_individual(individual: Individual, metrics: dict, fitness_m
     individual.discrete_progress = float(metrics["progress"])
     individual.dense_progress = float(metrics.get("dense_progress", metrics["progress"]))
     individual.time = float(metrics["time"])
-    individual.term = int(metrics["term"])
+    individual.finished = int(metrics.get("finished", 0))
+    individual.crashes = int(metrics.get("crashes", 0))
     individual.distance = float(metrics["distance"])
     individual.reward = float(metrics.get("reward", metrics.get("fitness", 0.0)))
     individual.evaluation_steps = int(metrics.get("steps", 0))
@@ -111,7 +112,9 @@ def cached_metrics_from_individual(individual: Individual) -> dict:
         "progress": float(individual.discrete_progress),
         "dense_progress": float(individual.dense_progress),
         "time": float(individual.time),
-        "term": int(individual.term),
+        "finished": int(individual.finished),
+        "crashes": int(individual.crashes),
+        "timeout": int(int(individual.finished) <= 0 and int(individual.crashes) <= 0),
         "distance": float(individual.distance),
         "reward": float(individual.reward),
         "fitness": fitness,
@@ -146,7 +149,8 @@ def generation_metric_fieldnames() -> list[str]:
         "best_dense_progress",
         "best_ranking_progress",
         "best_time",
-        "best_term",
+        "best_finished",
+        "best_crashes",
         "best_distance",
         "best_steps",
         "best_reward",
@@ -200,9 +204,8 @@ def individual_metric_fieldnames() -> list[str]:
         "progress",
         "dense_progress",
         "time",
-        "term",
         "finished",
-        "crashed",
+        "crashes",
         "timeout",
         "distance",
         "reward",
@@ -347,10 +350,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--ranking-key",
-        default="(term, progress, -time, -distance)",
+        default="(finished, progress, -time, -crashes, -distance)",
         help=(
             "Lexicographic tuple expression, e.g. "
-            "'(dense_progress, term, -time, -distance)'. "
+            "'(dense_progress, finished, -time, -crashes, -distance)'. "
         ),
     )
     parser.add_argument(
@@ -573,7 +576,15 @@ def main() -> None:
                 time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
                 distance_values = np.asarray([float(metric["distance"]) for metric in metrics], dtype=np.float64)
                 step_values = np.asarray([int(metric.get("steps", 0)) for metric in metrics], dtype=np.float64)
-                term_values = np.asarray([int(metric["term"]) for metric in metrics], dtype=np.int32)
+                finished_values = np.asarray([int(metric.get("finished", 0)) for metric in metrics], dtype=np.int32)
+                crash_values = np.asarray([int(metric.get("crashes", 0)) for metric in metrics], dtype=np.int32)
+                timeout_values = np.asarray(
+                    [
+                        int(int(metric.get("finished", 0)) <= 0 and int(metric.get("crashes", 0)) <= 0)
+                        for metric in metrics
+                    ],
+                    dtype=np.int32,
+                )
                 virtual_time_sum = float(np.sum(time_values))
                 virtual_steps_sum = int(np.sum(step_values))
                 cumulative_virtual_time += virtual_time_sum
@@ -587,7 +598,8 @@ def main() -> None:
                     "best_dense_progress": float(np.max(dense_progress_values)),
                     "best_ranking_progress": float(best.ranking_progress()),
                     "best_time": float(best.time),
-                    "best_term": int(best.term),
+                    "best_finished": int(best.finished),
+                    "best_crashes": int(best.crashes),
                     "best_distance": float(best.distance),
                     "best_steps": int(getattr(best, "evaluation_steps", 0)),
                     "best_reward": float(np.max(reward_values)),
@@ -595,9 +607,9 @@ def main() -> None:
                     "cached_evaluations": int(cached_evaluations),
                     "evaluated_count": int(len(population) - cached_evaluations),
                     "population_size": int(len(population)),
-                    "finish_count": int(np.sum(term_values > 0)),
-                    "crash_count": int(np.sum(term_values < 0)),
-                    "timeout_count": int(np.sum(term_values == 0)),
+                    "finish_count": int(np.sum(finished_values > 0)),
+                    "crash_count": int(np.sum(crash_values > 0)),
+                    "timeout_count": int(np.sum(timeout_values > 0)),
                     "terminated_count": int(sum(bool(metric.get("terminated", False)) for metric in metrics)),
                     "truncated_count": int(sum(bool(metric.get("truncated", False)) for metric in metrics)),
                     "virtual_time_sum": virtual_time_sum,
@@ -629,7 +641,7 @@ def main() -> None:
                         if individual.fitness is not None and np.isfinite(individual.fitness)
                         else float(individual.compute_scalar_fitness())
                     )
-                    timeout = int(individual.term == 0)
+                    timeout = int(int(individual.finished) <= 0 and int(individual.crashes) <= 0)
                     individual_writer.writerow(
                         {
                             "generation": generation,
@@ -644,9 +656,8 @@ def main() -> None:
                             "progress": float(individual.discrete_progress),
                             "dense_progress": float(individual.dense_progress),
                             "time": float(individual.time),
-                            "term": int(individual.term),
-                            "finished": int(individual.term > 0),
-                            "crashed": int(individual.term < 0),
+                            "finished": int(individual.finished),
+                            "crashes": int(individual.crashes),
                             "timeout": timeout,
                             "distance": float(individual.distance),
                             "reward": float(individual.reward),

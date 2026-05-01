@@ -45,7 +45,7 @@ def main() -> None:
         print(header)
         for progress in progresses:
             values = [
-                env._score_state(term=-1, progress=progress, time_value=t, distance=0.0)
+                env._score_state(finished=0, crashes=1, progress=progress, time_value=t, distance=0.0)
                 for t in times
             ]
             print(f"{progress:>10.3f}%  " + "".join(f"{value:12.3f}" for value in values))

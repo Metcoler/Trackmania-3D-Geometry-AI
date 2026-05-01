@@ -126,7 +126,8 @@ def load_population(
             "fitnesses": _read_optional_array(data, "fitnesses"),
             "progresses": _read_optional_array(data, "progresses"),
             "times": _read_optional_array(data, "times"),
-            "terms": _read_optional_array(data, "terms"),
+            "finisheds": _read_optional_array(data, "finisheds"),
+            "crashes": _read_optional_array(data, "crashes"),
             "distances": _read_optional_array(data, "distances"),
         }
         meta: Dict[str, Any] = {
@@ -340,7 +341,8 @@ def replay_population(
 
         m_progress = metrics.get("progresses")
         m_times = metrics.get("times")
-        m_terms = metrics.get("terms")
+        m_finished = metrics.get("finisheds")
+        m_crashes = metrics.get("crashes")
         m_distances = metrics.get("distances")
 
         for rank_in_selection, idx in enumerate(indices, start=1):
@@ -358,8 +360,10 @@ def replay_population(
                     parts.append(f"time={float(m_times[idx]):.2f}")
                 if m_distances is not None:
                     parts.append(f"distance={float(m_distances[idx]):.2f}")
-                if m_terms is not None:
-                    parts.append(f"term={int(m_terms[idx])}")
+                if m_finished is not None:
+                    parts.append(f"finished={int(m_finished[idx])}")
+                if m_crashes is not None:
+                    parts.append(f"crashes={int(m_crashes[idx])}")
                 print("Saved metrics: " + ", ".join(parts))
             print("=" * 40)
 
@@ -399,7 +403,8 @@ def replay_population(
                 print(
                     f"  Episode {ep + 1}/{episodes_per_individual} | "
                     f"reward={total_reward:.3f} | "
-                    f"term={getattr(env, 'race_terminated', 0)} | "
+                    f"finished={int(info.get('finished', getattr(env, 'finished', 0)))} | "
+                    f"crashes={int(info.get('crashes', getattr(env, 'crashes', 0)))} | "
                     f"progress={float(info.get('discrete_progress', 0.0)):.2f}% | "
                     f"time={float(info.get('time', 0.0)):.2f}s | "
                     f"distance={float(info.get('distance', 0.0)):.2f}"
@@ -469,7 +474,8 @@ def drive_model(
 
         print(
             f"Replay finished | reward={total_reward:.3f} | "
-            f"term={getattr(env, 'race_terminated', 0)} | "
+            f"finished={int(info.get('finished', getattr(env, 'finished', 0)))} | "
+            f"crashes={int(info.get('crashes', getattr(env, 'crashes', 0)))} | "
             f"progress={float(info.get('discrete_progress', 0.0)):.2f}% | "
             f"time={float(info.get('time', 0.0)):.2f}s | "
             f"distance={float(info.get('distance', 0.0)):.2f}"

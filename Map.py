@@ -727,9 +727,11 @@ class Map:
             in_vector = block.in_vector
             out_vector = block.out_vector
 
-            in_vector_2D = [in_vector[0], in_vector[2]]
-            out_vector_2D = [out_vector[0], out_vector[2]]
-            block_instruction = float(np.cross(in_vector_2D, out_vector_2D) * block.block_size)
+            turn_cross = float(in_vector[0] * out_vector[2] - in_vector[2] * out_vector[0])
+            if abs(turn_cross) <= 1e-6:
+                block_instruction = 0.0
+            else:
+                block_instruction = float(np.sign(turn_cross) / max(1, block.block_size))
             block_surface_instruction = traction_for_surface_prefix(block.surface_name)
             self.block_path_instructions.append(block_instruction)
             self.block_path_surface_instructions.append(block_surface_instruction)

@@ -48,14 +48,24 @@ The sandbox intentionally reuses the main project pieces where possible:
 Metric-parity note:
 
 - `TM2DSimEnv` mirrors the live `Car.get_data()` metric names for reward work:
-  `discrete_progress`, `dense_progress`, `done`, `time`, and `distance`.
+  `discrete_progress`, `dense_progress`, `finished`, `crashes`, `done`,
+  `time`, and `distance`.
 - `done` in the 2D env follows the OpenPlanet meaning used by live TM: it is
   `1.0` only for finish, not for every terminated rollout.
+- The old three-valued `term` metric was removed from the current runtime data
+  model. Current code represents outcome as `finished` (`0/1`) and `crashes`
+  (`0..max_touches`). Timeout is derived for logging as
+  `finished == 0 and crashes == 0`, not optimized as its own objective.
 - Historical aliases such as `total_progress`, `tile_progress`,
   `block_progress`, and `map_progress` were removed from the current runtime
   data flow. Old logs/checkpoints may still contain those names, but new code
   should use only `discrete_progress` for confirmed path-tile progress and
   `dense_progress` for projected between-tile progress.
+- Runtime/log progress values stay in percent (`0..100`) because that is much
+  easier to read in graphs and console output. Ranking/objective code also
+  exposes normalized aliases (`progress_norm`, `discrete_progress_norm`,
+  `dense_progress_norm`, `ranking_progress_norm`) for formulas that should work
+  in clean `[0, 1]` units.
 - 2D rollout diagnostic `fitness` now uses `dense_progress` when
   `Individual.RANKING_PROGRESS_SOURCE == "dense_progress"`, matching
   `EvolutionTrainer._evaluate_single_rollout()`.
@@ -76,7 +86,7 @@ Local 2D GA logging is intentionally research-grade now. `train_ga.py` and
   and rollout steps.
 - `individual_metrics.csv`: one row per individual per generation with rank,
   elite/parent flags, cached-evaluation flag where applicable, progress,
-  dense progress, time, term, finished/crashed/timeout booleans, distance,
+  dense progress, time, finished/crashes/timeout fields, distance,
   reward, fitness, steps, and selection-specific values such as ranking keys
   or Pareto objectives.
 - Virtual experience counters: generation and cumulative virtual driving time
@@ -110,11 +120,11 @@ The sandbox reward modes currently include:
 - `pace_delta`: old aggressive pace reward, useful mainly as a negative control because it can prefer fast early failure
 - `terminal_fitness`: terminal-only `Individual.compute_scalar_fitness_for`
 - `individual_dense`: conservative `Individual.compute_scalar_fitness_for` style score using continuous geometric progress between path tiles; this was added because pure discrete progress left random GA populations tied at `0%`
-- `terminal_lexicographic`: bounded terminal score with finish/fail term, progress, time tie-break, and distance tie-break
+- `terminal_lexicographic`: bounded terminal score with `finished`, progress, time tie-break, crash count, and distance tie-break
 - `terminal_lexicographic_no_distance`: same terminal score without the distance tie-break
 - `terminal_lexicographic_progress20`: terminal score that ignores time/distance tie-breaks below `20%` progress
 - `delta_lexicographic`: dense bounded score with progress primary, time secondary, distance tertiary, and finish bonus; failure does not retroactively erase earlier progress
-- `delta_lexicographic_terminal`: same dense score, but collision/timeout also add the failure term at episode end
+- `delta_lexicographic_terminal`: same dense score, but collision/timeout also apply the terminal failure component at episode end
 - `terminal_progress_time_safety`: terminal-only SAC/debug score in progress-percent units; finish adds one full track (`+100`) and crash/timeout subtract one full track (`-100`)
 - `delta_progress_time_safety`: potential-difference version of `terminal_progress_time_safety`; useful to test whether SAC can learn from dense progress when failed episodes are still globally bad
 - `terminal_progress_time_block_penalty`: terminal-only SAC curriculum score; failed episodes subtract one map-derived progress bucket instead of one full track
@@ -442,6 +452,26 @@ valid non-mirrored individuals and logs the count as `cached_evaluations` in
 evaluation time when mirror evaluation is disabled. It intentionally does not
 reuse metrics for mirrored/evaluate-both-mirrors rollouts.
 
+This cache is a time optimization, not a robustness guarantee. Because live
+Trackmania is noisy (variable FPS, reset timing, controller timing, small
+position differences), a risky individual can occasionally get one lucky strong
+run and then stay protected by cached elite metrics. That can help speed, but it
+can also propagate a policy that does not reliably reproduce its best result.
+For fast exploratory training this is acceptable; for scientific comparison or
+final model selection we should explicitly validate without cache.
+
+Recommended cache protocol:
+
+- Fast training mode: keep elite cache enabled to save real wall-clock time.
+- Robust evaluation mode: re-drive elite individuals every generation or every
+  `N` generations and compare against the cached variant.
+- Final validation: take top `K` policies, run each policy multiple times
+  without cache, and report mean, median, best, worst, finish rate, crash rate,
+  and timeout rate.
+- Thesis experiment: compare cache ON/OFF/hybrid as an explicit research
+  variable. Cache ON should train faster; cache OFF or periodic re-evaluation
+  should better reject lucky/risk-seeking policies.
+
 The same cache is also implemented in the local 2D GA sandbox. In
 `Experiments/train_ga.py`, unchanged valid elites are converted back to cached
 metric dictionaries before worker payloads are built, so process-based
@@ -451,9 +481,10 @@ rollout. `generation_metrics.csv` logs `cached_evaluations`. A smoke run with
 expected behavior: generation 1 cached `0` evaluations and generation 2 cached
 `2` evaluations.
 
-Here `finished = 1` only when `term > 0`, otherwise `0`; `crashed = 1` only
-when `term < 0`, otherwise `0`. Timeout is therefore no longer hidden inside a
-three-valued `term` unless a legacy `term_*` ranking mode is explicitly used.
+Current outcome metrics are `finished` and `crashes`. `finished = 1` only when
+the agent reaches finish. `crashes` is the number of counted touches/crashes in
+the rollout and can be greater than `1` when `max_touches > 1`. Timeout is
+derived as `finished == 0 and crashes == 0`.
 
 Common metrics used by the reward functions:
 
@@ -1159,43 +1190,53 @@ Pseudocode:
 ```python
 progress_obj = dense_progress / 100
 
-finish_obj = 1 if term > 0 else 0
+finish_obj = finished
 
 speed_for_progress_obj = progress_obj * (1 - time / max_time)
 
-safe_progress_obj = progress_obj if term >= 0 else 0
+safe_progress_obj = progress_obj * (1 - min(crashes / max_crashes, 1))
 
 ideal_distance = progress_obj * estimated_path_length
 excess_distance = max(0, distance - ideal_distance)
 path_efficiency_obj = progress_obj * (1 - excess_distance / max_episode_distance)
 
 objectives = (
-    progress_obj,
     finish_obj,
+    progress_obj,
     speed_for_progress_obj,
     safe_progress_obj,
     path_efficiency_obj,
 )
 ```
 
-`progress_obj`:
-How far the agent got. This is the most important practical objective.
-
 `finish_obj`:
 Whether the agent reached the finish. This separates complete-map policies
 from partial policies.
+
+`progress_obj`:
+How far the agent got. This acts like finish split into smaller measurable
+steps while the policy cannot finish yet.
 
 `speed_for_progress_obj`:
 How quickly the agent achieved its progress. It is multiplied by progress, so
 a parked car cannot score well just because time handling is favorable.
 
 `safe_progress_obj`:
-Progress that is only counted as safe if the terminal status is not crash.
-This discourages pure kamikaze progress.
+Progress scaled by remaining crash budget. This discourages pure kamikaze
+progress while still supporting real Trackmania runs where `max_touches > 1`.
 
 `path_efficiency_obj`:
 Rewards progress with limited excess distance. It is also gated by progress,
 so a parked car is not an "efficient" solution.
+
+Default within-front priority is:
+
+```text
+finish -> progress -> speed_for_progress -> safe_progress -> path_efficiency
+```
+
+Pareto fronts preserve multi-objective diversity first; this priority is only
+used inside the same non-dominated front.
 
 Pareto comparison:
 A dominates B if A is at least as good in every objective and strictly better
@@ -1280,6 +1321,56 @@ Recommended extra logging for future reproductions:
   - `generation_rollouts`
   - `cumulative_rollouts`
 
+Recommended evaluation plots for lexicographic GA behavior:
+
+The four lexicographic candidates
+`(finished, progress)`, `(finished, progress, -time)`,
+`(finished, progress, -time, -crashes)`, and
+`(finished, progress, -crashes, -time)` should not be judged by final time
+alone. They intentionally trade off speed, progress, and safety differently.
+
+Suggested safety metrics:
+
+- `finish_rate`: fraction of validation runs that reach the finish.
+- `crash_rate`: fraction of validation runs with `crashes > 0`.
+- `mean_crashes`: average crash/touch count per validation run.
+- `timeout_rate`: derived as `finished == 0 and crashes == 0`.
+- `safe_finish_rate`: fraction of validation runs with `finished == 1` and
+  `crashes == 0`.
+- `crash_free_progress`: mean progress over runs with `crashes == 0`.
+- `robust_progress`: median progress and 10th percentile progress over repeated
+  validation seeds; this shows whether a policy is reproducible or only has a
+  lucky best run.
+
+Good single-figure options:
+
+- Bubble scatter:
+  - x-axis: mean/median final time of successful runs
+  - y-axis: finish rate
+  - bubble size: mean crashes or crash rate
+  - color: safe finish rate or timeout rate
+  This shows fast-but-risky policies as large/dark bubbles and safe reliable
+  policies as small/light bubbles.
+- Progress-time-safety scatter:
+  - x-axis: mean time
+  - y-axis: median progress
+  - color gradient: crash rate
+  - marker shape: reward/ranking key
+  This works even when some methods do not finish often enough for time-only
+  comparison.
+- Pareto-style plot:
+  - x-axis: median time among finishes
+  - y-axis: safe finish rate
+  - annotate each lexicographic key
+  This visually motivates why NSGA-II/Pareto selection is useful: there is no
+  universally best scalar ordering when speed and safety conflict.
+
+Avoid compressing safety into one arbitrary weighted score for the main thesis
+plot. It is better to show time, progress, finish rate, and crash behavior as
+separate dimensions. If a single summary number is needed, use it only as a
+secondary helper and define it from observable quantities, for example
+`safe_finish_rate` rather than a hand-weighted sum.
+
 
 ## Current High-Level Architecture
 
@@ -1320,6 +1411,57 @@ Recommended extra logging for future reproductions:
    so resume can continue the annealing schedule from the actual checkpoint state instead of
    reusing only the values from the trainer script.
 
+### GA trainer features worth documenting
+
+The real Trackmania GA trainer accumulated several practical improvements that
+are useful for the thesis because they show the engineering problems caused by
+slow, non-headless, real-time evaluation:
+
+- Lexicographic ranking keys:
+  `Individual.ranking_key()` can compare policies by explicit tuples such as
+  `(dense_progress, finished, -time, -crashes, -distance)`. This avoided
+  arbitrary weighted sums, but also exposed a real limitation: changing the
+  metric order changes the learned behavior. This later motivated the
+  multi-objective/Pareto GA experiments.
+- Dense progress:
+  beside discrete path-tile progress, the trainer can rank by projected
+  between-tile progress. This reduces the sparse-reward problem where many
+  individuals are tied at the same checkpoint percentage.
+- Mirrored evaluation:
+  `mirror_episode_prob` can randomly evaluate some individuals on mirrored
+  observations/actions, while `evaluate_both_mirrors=True` evaluates every
+  individual in both normal and mirrored mode and averages the result. This was
+  introduced to reduce left/right track bias.
+- Multiple touches:
+  `max_touches` allows experiments where a policy may survive a small number
+  of wall contacts. The outcome metric is now `crashes` rather than a single
+  binary crash flag, so safety can be optimized as a count.
+- Mutation annealing:
+  `mutation_prob` and `mutation_sigma` can decay toward configured minimums.
+  Checkpoints store the current mutation state, so resumed runs continue from
+  the real exploration/fine-tuning point instead of restarting the schedule.
+- Arithmetic-mean crossover:
+  children are produced by averaging parent genomes before mutation. Parent
+  pairing is done without repetition inside each pairing round, then reshuffled
+  for the next round. This gives the top parent pool more even genetic usage.
+- Elite cache:
+  unchanged elite copies can keep their previous rollout metrics, saving live
+  Trackmania evaluation time. This is a speed optimization, not a robustness
+  guarantee, so final validation should re-drive top policies without cache.
+- Supervised/model seeding:
+  the population can start from a supervised `.pt` policy or a population
+  checkpoint instead of pure random genomes. Seeded copies can be mixed with
+  increasingly mutated variants.
+- Confirmed reset handshake:
+  `Enviroment.reset()` repeatedly presses `B` and waits for telemetry evidence
+  of a real restart. This avoids leaking stale Trackmania state from one
+  individual into the next.
+- Detailed experiment logs:
+  generation summaries, individual metrics, checkpoints, best-policy payloads,
+  current mutation state, cached-evaluation counts, and training config are
+  stored so that runs are reproducible and analyzable after long overnight
+  experiments.
+
 ### Supervised dataflow
 
 1. `Actor.py` reads both:
@@ -1342,6 +1484,11 @@ Current observation layout:
 
 - `15` laser distances
 - `5` path instructions
+  - same feature name as before, but current semantics are signed curvature:
+    `straight = 0`, `Curve1 = +/-1.0`, `Curve2 = +/-0.5`,
+    `Curve3 = +/-0.333`, `Curve4 = +/-0.25`
+  - sign encodes left/right turn direction; absolute value encodes turn
+    sharpness, so tighter turns produce stronger steering cues
 - `speed`
 - `side_speed`
 - `segment_heading_error`
@@ -1433,7 +1580,15 @@ Current vertical-mode sensor semantics:
   - if it hits padded block walls, the result is `grid_wall`
   - if it tries to enter a non-connected neighboring block, the result is `grid_blocked_transition`
 - when `vertical_mode=False`, the old flat `walls_mesh`-only raycast remains active
-- `surface_step_size` is kept only for backward config compatibility; the active vertical sensor no longer uses fixed marching steps
+- historical note: the first vertical lidar prototype used fixed-step marching
+  over the road surface (`surface_step_size`). It was slow and unreliable
+  because correctness depended on the chosen step size. The active code no
+  longer exposes or logs `surface_step_size`; the replacement is block-grid
+  surface-following traversal with analytic wall checks per grid cell.
+- `surface_probe_height` and `surface_ray_lift` are still active parameters:
+  the former controls how high support probes start above the fitted road
+  surface and the latter keeps surface-following laser paths slightly above the
+  fitted road plane.
 
 Supported height-changing road blocks:
 
@@ -1502,6 +1657,14 @@ Important history:
 - It was replaced by signed current and next segment heading errors because the agent needed explicit left/right steering information.
 - `path_instructions` used to be stored at block granularity while the car advanced by tile index.
 - This created offsets on multi-tile curves; `Map.py` now expands block instructions into tile-aligned path entries.
+- `path_instructions` also used to encode signed curve size:
+  `Curve1 = +/-0.25`, `Curve2 = +/-0.5`, `Curve3 = +/-0.75`,
+  `Curve4 = +/-1.0` after observation normalization.
+- That meant larger absolute values actually described wider/easier turns, not
+  sharper turns. The current version keeps the same observation slot name but
+  changes the value to signed curvature, approximately `sign / curve_size`.
+  This is more physically meaningful for steering because `Curve1` is the
+  sharpest turn and therefore now has the largest absolute instruction.
 - Per-wheel slip was originally added as four separate observation values: `slip_fl`, `slip_fr`, `slip_rl`, `slip_rr`.
 - It was later compressed into `slip_mean` to reduce observation dimension after live inspection showed the four values are usually redundant for the current agent.
 

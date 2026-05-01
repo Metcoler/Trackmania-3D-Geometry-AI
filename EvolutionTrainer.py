@@ -92,8 +92,8 @@ class TrainingLogger:
         "timestamp_utc",
         "generation",
         "individual_index",
-        "term",
-        "is_finish",
+        "finished",
+        "crashes",
         "discrete_progress",
         "dense_progress",
         "distance",
@@ -114,7 +114,8 @@ class TrainingLogger:
         "finish_rate",
         "crash_rate",
         "timeout_rate",
-        "best_term",
+        "best_finished",
+        "best_crashes",
         "best_progress",
         "best_dense_progress",
         "mean_dense_progress",
@@ -221,7 +222,8 @@ class TrainingLogger:
             [float(ind.dense_progress) for ind in population], dtype=np.float32
         )
         times = np.array([float(ind.time) for ind in population], dtype=np.float32)
-        terms = np.array([int(ind.term) for ind in population], dtype=np.int32)
+        finisheds = np.array([int(ind.finished) for ind in population], dtype=np.int32)
+        crashes = np.array([int(ind.crashes) for ind in population], dtype=np.int32)
         distances = np.array([float(ind.distance) for ind in population], dtype=np.float32)
         fitnesses = np.array(
             [np.nan if ind.fitness is None else float(ind.fitness) for ind in population],
@@ -234,7 +236,8 @@ class TrainingLogger:
             progresses=progresses,
             dense_progresses=dense_progresses,
             times=times,
-            terms=terms,
+            finisheds=finisheds,
+            crashes=crashes,
             distances=distances,
             fitnesses=fitnesses,
             obs_dim=np.array([obs_dim], dtype=np.int32),
@@ -273,7 +276,8 @@ class TrainingLogger:
                 best_progress=np.array([float(best_individual.discrete_progress)], dtype=np.float32),
                 best_dense_progress=np.array([float(best_individual.dense_progress)], dtype=np.float32),
                 best_time=np.array([float(best_individual.time)], dtype=np.float32),
-                best_term=np.array([int(best_individual.term)], dtype=np.int32),
+                best_finished=np.array([int(best_individual.finished)], dtype=np.int32),
+                best_crashes=np.array([int(best_individual.crashes)], dtype=np.int32),
                 best_distance=np.array([float(best_individual.distance)], dtype=np.float32),
                 best_fitness=np.array(
                     [np.nan if best_individual.fitness is None else float(best_individual.fitness)],
@@ -304,7 +308,8 @@ class TrainingLogger:
             [float(ind.dense_progress) for ind in population], dtype=np.float32
         )
         times = np.array([float(ind.time) for ind in population], dtype=np.float32)
-        terms = np.array([int(ind.term) for ind in population], dtype=np.int32)
+        finisheds = np.array([int(ind.finished) for ind in population], dtype=np.int32)
+        crashes = np.array([int(ind.crashes) for ind in population], dtype=np.int32)
         distances = np.array([float(ind.distance) for ind in population], dtype=np.float32)
         fitnesses = np.array(
             [np.nan if ind.fitness is None else float(ind.fitness) for ind in population],
@@ -317,7 +322,8 @@ class TrainingLogger:
             progresses=progresses,
             dense_progresses=dense_progresses,
             times=times,
-            terms=terms,
+            finisheds=finisheds,
+            crashes=crashes,
             distances=distances,
             fitnesses=fitnesses,
             obs_dim=np.array([obs_dim], dtype=np.int32),
@@ -366,7 +372,8 @@ class TrainingLogger:
             discrete_progress=float(best.discrete_progress),
             dense_progress=float(best.dense_progress),
             time=float(best.time),
-            term=int(best.term),
+            finished=int(best.finished),
+            crashes=int(best.crashes),
             distance=float(best.distance),
             fitness=np.nan if best.fitness is None else float(best.fitness),
         )
@@ -399,7 +406,8 @@ class TrainingLogger:
             discrete_progress=float(best.discrete_progress),
             dense_progress=float(best.dense_progress),
             time=float(best.time),
-            term=int(best.term),
+            finished=int(best.finished),
+            crashes=int(best.crashes),
             distance=float(best.distance),
             fitness=np.nan if best.fitness is None else float(best.fitness),
             observation_layout=list(
@@ -483,14 +491,12 @@ class EvolutionTrainer:
         self._checkpoint_current_mutation_sigma: Optional[float] = None
 
     @staticmethod
-    def _term_status_text(term: int) -> str:
-        if term == 1:
+    def _outcome_status_text(finished: int, crashes: int) -> str:
+        if int(finished) > 0:
             return "FINISH"
-        if term == 0:
-            return "TIMEOUT"
-        if term < 0:
-            return f"CRASHx{abs(int(term))}"
-        return str(term)
+        if int(crashes) > 0:
+            return f"CRASHx{int(crashes)}"
+        return "TIMEOUT"
 
     def _wait_for_positive_game_time(
         self,
@@ -547,21 +553,31 @@ class EvolutionTrainer:
                 np.mean([metrics["distance"] for metrics in rollout_metrics])
             )
             mean_fitness = float(np.mean([metrics["fitness"] for metrics in rollout_metrics]))
-            representative_term = int(
-                min(int(metrics["term"]) for metrics in rollout_metrics)
+            representative_finished = int(
+                min(int(metrics["finished"]) for metrics in rollout_metrics)
+            )
+            representative_crashes = int(
+                round(float(np.mean([metrics["crashes"] for metrics in rollout_metrics])))
             )
 
             individual.discrete_progress = mean_discrete_progress
             individual.dense_progress = mean_dense_progress
             individual.time = mean_time
-            individual.term = representative_term
+            individual.finished = representative_finished
+            individual.crashes = representative_crashes
             individual.distance = mean_distance
             individual.fitness = mean_fitness
             individual.evaluation_valid = True
 
             if verbose and index is not None and total is not None:
-                normal_status = self._term_status_text(int(normal_metrics["term"]))
-                mirrored_status = self._term_status_text(int(mirrored_metrics["term"]))
+                normal_status = self._outcome_status_text(
+                    int(normal_metrics["finished"]),
+                    int(normal_metrics["crashes"]),
+                )
+                mirrored_status = self._outcome_status_text(
+                    int(mirrored_metrics["finished"]),
+                    int(mirrored_metrics["crashes"]),
+                )
                 print(
                     f"{index + 1}/{total} "
                     f"N:{normal_status} {normal_metrics['discrete_progress']:.1f}%/{normal_metrics['time']:.2f}s | "
@@ -577,13 +593,14 @@ class EvolutionTrainer:
         individual.discrete_progress = float(rollout_metrics["discrete_progress"])
         individual.dense_progress = float(rollout_metrics["dense_progress"])
         individual.time = float(rollout_metrics["time"])
-        individual.term = int(rollout_metrics["term"])
+        individual.finished = int(rollout_metrics["finished"])
+        individual.crashes = int(rollout_metrics["crashes"])
         individual.distance = float(rollout_metrics["distance"])
         individual.fitness = float(rollout_metrics["fitness"])
         individual.evaluation_valid = True
 
         if verbose and index is not None and total is not None:
-            status = self._term_status_text(individual.term)
+            status = self._outcome_status_text(individual.finished, individual.crashes)
             mirror_tag = " [MIRROR]" if mirrored else ""
             print(
                 f"{index + 1}/{total} "
@@ -619,10 +636,11 @@ class EvolutionTrainer:
             last_info = info
             step_count += 1
 
-            race_term = getattr(self.env, "race_terminated", 0)
+            race_finished = int(getattr(self.env, "finished", 0))
+            race_term = int(getattr(self.env, "race_terminated", 0))
             info_done = info.get("done", 0.0) == 1.0
 
-            terminated = done or truncated or info_done or (race_term != 0)
+            terminated = done or truncated or info_done or race_finished > 0 or race_term != 0
             if terminated:
                 break
 
@@ -633,13 +651,15 @@ class EvolutionTrainer:
             t = 1e-3
 
         distance = float(last_info.get("distance", 0.0))
-        term = int(getattr(self.env, "race_terminated", 0))
+        finished = int(last_info.get("finished", int(getattr(self.env, "finished", 0))))
+        crashes = int(last_info.get("crashes", int(getattr(self.env, "crashes", 0))))
         info_done = last_info.get("done", 0.0) == 1.0
-        if info_done and term == 0:
-            term = 1
+        if info_done and finished == 0:
+            finished = 1
 
         scalar = Individual.compute_scalar_fitness_for(
-            term=term,
+            finished=finished,
+            crashes=crashes,
             progress=dense_progress
             if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
             else discrete_progress,
@@ -650,7 +670,8 @@ class EvolutionTrainer:
             discrete_progress=discrete_progress,
             dense_progress=dense_progress,
             time=t,
-            term=term,
+            finished=finished,
+            crashes=crashes,
             distance=distance,
             fitness=scalar,
         )
@@ -713,7 +734,7 @@ class EvolutionTrainer:
                 else:
                     fitnesses[i] = float(ind.compute_scalar_fitness())
                 if verbose:
-                    status = self._term_status_text(ind.term)
+                    status = self._outcome_status_text(ind.finished, ind.crashes)
                     print(
                         f"{i + 1}/{n} {status} | "
                         f"progress={ind.discrete_progress:.1f}% | "
@@ -902,8 +923,8 @@ class EvolutionTrainer:
                     timestamp_utc=timestamp,
                     generation=generation,
                     individual_index=idx,
-                    term=int(ind.term),
-                    is_finish=1 if int(ind.term) == 1 else 0,
+                    finished=int(ind.finished),
+                    crashes=int(ind.crashes),
                     discrete_progress=float(ind.discrete_progress),
                     dense_progress=float(ind.dense_progress),
                     distance=float(ind.distance),
@@ -913,14 +934,15 @@ class EvolutionTrainer:
             )
         self.logger.log_individual_batch(individual_rows)
 
-        terms = np.array([int(ind.term) for ind in self.population], dtype=np.int32)
+        finisheds = np.array([int(ind.finished) for ind in self.population], dtype=np.int32)
+        crashes = np.array([int(ind.crashes) for ind in self.population], dtype=np.int32)
         dense_progresses = np.array(
             [float(ind.dense_progress) for ind in self.population],
             dtype=np.float32,
         )
-        finish_rate = float((terms == 1).mean())
-        crash_rate = float((terms < 0).mean())
-        timeout_rate = float((terms == 0).mean())
+        finish_rate = float((finisheds > 0).mean())
+        crash_rate = float((crashes > 0).mean())
+        timeout_rate = float(((finisheds <= 0) & (crashes <= 0)).mean())
 
         summary_row = dict(
             timestamp_utc=timestamp,
@@ -935,7 +957,8 @@ class EvolutionTrainer:
             finish_rate=finish_rate,
             crash_rate=crash_rate,
             timeout_rate=timeout_rate,
-            best_term=int(best_gen.term),
+            best_finished=int(best_gen.finished),
+            best_crashes=int(best_gen.crashes),
             best_progress=float(best_gen.discrete_progress),
             best_dense_progress=float(best_gen.dense_progress),
             mean_dense_progress=(
@@ -1086,7 +1109,10 @@ class EvolutionTrainer:
                 self.population = self.population[: self.pop_size]
 
                 if verbose:
-                    status = self._term_status_text(int(screened_best.term))
+                    status = self._outcome_status_text(
+                        screened_best.finished,
+                        screened_best.crashes,
+                    )
                     print(
                         f"Screening best: {status} | "
                         f"progress={screened_best.discrete_progress:.1f}% | "
@@ -1143,7 +1169,7 @@ class EvolutionTrainer:
             )
             times_plot = np.array(
                 [
-                    float(ind.time) if ind.term == 1 else float(dnf_time_for_plot)
+                    float(ind.time) if int(ind.finished) > 0 else float(dnf_time_for_plot)
                     for ind in self.population
                 ],
                 dtype=np.float32,
@@ -1155,7 +1181,7 @@ class EvolutionTrainer:
             best_gen = max(self.population)
             dist_best_gen = float(best_gen.discrete_progress)
             time_best_gen = float(
-                best_gen.time if best_gen.term == 1 else dnf_time_for_plot
+                best_gen.time if int(best_gen.finished) > 0 else dnf_time_for_plot
             )
 
             best_improved = best_so_far is None or best_gen > best_so_far
@@ -1164,7 +1190,7 @@ class EvolutionTrainer:
 
             dist_best_global = float(best_so_far.discrete_progress)
             time_best_global = float(
-                best_so_far.time if best_so_far.term == 1 else dnf_time_for_plot
+                best_so_far.time if int(best_so_far.finished) > 0 else dnf_time_for_plot
             )
 
             history["dist_avg"].append(dist_avg)
@@ -1175,7 +1201,7 @@ class EvolutionTrainer:
             history["time_best_global"].append(time_best_global)
 
             if verbose:
-                from_status = self._term_status_text(int(best_gen.term))
+                from_status = self._outcome_status_text(best_gen.finished, best_gen.crashes)
                 print(
                     f"Best of generation: {from_status} | "
                     f"progress={dist_best_gen:.1f}% | time={best_gen.time:.2f}s"
@@ -1335,7 +1361,8 @@ class EvolutionTrainer:
         progresses = data["progresses"] if "progresses" in data.files else None
         dense_progresses = data["dense_progresses"] if "dense_progresses" in data.files else None
         times = data["times"] if "times" in data.files else None
-        terms = data["terms"] if "terms" in data.files else None
+        finisheds = data["finisheds"] if "finisheds" in data.files else None
+        crashes = data["crashes"] if "crashes" in data.files else None
         distances = data["distances"] if "distances" in data.files else None
         fitnesses = data["fitnesses"] if "fitnesses" in data.files else None
         checkpoint_current_mutation_prob = (
@@ -1353,7 +1380,8 @@ class EvolutionTrainer:
             and progresses is not None
             and dense_progresses is not None
             and times is not None
-            and terms is not None
+            and finisheds is not None
+            and crashes is not None
             and distances is not None
         )
 
@@ -1376,8 +1404,10 @@ class EvolutionTrainer:
                 ind.dense_progress = float(ind.discrete_progress)
             if times is not None:
                 ind.time = float(times[i])
-            if terms is not None:
-                ind.term = int(terms[i])
+            if finisheds is not None:
+                ind.finished = int(finisheds[i])
+            if crashes is not None:
+                ind.crashes = int(crashes[i])
             if distances is not None:
                 ind.distance = float(distances[i])
             if fitnesses is not None:
@@ -1417,8 +1447,10 @@ class EvolutionTrainer:
                 best.dense_progress = float(best.discrete_progress)
             if "best_time" in data.files:
                 best.time = float(np.asarray(data["best_time"]).reshape(-1)[0])
-            if "best_term" in data.files:
-                best.term = int(np.asarray(data["best_term"]).reshape(-1)[0])
+            if "best_finished" in data.files:
+                best.finished = int(np.asarray(data["best_finished"]).reshape(-1)[0])
+            if "best_crashes" in data.files:
+                best.crashes = int(np.asarray(data["best_crashes"]).reshape(-1)[0])
             if "best_distance" in data.files:
                 best.distance = float(np.asarray(data["best_distance"]).reshape(-1)[0])
             if "best_fitness" in data.files:
@@ -1471,10 +1503,10 @@ if __name__ == "__main__":
     #
     # With selection_fitness_mode="ranking", Individual.fitness remains a
     # log-friendly scalar, but population sorting uses Individual.ranking_key().
-    # This run tests: (dense_progress, term, -time, -distance).
+    # This run tests: (dense_progress, finished, -time, -crashes, -distance).
     selection_fitness_mode = "ranking"  # scalar / ranking
     ranking_mode = "lexicographic"
-    ranking_key = "(dense_progress, term, -time, -distance)"
+    ranking_key = "(dense_progress, finished, -time, -crashes, -distance)"
     ranking_progress_source = "dense_progress"
 
     mutation_prob = 0.20
@@ -1498,7 +1530,6 @@ if __name__ == "__main__":
     max_steps = None
     env_dt_ref = 1.0 / 100.0
     env_dt_ratio_clip = 3.0
-    surface_step_size = Car.SURFACE_STEP_SIZE
     surface_probe_height = Car.SURFACE_PROBE_HEIGHT
     surface_ray_lift = Car.SURFACE_RAY_LIFT
     policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
@@ -1557,7 +1588,6 @@ if __name__ == "__main__":
         dt_ref=env_dt_ref,
         dt_ratio_clip=env_dt_ratio_clip,
         vertical_mode=vertical_mode,
-        surface_step_size=surface_step_size,
         surface_probe_height=surface_probe_height,
         surface_ray_lift=surface_ray_lift,
         max_time=env_max_time,
@@ -1655,7 +1685,6 @@ if __name__ == "__main__":
                 env_dt_ref=env_dt_ref,
                 env_dt_ratio_clip=env_dt_ratio_clip,
                 vertical_mode=vertical_mode,
-                surface_step_size=surface_step_size,
                 surface_probe_height=surface_probe_height,
                 surface_ray_lift=surface_ray_lift,
                 action_mode=action_mode,
@@ -1689,7 +1718,8 @@ if __name__ == "__main__":
 
         if trainer.best_individual is not None:
             print(
-                f"\nBest overall: term={trainer.best_individual.term}, "
+                f"\nBest overall: finished={trainer.best_individual.finished}, "
+                f"crashes={trainer.best_individual.crashes}, "
                 f"progress={trainer.best_individual.discrete_progress:.1f}%, "
                 f"time={trainer.best_individual.time:.2f}s"
             )

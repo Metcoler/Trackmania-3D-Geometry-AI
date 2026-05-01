@@ -136,14 +136,17 @@ class TM2DSB3Env(gym.Env):
         )
 
     def _episode_metrics(self, info: dict[str, Any]) -> dict[str, float]:
-        term = int(info.get("term", 0))
+        finished = int(info.get("finished", 0))
+        crashes = int(info.get("crashes", 0))
         progress = float(info.get("discrete_progress", 0.0))
         dense_progress = float(info.get("dense_progress", progress))
         time_value = float(info.get("time", 0.0))
         distance = float(info.get("distance", 0.0))
-        fitness = Individual.compute_scalar_fitness_for(term, progress, time_value, distance)
+        fitness = Individual.compute_scalar_fitness_for(finished, crashes, progress, time_value, distance)
         return {
-            "term": float(term),
+            "finished": float(finished),
+            "crashes": float(crashes),
+            "timeout": float(int(finished <= 0 and crashes <= 0)),
             "progress": progress,
             "dense_progress": dense_progress,
             "time": time_value,
@@ -212,7 +215,9 @@ class EpisodeMetricsCallback:
         return [
             "timestamp_utc",
             "episode",
-            "term",
+            "finished",
+            "crashes",
+            "timeout",
             "progress",
             "dense_progress",
             "time",
@@ -233,7 +238,9 @@ class EpisodeMetricsCallback:
         row = {
             "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "episode": self.episode,
-            "term": int(metrics.get("term", 0)),
+            "finished": int(metrics.get("finished", 0)),
+            "crashes": int(metrics.get("crashes", 0)),
+            "timeout": int(metrics.get("timeout", 0)),
             "progress": progress,
             "dense_progress": dense_progress,
             "time": float(metrics.get("time", 0.0)),
@@ -265,7 +272,8 @@ class EpisodeMetricsCallback:
             print(
                 f"[TM2D SAC] ep={self.episode} dense={dense_progress:.2f}% "
                 f"progress={progress:.2f}% reward={episode_reward:.3f} "
-                f"term={int(row['term'])} time={row['time']:.2f}s"
+                f"fin={int(row['finished'])} crashes={int(row['crashes'])} "
+                f"time={row['time']:.2f}s"
             )
 
 

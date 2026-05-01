@@ -44,7 +44,8 @@ def apply_metrics_to_individual(individual: Individual, metrics: dict, selection
     individual.discrete_progress = float(metrics["progress"])
     individual.dense_progress = float(metrics.get("dense_progress", metrics["progress"]))
     individual.time = float(metrics["time"])
-    individual.term = int(metrics["term"])
+    individual.finished = int(metrics.get("finished", 0))
+    individual.crashes = int(metrics.get("crashes", 0))
     individual.distance = float(metrics["distance"])
     individual.reward = float(metrics.get("reward", metrics.get("fitness", 0.0)))
     individual.evaluation_steps = int(metrics.get("steps", 0))
@@ -107,7 +108,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--objective-priority",
-        default="progress,finish,speed_for_progress,safe_progress,path_efficiency",
+        default="finish,progress,speed_for_progress,safe_progress,path_efficiency",
         help="Comma-separated objective names for within-front ordering.",
     )
     parser.add_argument(
@@ -210,7 +211,8 @@ def main() -> None:
         "best_progress",
         "best_dense_progress",
         "best_time",
-        "best_term",
+        "best_finished",
+        "best_crashes",
         "best_reward",
         "best_scalar_fitness",
         "best_distance",
@@ -246,9 +248,8 @@ def main() -> None:
         "progress",
         "dense_progress",
         "time",
-        "term",
         "finished",
-        "crashed",
+        "crashes",
         "timeout",
         "distance",
         "reward",
@@ -354,7 +355,15 @@ def main() -> None:
                 time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
                 distance_values = np.asarray([float(metric["distance"]) for metric in metrics], dtype=np.float64)
                 step_values = np.asarray([int(metric.get("steps", 0)) for metric in metrics], dtype=np.float64)
-                term_values = np.asarray([int(metric["term"]) for metric in metrics], dtype=np.int32)
+                finished_values = np.asarray([int(metric.get("finished", 0)) for metric in metrics], dtype=np.int32)
+                crash_values = np.asarray([int(metric.get("crashes", 0)) for metric in metrics], dtype=np.int32)
+                timeout_values = np.asarray(
+                    [
+                        int(int(metric.get("finished", 0)) <= 0 and int(metric.get("crashes", 0)) <= 0)
+                        for metric in metrics
+                    ],
+                    dtype=np.int32,
+                )
                 virtual_time_sum = float(np.sum(time_values))
                 virtual_steps_sum = int(np.sum(step_values))
                 cumulative_virtual_time += virtual_time_sum
@@ -370,14 +379,15 @@ def main() -> None:
                     "best_progress": float(best_metric["progress"]),
                     "best_dense_progress": float(best_metric["dense_progress"]),
                     "best_time": float(best_metric["time"]),
-                    "best_term": int(best_metric["term"]),
+                    "best_finished": int(best_metric.get("finished", 0)),
+                    "best_crashes": int(best_metric.get("crashes", 0)),
                     "best_reward": float(best_metric["reward"]),
                     "best_scalar_fitness": float(best_metric["fitness"]),
                     "best_distance": float(best_metric["distance"]),
                     "best_steps": int(best_metric.get("steps", 0)),
-                    "finish_count": int(np.sum(term_values > 0)),
-                    "crash_count": int(np.sum(term_values < 0)),
-                    "timeout_count": int(np.sum(term_values == 0)),
+                    "finish_count": int(np.sum(finished_values > 0)),
+                    "crash_count": int(np.sum(crash_values > 0)),
+                    "timeout_count": int(np.sum(timeout_values > 0)),
                     "virtual_time_sum": virtual_time_sum,
                     "cumulative_virtual_time": cumulative_virtual_time,
                     "virtual_steps_sum": virtual_steps_sum,
@@ -418,10 +428,12 @@ def main() -> None:
                         "progress": float(metric["progress"]),
                         "dense_progress": float(metric["dense_progress"]),
                         "time": float(metric["time"]),
-                        "term": int(metric["term"]),
-                        "finished": int(int(metric["term"]) > 0),
-                        "crashed": int(int(metric["term"]) < 0),
-                        "timeout": int(int(metric["term"]) == 0),
+                        "finished": int(metric.get("finished", 0)),
+                        "crashes": int(metric.get("crashes", 0)),
+                        "timeout": int(
+                            int(metric.get("finished", 0)) <= 0
+                            and int(metric.get("crashes", 0)) <= 0
+                        ),
                         "distance": float(metric["distance"]),
                         "reward": float(metric["reward"]),
                         "fitness": float(metric["fitness"]),
@@ -437,7 +449,8 @@ def main() -> None:
                 print(
                     f"gen={generation:04d} front0={row['front0_size']:02d} "
                     f"best_dense={row['best_dense_progress']:.2f}% "
-                    f"best_time={row['best_time']:.2f}s term={row['best_term']} "
+                    f"best_time={row['best_time']:.2f}s "
+                    f"fin={row['best_finished']} crashes={row['best_crashes']} "
                     f"obj_progress={row['best_obj_progress']:.3f} "
                     f"obj_speed={row['best_obj_speed_for_progress']:.3f}"
                 )

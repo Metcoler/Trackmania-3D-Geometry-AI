@@ -18,7 +18,6 @@ class Car:
     PACKET_FLOAT_COUNT = 37
     PACKET_SIZE = PACKET_FLOAT_COUNT * 4
     LASER_MAX_DISTANCE = 160.0
-    SURFACE_STEP_SIZE = 5.0
     SURFACE_PROBE_HEIGHT = 1.0
     SURFACE_RAY_LIFT = 0.2
     SURFACE_TRAVERSAL_EPS = 1e-4
@@ -66,7 +65,6 @@ class Car:
         self,
         game_map: Map,
         vertical_mode: bool = True,
-        surface_step_size: float = SURFACE_STEP_SIZE,
         surface_probe_height: float = SURFACE_PROBE_HEIGHT,
         surface_ray_lift: float = SURFACE_RAY_LIFT,
     ) -> None:
@@ -82,7 +80,6 @@ class Car:
         self.road_face_neighbors = self.game_map.get_road_face_neighbors()
         self.walls_mesh = self.game_map.get_walls_mesh()
         self.vertical_mode = bool(vertical_mode)
-        self.surface_step_size = float(surface_step_size)
         self.surface_probe_height = float(surface_probe_height)
         self.surface_ray_lift = float(surface_ray_lift)
 

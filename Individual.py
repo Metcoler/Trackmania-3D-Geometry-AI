@@ -10,6 +10,32 @@ class Individual:
 
     Holds a policy network plus evaluation metrics used by lexicographic ranking.
     """
+    TERM_WEIGHT = 1_000_000_000.0
+    PROGRESS_WEIGHT = 1_000_000.0
+    TIME_WEIGHT = 10_000.0
+    DISTANCE_WEIGHT = 1.0
+    COMPARE_BY_RANKING_KEY = False
+    RANKING_KEY_MODE = "term_progress_time_distance"
+    RANKING_PROGRESS_SOURCE = "progress"
+    RANKING_PROGRESS_SOURCES = ("progress", "dense_progress")
+    RANKING_KEY_MODES = (
+        "term_progress_time_distance",
+        "progress",
+        "progress_time",
+        "progress_time_distance",
+        "finished_progress_time",
+        "progress_finished_time",
+        "progress_finished_time_distance",
+        "progress_finished_crashed_time",
+        "progress_finished_crashed_time_distance",
+        "finished_crashed_progress_time",
+        "crashed_finished_progress_time",
+        "finished_progress_crashed_time",
+        "finished_progress_crashed_time_distance",
+        "finished_progress_time_crashed",
+        "finished_progress_time_distance",
+        "progress_term_time_distance",
+    )
 
     def __init__(
         self,
@@ -33,6 +59,7 @@ class Individual:
 
         self.fitness: Optional[float] = None
         self.total_progress: float = 0.0
+        self.dense_progress: float = 0.0
         self.time: float = float("inf")
         self.term: int = -999
         self.distance: float = 0.0
@@ -54,6 +81,7 @@ class Individual:
     def invalidate_evaluation(self) -> None:
         self.fitness = None
         self.total_progress = 0.0
+        self.dense_progress = 0.0
         self.time = float("inf")
         self.term = -999
         self.distance = 0.0
@@ -67,31 +95,67 @@ class Individual:
         progress: float,
         time_value: float,
         distance: float,
-    ) -> Tuple[int, float, float, float]:
+    ) -> Tuple[float, ...]:
         term = int(term)
         progress = float(progress)
         dist = float(distance)
         t = float(time_value)
 
-        if np.isfinite(t):
-            time_bucket = int(np.floor(t))
-        else:
-            time_bucket = 10**9
+        if not np.isfinite(t):
+            t = 10**9
+        if not np.isfinite(dist):
+            dist = 10**9
 
+        finished = 1.0 if term > 0 else 0.0
+        crashed = 1.0 if term < 0 else 0.0
 
-        # If player didn't reach 20% don't consider time
-        if progress < 20:
-           return (term, progress, 0, 0)
-        
-        if term <= 0:
-            return (term, progress, -t, 0)
-        
-        return (term, progress, -time_bucket, -dist)
+        mode = str(Individual.RANKING_KEY_MODE)
+        if mode == "term_progress_time_distance":
+            return (float(term), progress, -t, -dist)
+        if mode == "progress":
+            return (progress,)
+        if mode == "progress_time_distance":
+            return (progress, -t, -dist)
+        if mode == "progress_time":
+            return (progress, -t)
+        if mode == "finished_progress_time":
+            return (finished, progress, -t)
+        if mode == "progress_finished_time":
+            return (progress, finished, -t)
+        if mode == "progress_finished_time_distance":
+            return (progress, finished, -t, -dist)
+        if mode == "progress_finished_crashed_time":
+            return (progress, finished, -crashed, -t)
+        if mode == "progress_finished_crashed_time_distance":
+            return (progress, finished, -crashed, -t, -dist)
+        if mode == "finished_crashed_progress_time":
+            return (finished, -crashed, progress, -t)
+        if mode == "crashed_finished_progress_time":
+            return (-crashed, finished, progress, -t)
+        if mode == "finished_progress_crashed_time":
+            return (finished, progress, -crashed, -t)
+        if mode == "finished_progress_crashed_time_distance":
+            return (finished, progress, -crashed, -t, -dist)
+        if mode == "finished_progress_time_crashed":
+            return (finished, progress, -t, -crashed)
+        if mode == "finished_progress_time_distance":
+            return (finished, progress, -t, -dist)
+        if mode == "progress_term_time_distance":
+            return (progress, float(term), -t, -dist)
+        raise ValueError(f"Unknown Individual.RANKING_KEY_MODE: {mode}")
 
-    def ranking_key(self) -> Tuple[int, float, float, float]:
+    def ranking_progress(self) -> float:
+        source = str(Individual.RANKING_PROGRESS_SOURCE)
+        if source == "progress":
+            return float(self.total_progress)
+        if source == "dense_progress":
+            return float(self.dense_progress)
+        raise ValueError(f"Unknown Individual.RANKING_PROGRESS_SOURCE: {source}")
+
+    def ranking_key(self) -> Tuple[float, ...]:
         return self.ranking_key_for(
             term=self.term,
-            progress=self.total_progress,
+            progress=self.ranking_progress(),
             time_value=self.time,
             distance=self.distance,
         )
@@ -104,34 +168,465 @@ class Individual:
         time_value: float,
         distance: float,
     ) -> float:
-        term, progress, neg_time_bucket, neg_dist = cls.ranking_key_for(
+        key = cls.ranking_key_for(
             term=term,
             progress=progress,
             time_value=time_value,
             distance=distance,
         )
-        time_bucket = -neg_time_bucket
-        dist = -neg_dist
 
-        a = 1_000_000_000.0
-        b = 1_000_000.0
-        c = 10_000.0
-        d = 1.0
-        return term * a + progress * b - time_bucket * c - dist * d
+        if cls.RANKING_KEY_MODE == "term_progress_time_distance" and len(key) == 4:
+            term_key, progress_key, neg_time_key, neg_dist = key
+            time_key = -neg_time_key
+            dist = -neg_dist
+
+            return (
+                term_key * cls.TERM_WEIGHT
+                + progress_key * cls.PROGRESS_WEIGHT
+                - time_key * cls.TIME_WEIGHT
+                - dist * cls.DISTANCE_WEIGHT
+            )
+
+        # Diagnostic scalar only: real GA selection can compare ranking_key()
+        # tuples directly via __lt__/__eq__ when fitness is None.
+        score = 0.0
+        scale = 1.0
+        for value in reversed(key):
+            score += float(value) * scale
+            scale *= 1_000_000.0
+        return float(score)
+
+    @staticmethod
+    def _is_terminal_score_state(term: int, time_value: float, max_time: float) -> bool:
+        return int(term) != 0 or float(time_value) >= float(max_time)
+
+    @staticmethod
+    def _progress_unit_norm(
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+    ) -> float:
+        if path_tile_count is not None and int(path_tile_count) > 1:
+            return 1.0 / float(int(path_tile_count) - 1)
+        if progress_bucket is not None and float(progress_bucket) > 0.0:
+            return float(progress_bucket) / 100.0
+        return 0.01
+
+    @classmethod
+    def compute_lexicographic_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        estimated_path_length: float | None = None,
+        max_episode_distance: float | None = None,
+        include_failure_term: bool = False,
+        ignore_time_below_progress: float = 0.0,
+        distance_mode: str = "all",
+    ) -> float:
+        """Bounded lexicographic score for GA/RL reward shaping.
+
+        The scale is derived from map/time geometry:
+        progress is normalized to `[0, 1]`, one full path-tile progress unit
+        dominates the whole time tie-break range, and the time tie-break
+        dominates the whole distance tie-break range.
+        """
+
+        max_time = max(1e-6, float(max_time))
+        progress = float(np.clip(float(progress), 0.0, 100.0))
+        time_value = max(0.0, float(time_value))
+        distance = max(0.0, float(distance))
+        terminal = cls._is_terminal_score_state(term, time_value, max_time)
+        progress_norm = progress / 100.0
+        tile_unit = cls._progress_unit_norm(path_tile_count, progress_bucket)
+
+        score = progress_norm
+        if terminal and int(term) > 0:
+            score += 1.0
+        elif terminal and include_failure_term:
+            score -= 1.0
+
+        if progress >= float(ignore_time_below_progress):
+            time_norm = float(np.clip(time_value / max_time, 0.0, 1.0))
+            score += tile_unit * (1.0 - time_norm)
+
+            use_distance = distance_mode == "all" or (
+                distance_mode == "finish" and terminal and int(term) > 0
+            )
+            if use_distance:
+                distance_limit_candidates = [
+                    value
+                    for value in (estimated_path_length, max_episode_distance)
+                    if value is not None and float(value) > 0.0
+                ]
+                if distance_limit_candidates:
+                    distance_limit = max(float(value) for value in distance_limit_candidates)
+                    distance_norm = float(np.clip(distance / distance_limit, 0.0, 1.0))
+                    score += (tile_unit * tile_unit) * (1.0 - distance_norm)
+
+        return float(score)
+
+    @classmethod
+    def compute_delta_lexicographic_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        estimated_path_length: float | None = None,
+        max_episode_distance: float | None = None,
+    ) -> float:
+        return cls.compute_lexicographic_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            estimated_path_length=estimated_path_length,
+            max_episode_distance=max_episode_distance,
+            include_failure_term=False,
+            ignore_time_below_progress=0.0,
+            distance_mode="all",
+        )
+
+    @classmethod
+    def compute_terminal_lexicographic_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        estimated_path_length: float | None = None,
+        max_episode_distance: float | None = None,
+    ) -> float:
+        if not cls._is_terminal_score_state(term, time_value, max_time):
+            return 0.0
+        return cls.compute_lexicographic_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            estimated_path_length=estimated_path_length,
+            max_episode_distance=max_episode_distance,
+            include_failure_term=True,
+            ignore_time_below_progress=0.0,
+            distance_mode="all",
+        )
+
+    @classmethod
+    def compute_progress_time_efficiency_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        estimated_path_length: float | None = None,
+        max_episode_distance: float | None = None,
+        terminal_only: bool = False,
+    ) -> float:
+        """Progress-primary score with map-derived time and efficiency tie-breaks.
+
+        Human goal: get as far as possible, and for equal progress get there
+        sooner. The time term is gated by progress, so a zero-progress crash
+        cannot beat a zero-progress attempt by simply ending earlier. Distance
+        is only an excess-distance penalty, which avoids rewarding zig-zags.
+        """
+
+        if terminal_only and not cls._is_terminal_score_state(term, time_value, max_time):
+            return 0.0
+
+        max_time = max(1e-6, float(max_time))
+        progress = float(np.clip(float(progress), 0.0, 100.0))
+        progress_norm = progress / 100.0
+        time_value = max(0.0, float(time_value))
+        distance = max(0.0, float(distance))
+        tile_unit = cls._progress_unit_norm(path_tile_count, progress_bucket)
+
+        score = progress_norm
+        if cls._is_terminal_score_state(term, time_value, max_time) and int(term) > 0:
+            score += 1.0
+
+        if progress_norm > 0.0:
+            time_norm = float(np.clip(time_value / max_time, 0.0, 1.0))
+            score += tile_unit * progress_norm * (1.0 - time_norm)
+
+            distance_limit_candidates = [
+                value
+                for value in (estimated_path_length, max_episode_distance)
+                if value is not None and float(value) > 0.0
+            ]
+            if distance_limit_candidates:
+                estimated_length = max(1e-6, float(estimated_path_length or 0.0))
+                distance_limit = max(float(value) for value in distance_limit_candidates)
+                ideal_distance = progress_norm * estimated_length
+                excess_distance = max(0.0, distance - ideal_distance)
+                excess_norm = float(np.clip(excess_distance / max(1e-6, distance_limit), 0.0, 1.0))
+                score -= (tile_unit * tile_unit) * progress_norm * excess_norm
+
+        return float(score)
+
+    @classmethod
+    def compute_delta_progress_time_efficiency_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        estimated_path_length: float | None = None,
+        max_episode_distance: float | None = None,
+    ) -> float:
+        return cls.compute_progress_time_efficiency_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            estimated_path_length=estimated_path_length,
+            max_episode_distance=max_episode_distance,
+            terminal_only=False,
+        )
+
+    @classmethod
+    def compute_terminal_progress_time_efficiency_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        estimated_path_length: float | None = None,
+        max_episode_distance: float | None = None,
+    ) -> float:
+        return cls.compute_progress_time_efficiency_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            estimated_path_length=estimated_path_length,
+            max_episode_distance=max_episode_distance,
+            terminal_only=True,
+        )
+
+    @classmethod
+    def compute_progress_time_safety_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        terminal_only: bool = False,
+    ) -> float:
+        """SAC-friendly progress score with terminal failure safety.
+
+        The score stays in progress-percent units so SAC gets a clear dense
+        signal, but an unsuccessful terminal state subtracts one full track
+        completion. That keeps "go farther" as the main objective while making
+        both crash and timeout worse than continuing.
+        """
+
+        if terminal_only and not cls._is_terminal_score_state(term, time_value, max_time):
+            return 0.0
+
+        del distance
+        max_time = max(1e-6, float(max_time))
+        progress = float(np.clip(float(progress), 0.0, 100.0))
+        progress_norm = progress / 100.0
+        time_value = max(0.0, float(time_value))
+        tile_unit = cls._progress_unit_norm(path_tile_count, progress_bucket)
+        tile_percent = 100.0 * tile_unit
+
+        score = progress
+        if progress_norm > 0.0:
+            time_norm = float(np.clip(time_value / max_time, 0.0, 1.0))
+            score += tile_percent * progress_norm * (1.0 - time_norm)
+
+        if cls._is_terminal_score_state(term, time_value, max_time):
+            if int(term) > 0:
+                score += 100.0
+            else:
+                score -= 100.0
+
+        return float(score)
+
+    @classmethod
+    def compute_delta_progress_time_safety_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+    ) -> float:
+        return cls.compute_progress_time_safety_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            terminal_only=False,
+        )
+
+    @classmethod
+    def compute_terminal_progress_time_safety_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+    ) -> float:
+        return cls.compute_progress_time_safety_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            terminal_only=True,
+        )
+
+    @classmethod
+    def compute_progress_time_block_penalty_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        terminal_only: bool = False,
+    ) -> float:
+        """Dense progress score with one-block terminal failure penalty.
+
+        This is a softer SAC curriculum version of
+        `compute_progress_time_safety_score_for`: a failed episode loses one
+        map-derived progress bucket instead of one full track completion.
+        """
+
+        if terminal_only and not cls._is_terminal_score_state(term, time_value, max_time):
+            return 0.0
+
+        del distance
+        max_time = max(1e-6, float(max_time))
+        progress = float(np.clip(float(progress), 0.0, 100.0))
+        progress_norm = progress / 100.0
+        time_value = max(0.0, float(time_value))
+        tile_unit = cls._progress_unit_norm(path_tile_count, progress_bucket)
+        tile_percent = 100.0 * tile_unit
+
+        score = progress
+        if progress_norm > 0.0:
+            time_norm = float(np.clip(time_value / max_time, 0.0, 1.0))
+            score += tile_percent * progress_norm * (1.0 - time_norm)
+
+        if cls._is_terminal_score_state(term, time_value, max_time):
+            if int(term) > 0:
+                score += 100.0
+            else:
+                score -= tile_percent
+
+        return float(score)
+
+    @classmethod
+    def compute_delta_progress_time_block_penalty_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+    ) -> float:
+        return cls.compute_progress_time_block_penalty_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            terminal_only=False,
+        )
+
+    @classmethod
+    def compute_terminal_progress_time_block_penalty_score_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+    ) -> float:
+        return cls.compute_progress_time_block_penalty_score_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            terminal_only=True,
+        )
 
     def compute_scalar_fitness(self) -> float:
-        return self.compute_scalar_fitness_for(
-            term=self.term,
-            progress=self.total_progress,
-            time_value=self.time,
-            distance=self.distance,
-        )
+        return self._diagnostic_scalar_for_key(self.ranking_key())
+
+    @staticmethod
+    def _diagnostic_scalar_for_key(key: Tuple[float, ...]) -> float:
+        score = 0.0
+        scale = 1.0
+        for value in reversed(key):
+            score += float(value) * scale
+            scale *= 1_000_000.0
+        return float(score)
 
     def __lt__(self, other: "Individual") -> bool:
         if not isinstance(other, Individual):
             return NotImplemented
         if (
-            self.fitness is not None
+            not Individual.COMPARE_BY_RANKING_KEY
+            and self.fitness is not None
             and other.fitness is not None
             and np.isfinite(self.fitness)
             and np.isfinite(other.fitness)
@@ -143,7 +638,8 @@ class Individual:
         if not isinstance(other, Individual):
             return NotImplemented
         if (
-            self.fitness is not None
+            not Individual.COMPARE_BY_RANKING_KEY
+            and self.fitness is not None
             and other.fitness is not None
             and np.isfinite(self.fitness)
             and np.isfinite(other.fitness)
@@ -156,6 +652,7 @@ class Individual:
             "Individual("
             f"term={self.term}, "
             f"progress={self.total_progress:.1f}, "
+            f"dense_progress={self.dense_progress:.1f}, "
             f"distance={self.distance:.1f}, "
             f"time={self.time:.2f}, "
             f"fitness={self.fitness})"
@@ -173,6 +670,7 @@ class Individual:
         )
         new.fitness = self.fitness
         new.total_progress = self.total_progress
+        new.dense_progress = self.dense_progress
         new.time = self.time
         new.term = self.term
         new.distance = self.distance

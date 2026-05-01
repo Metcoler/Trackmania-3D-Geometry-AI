@@ -1,0 +1,364 @@
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import multiprocessing as mp
+import random
+import sys
+import time
+from dataclasses import asdict
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from EvolutionPolicy import normalize_hidden_activations, normalize_hidden_dims
+from Individual import Individual
+
+from Experiments.multiobjective import (
+    objective_names_for_mode,
+    objectives_from_metrics,
+    pareto_order,
+)
+from Experiments.tm2d_env import TM2DRewardConfig, TM2DSimEnv
+from Experiments.train_ga import (
+    NumpyPolicyView,
+    _evaluate_genome_worker,
+    _init_worker,
+    make_child_pool,
+    parse_list,
+)
+
+
+def evaluate_individual(env: TM2DSimEnv, individual: Individual) -> dict:
+    return env.rollout_policy(NumpyPolicyView(individual.policy))
+
+
+def apply_metrics_to_individual(individual: Individual, metrics: dict, selection_score: float) -> None:
+    individual.fitness = float(selection_score)
+    individual.total_progress = float(metrics["progress"])
+    individual.time = float(metrics["time"])
+    individual.term = int(metrics["term"])
+    individual.distance = float(metrics["distance"])
+
+
+def objective_priority_indices(names: list[str], priority: str) -> list[int]:
+    priority_names = [part.strip() for part in str(priority).split(",") if part.strip()]
+    if not priority_names:
+        return list(range(len(names)))
+    missing = [name for name in priority_names if name not in names]
+    if missing:
+        raise ValueError(f"Unknown objective priority names: {missing}. Available: {names}")
+    return [names.index(name) for name in priority_names]
+
+
+def build_run_dir(log_dir: str, map_name: str, objective_mode: str) -> Path:
+    run_name = (
+        time.strftime("%Y%m%d_%H%M%S")
+        + f"_tm2d_ga_moo_{map_name.replace(' ', '_').replace('#', '')}_{objective_mode}"
+    )
+    run_dir = Path(log_dir) / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Fast 2D Trackmania-like multi-objective GA experiments.")
+    parser.add_argument("--map-name", default="AI Training #5")
+    parser.add_argument("--generations", type=int, default=100)
+    parser.add_argument("--population-size", type=int, default=48)
+    parser.add_argument("--elite-count", type=int, default=4)
+    parser.add_argument("--parent-count", type=int, default=16)
+    parser.add_argument("--max-time", type=float, default=45.0)
+    parser.add_argument("--hidden-dim", default="32,16")
+    parser.add_argument("--hidden-activation", default="relu,tanh")
+    parser.add_argument("--mutation-prob", type=float, default=0.18)
+    parser.add_argument("--mutation-sigma", type=float, default=0.22)
+    parser.add_argument("--collision-mode", choices=["center", "corners"], default="center")
+    parser.add_argument(
+        "--objective-mode",
+        choices=["trackmania_racing"],
+        default="trackmania_racing",
+        help="Objective vector used for Pareto selection.",
+    )
+    parser.add_argument(
+        "--reward-mode",
+        choices=[
+            "terminal_progress_time_efficiency",
+            "delta_progress_time_efficiency",
+            "terminal_lexicographic",
+            "terminal_lexicographic_no_distance",
+            "terminal_lexicographic_progress20",
+            "terminal_fitness",
+        ],
+        default="terminal_progress_time_efficiency",
+        help="Only used for reward logging; Pareto selection uses --objective-mode.",
+    )
+    parser.add_argument(
+        "--objective-priority",
+        default="progress,finish,speed_for_progress,safe_progress,path_efficiency",
+        help="Comma-separated objective names for within-front ordering.",
+    )
+    parser.add_argument(
+        "--pareto-tiebreak",
+        choices=["priority", "crowding"],
+        default="priority",
+        help="How to order individuals inside the same Pareto front.",
+    )
+    parser.add_argument("--seed", type=int, default=123)
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=1,
+        help="Number of worker processes for parallel individual evaluation. Use 1 to disable.",
+    )
+    parser.add_argument("--log-dir", default="Experiments/runs")
+    parser.add_argument("--run-dir", default=None)
+    parser.add_argument("--render-best", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+
+    hidden_dim = tuple(parse_list(args.hidden_dim, int))
+    hidden_activation = tuple(parse_list(args.hidden_activation, str))
+    hidden_dim = normalize_hidden_dims(hidden_dim)
+    hidden_activation = normalize_hidden_activations(hidden_activation, len(hidden_dim))
+
+    reward_config = TM2DRewardConfig(mode=args.reward_mode)
+    env = TM2DSimEnv(
+        map_name=args.map_name,
+        max_time=args.max_time,
+        reward_config=reward_config,
+        seed=args.seed,
+        collision_mode=args.collision_mode,
+    )
+    action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
+    population = [
+        Individual(
+            obs_dim=env.obs_dim,
+            hidden_dim=hidden_dim,
+            act_dim=env.act_dim,
+            action_scale=action_scale,
+            action_mode="target",
+            hidden_activation=hidden_activation,
+        )
+        for _ in range(args.population_size)
+    ]
+
+    objective_names = objective_names_for_mode(args.objective_mode)
+    priority_indices = objective_priority_indices(objective_names, args.objective_priority)
+    max_episode_distance = float(env.physics.max_speed) * float(args.max_time)
+    run_dir = Path(args.run_dir) if args.run_dir else build_run_dir(args.log_dir, args.map_name, args.objective_mode)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    config = {
+        "map_name": args.map_name,
+        "generations": args.generations,
+        "population_size": args.population_size,
+        "elite_count": args.elite_count,
+        "parent_count": args.parent_count,
+        "max_time": args.max_time,
+        "hidden_dim": list(hidden_dim),
+        "hidden_activation": list(hidden_activation),
+        "mutation_prob": args.mutation_prob,
+        "mutation_sigma": args.mutation_sigma,
+        "selection_mode": "pareto",
+        "objective_mode": args.objective_mode,
+        "objective_names": objective_names,
+        "objective_priority": [objective_names[index] for index in priority_indices],
+        "pareto_tiebreak": args.pareto_tiebreak,
+        "reward_mode": args.reward_mode,
+        "collision_mode": args.collision_mode,
+        "obs_dim": env.obs_dim,
+        "act_dim": env.act_dim,
+        "progress_bucket": env.progress_bucket,
+        "estimated_path_length": env.geometry.estimated_path_length,
+        "max_episode_distance": max_episode_distance,
+        "physics": asdict(env.physics),
+        "num_workers": int(args.num_workers),
+    }
+    (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+    print("\n[TM2D MOO GA] Prepared multi-objective GA experiment")
+    print(f"[TM2D MOO GA] run_dir={run_dir}")
+    print(f"[TM2D MOO GA] objectives={objective_names}")
+    print(f"[TM2D MOO GA] priority={[objective_names[index] for index in priority_indices]}")
+    print(f"[TM2D MOO GA] pareto_tiebreak={args.pareto_tiebreak}")
+
+    csv_path = run_dir / "generation_metrics.csv"
+    fieldnames = [
+        "generation",
+        "front0_size",
+        "best_rank",
+        "best_crowding",
+        "best_priority_score",
+        "best_progress",
+        "best_dense_progress",
+        "best_time",
+        "best_term",
+        "best_reward",
+        "best_scalar_fitness",
+        "mean_progress",
+        "mean_dense_progress",
+        "mean_reward",
+        "mean_time",
+    ] + [f"best_obj_{name}" for name in objective_names] + [f"mean_obj_{name}" for name in objective_names]
+
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+
+        worker_pool = None
+        best_overall: Individual | None = None
+        best_overall_key: tuple[float, ...] | None = None
+        if int(args.num_workers) > 1:
+            worker_config = {
+                "map_name": args.map_name,
+                "max_time": args.max_time,
+                "reward_mode": args.reward_mode,
+                "collision_mode": args.collision_mode,
+                "seed": args.seed,
+                "obs_dim": env.obs_dim,
+                "hidden_dim": list(hidden_dim),
+                "hidden_activation": list(hidden_activation),
+                "act_dim": env.act_dim,
+                "action_mode": "target",
+                "action_scale": action_scale.tolist(),
+            }
+            worker_pool = mp.get_context("spawn").Pool(
+                processes=int(args.num_workers),
+                initializer=_init_worker,
+                initargs=(worker_config,),
+            )
+
+        try:
+            for generation in range(1, args.generations + 1):
+                if worker_pool is None:
+                    metrics = [evaluate_individual(env, individual) for individual in population]
+                else:
+                    payloads = [
+                        (idx, individual.genome.copy())
+                        for idx, individual in enumerate(population)
+                    ]
+                    metrics = [None for _ in population]
+                    for idx, metric in worker_pool.map(_evaluate_genome_worker, payloads):
+                        metrics[idx] = metric
+                    metrics = [metric for metric in metrics if metric is not None]
+
+                objective_matrix = np.vstack(
+                    [
+                        objectives_from_metrics(
+                            metric,
+                            mode=args.objective_mode,
+                            max_time=args.max_time,
+                            estimated_path_length=env.geometry.estimated_path_length,
+                            max_episode_distance=max_episode_distance,
+                        )
+                        for metric in metrics
+                    ]
+                )
+                ordering = pareto_order(
+                    objective_matrix,
+                    priority_indices=priority_indices,
+                    tiebreak=args.pareto_tiebreak,
+                )
+                population = [population[index] for index in ordering.order]
+                metrics = [metrics[index] for index in ordering.order]
+                ordered_objectives = ordering.objectives[ordering.order]
+                ordered_crowding = ordering.crowding[ordering.order]
+                ordered_ranks = ordering.ranks[ordering.order]
+
+                for local_idx, individual in enumerate(population):
+                    priority_score = tuple(float(ordered_objectives[local_idx, idx]) for idx in priority_indices)
+                    scalar_priority = float(sum((10.0 ** -i) * value for i, value in enumerate(priority_score)))
+                    apply_metrics_to_individual(individual, metrics[local_idx], selection_score=scalar_priority)
+
+                best = population[0]
+                best_metric = metrics[0]
+                best_objectives = ordered_objectives[0]
+                best_key = tuple(float(best_objectives[index]) for index in priority_indices)
+                if best_overall_key is None or best_key > best_overall_key:
+                    best_overall_key = best_key
+                    best_overall = best.copy()
+
+                row = {
+                    "generation": generation,
+                    "front0_size": len(ordering.fronts[0]) if ordering.fronts else 0,
+                    "best_rank": int(ordered_ranks[0]),
+                    "best_crowding": float(ordered_crowding[0]),
+                    "best_priority_score": float(best.fitness),
+                    "best_progress": float(best_metric["progress"]),
+                    "best_dense_progress": float(best_metric["dense_progress"]),
+                    "best_time": float(best_metric["time"]),
+                    "best_term": int(best_metric["term"]),
+                    "best_reward": float(best_metric["reward"]),
+                    "best_scalar_fitness": float(best_metric["fitness"]),
+                    "mean_progress": float(np.mean([metric["progress"] for metric in metrics])),
+                    "mean_dense_progress": float(np.mean([metric["dense_progress"] for metric in metrics])),
+                    "mean_reward": float(np.mean([metric["reward"] for metric in metrics])),
+                    "mean_time": float(np.mean([metric["time"] for metric in metrics])),
+                }
+                for objective_idx, name in enumerate(objective_names):
+                    row[f"best_obj_{name}"] = float(best_objectives[objective_idx])
+                    row[f"mean_obj_{name}"] = float(np.mean(ordered_objectives[:, objective_idx]))
+                writer.writerow(row)
+                handle.flush()
+
+                print(
+                    f"gen={generation:04d} front0={row['front0_size']:02d} "
+                    f"best_dense={row['best_dense_progress']:.2f}% "
+                    f"best_time={row['best_time']:.2f}s term={row['best_term']} "
+                    f"obj_progress={row['best_obj_progress']:.3f} "
+                    f"obj_speed={row['best_obj_speed_for_progress']:.3f}"
+                )
+
+                if generation < args.generations:
+                    elites = [individual.copy() for individual in population[: args.elite_count]]
+                    parents = [individual.copy() for individual in population[: args.parent_count]]
+                    children = make_child_pool(parents, args.population_size - len(elites))
+                    for child in children:
+                        child.mutate(args.mutation_prob, args.mutation_sigma)
+                    population = elites + children
+        finally:
+            if worker_pool is not None:
+                worker_pool.close()
+                worker_pool.join()
+
+    best_path = run_dir / "best_policy.pt"
+    if best_overall is None:
+        best_overall = population[0]
+    best_overall.policy.save(str(best_path), extra={"config": config})
+    print(f"Saved best policy to {best_path}")
+    print(f"Saved metrics to {csv_path}")
+
+    if args.render_best:
+        from Experiments.tm2d_viewer import TM2DViewer
+
+        viewer_env = TM2DSimEnv(
+            map_name=args.map_name,
+            max_time=args.max_time,
+            reward_config=reward_config,
+            seed=args.seed + 1,
+            collision_mode=args.collision_mode,
+        )
+        viewer = TM2DViewer(viewer_env)
+        obs, info = viewer_env.reset()
+        while True:
+            action = best_overall.act(obs)
+            obs, _, terminated, truncated, info = viewer_env.step(action)
+            viewer.update(info)
+            time.sleep(0.01)
+            if terminated or truncated:
+                time.sleep(1.0)
+                obs, info = viewer_env.reset()
+
+
+if __name__ == "__main__":
+    main()

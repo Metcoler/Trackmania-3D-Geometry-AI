@@ -1366,8 +1366,17 @@ if __name__ == "__main__":
     # Evolution
     pop_size = 32
     elite_fraction = 0.25
-    generations_to_run = 100
+    generations_to_run = 200
     checkpoint_every = 10
+
+    # Selection metric for the overnight GA experiment.
+    #
+    # With selection_fitness_mode="ranking", Individual.fitness remains a
+    # log-friendly scalar, but population sorting uses Individual.ranking_key().
+    # This run tests: (progress, term, -time, -distance).
+    selection_fitness_mode = "ranking"  # scalar / ranking
+    ranking_key_mode = "progress_term_time_distance"
+    ranking_progress_source = "progress"
 
     mutation_prob = 0.20
     mutation_prob_decay = 1.0
@@ -1396,6 +1405,9 @@ if __name__ == "__main__":
     policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
     start_idle_max_time = 2.0
     # Baseline run from scratch: stronger exploration first, then gradual annealing.
+    Individual.COMPARE_BY_RANKING_KEY = selection_fitness_mode == "ranking"
+    Individual.RANKING_KEY_MODE = ranking_key_mode
+    Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
     
     # Train from checkpoint or supervised predtrainded model
     initial_population_source: Optional[str] = None
@@ -1483,6 +1495,7 @@ if __name__ == "__main__":
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             f"_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+            f"_{selection_fitness_mode}_{ranking_key_mode}"
         )
         logger = TrainingLogger(run_name=run_name)
 
@@ -1562,6 +1575,10 @@ if __name__ == "__main__":
                 mirror_episode_prob=mirror_episode_prob,
                 max_touches=max_touches,
                 start_idle_max_time=start_idle_max_time,
+                selection_fitness_mode=selection_fitness_mode,
+                compare_by_ranking_key=bool(Individual.COMPARE_BY_RANKING_KEY),
+                ranking_key_mode=ranking_key_mode,
+                ranking_progress_source=ranking_progress_source,
                 mutation_prob_decay=mutation_prob_decay,
                 mutation_prob_min=mutation_prob_min,
                 mutation_sigma_decay=mutation_sigma_decay,

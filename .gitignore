@@ -24,3 +24,10 @@ Map Extractor C#/obj/
 # Local-only folders
 Bakal*/
 Cars Evolution Training Project/
+
+# Local SAC model checkpoints
+logs/sb3_runs/**/*.zip
+RL_test/logs/sb3_runs/**/*.zip
+
+# Fast local experiment outputs
+Experiments/runs/

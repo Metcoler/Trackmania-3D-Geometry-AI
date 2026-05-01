@@ -12,10 +12,7 @@ class ObservationEncoder:
         "dt_ratio",
     )
     WHEEL_SLIP_FEATURE_NAMES = (
-        "slip_fl",
-        "slip_fr",
-        "slip_rl",
-        "slip_rr",
+        "slip_mean",
     )
     SURFACE_FEATURE_NAMES = tuple(
         f"surface_instruction_{idx}" for idx in range(Car.SIGHT_TILES)
@@ -321,17 +318,23 @@ class ObservationEncoder:
 
         dt_ratio = self.update_dt_ratio(current_time)
         info["dt_ratio"] = dt_ratio
-        wheel_slips = self.fit_vector(
-            values=[
-                info.get("slip_fl", 0.0),
-                info.get("slip_fr", 0.0),
-                info.get("slip_rl", 0.0),
-                info.get("slip_rr", 0.0),
-            ],
-            expected_size=len(self.WHEEL_SLIP_FEATURE_NAMES),
-            pad_value=0.0,
-        )
-        wheel_slips = np.clip(wheel_slips, 0.0, 1.0)
+        if "slip_mean" in info:
+            slip_mean = float(info.get("slip_mean", 0.0))
+        else:
+            raw_slips = np.asarray(
+                [
+                    info.get("slip_fl", 0.0),
+                    info.get("slip_fr", 0.0),
+                    info.get("slip_rl", 0.0),
+                    info.get("slip_rr", 0.0),
+                ],
+                dtype=np.float32,
+            )
+            raw_slips = np.nan_to_num(raw_slips, nan=0.0, posinf=1.0, neginf=0.0)
+            raw_slips = np.clip(raw_slips, 0.0, 1.0)
+            slip_mean = float(np.mean(raw_slips))
+        wheel_slips = np.array([np.clip(slip_mean, 0.0, 1.0)], dtype=np.float32)
+        info["slip_mean"] = float(wheel_slips[0])
         surface_instructions = self.fit_vector(
             values=info.get("next_surface_instructions", [1.0 for _ in range(Car.SIGHT_TILES)]),
             expected_size=len(self.SURFACE_FEATURE_NAMES),
@@ -479,9 +482,6 @@ class ObservationEncoder:
         x[side_speed_idx] = -x[side_speed_idx]
         x[segment_heading_error_idx] = -x[segment_heading_error_idx]
         x[next_segment_heading_error_idx] = -x[next_segment_heading_error_idx]
-        slip_offset = slices["slip"].start
-        x[slip_offset : slip_offset + 2] = x[slip_offset : slip_offset + 2][::-1]
-        x[slip_offset + 2 : slip_offset + 4] = x[slip_offset + 2 : slip_offset + 4][::-1]
         surface_slice = slices["surface"]
         x[surface_slice] = x[surface_slice][::-1]
         temporal_offset = slices["temporal"].start

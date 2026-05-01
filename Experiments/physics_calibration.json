@@ -1,0 +1,82 @@
+{
+  "attempt_files": 11,
+  "usable_samples": 45981,
+  "speed_stats_from_observation": {
+    "p1": 8.715340867638588,
+    "p5": 32.20529854297638,
+    "p25": 56.928206235170364,
+    "p50": 66.00119918584824,
+    "p75": 76.6340047121048,
+    "p90": 85.635706782341,
+    "p95": 90.89600294828415,
+    "p99": 104.1608288884161
+  },
+  "speed_stats_from_distance_derivative": {
+    "p1": 8.55103354552607,
+    "p5": 28.81739503612045,
+    "p25": 49.6936868205226,
+    "p50": 61.8149914171276,
+    "p75": 77.40301354186535,
+    "p90": 93.7299771167048,
+    "p95": 108.39182178822094,
+    "p99": 136.79273950847616
+  },
+  "side_speed_stats": {
+    "p1": -18.44746135175228,
+    "p5": -8.584199473261833,
+    "p25": -0.348400033544749,
+    "p50": -0.03980000474257395,
+    "p75": 0.26000000070780516,
+    "p90": 0.5190000520087779,
+    "p95": 1.1906001018360257,
+    "p99": 15.482600219547745
+  },
+  "dt_stats": {
+    "p1": 0.0099945068359375,
+    "p5": 0.0099945068359375,
+    "p25": 0.009999990463256836,
+    "p50": 0.010000228881835938,
+    "p75": 0.019998550415039062,
+    "p90": 0.0200042724609375,
+    "p95": 0.029998779296875,
+    "p99": 0.040008544921875
+  },
+  "abs_steer_stats": {
+    "p1": 0.0,
+    "p5": 0.0,
+    "p25": 0.328000009059906,
+    "p50": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p95": 1.0,
+    "p99": 1.0
+  },
+  "longitudinal_fit": {
+    "intercept": -15.985050255664415,
+    "gas_accel": 28.187465969913635,
+    "brake_accel": 16.647547864402284,
+    "drag": 0.0966074653718394,
+    "rolling_drag": 15.985050255664415,
+    "rmse": 7.310670520318601,
+    "gas_equilibrium_speed": 126.3092419129564
+  },
+  "suggested_tm2d_physics_config": {
+    "min_dt": 0.008333333333333333,
+    "max_dt": 0.04,
+    "max_speed": 143.63237648389998,
+    "reverse_speed": 10.0,
+    "gas_accel": 28.187,
+    "brake_accel": 16.648,
+    "drag": 0.0966,
+    "rolling_drag": 15.985,
+    "lateral_grip": 5.5,
+    "max_yaw_rate": 2.35,
+    "car_length": 4.8,
+    "car_width": 2.6
+  },
+  "notes": [
+    "Fit model: accel ~= intercept + gas*gas_coef + brake*brake_coef + speed*speed_coef.",
+    "TM2DPhysicsConfig implements this as gas_accel, brake_accel, rolling_drag and drag.",
+    "Steering/yaw is not directly present in older supervised attempts, so max_yaw_rate remains a hand-tuned curve feasibility parameter."
+  ]
+}

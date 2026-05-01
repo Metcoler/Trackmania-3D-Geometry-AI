@@ -21,27 +21,26 @@ os.chdir(PROJECT_ROOT)
 from Car import Car
 from Enviroment import RacingGameEnviroment
 from Individual import Individual
+from Map import MAP_BLOCK_SIZE
 
 
 MAP_NAME = "AI Training #5"
-EPISODES_TO_RUN = 5000
-TOTAL_TIMESTEPS = 20_000_000
-MAX_RUNTIME_HOURS = 7.0
+EPISODES_TO_RUN = 10_000
+TOTAL_TIMESTEPS = 50_000_000
+MAX_RUNTIME_HOURS = 8.0
 ENV_MAX_TIME = 45.0
 CHECKPOINT_EVERY_EPISODES = 50
 
-# Exact sparse shaping: each emitted reward is the delta of the same scalar
-# fitness score used for terminal_fitness, so the episode reward sums to the
-# final scaled fitness while still giving feedback when progress advances.
-REWARD_MODE = "fitness_delta"
+# SAC debug default after the 2026-04-30 local sandbox sweep:
+#   - dense progress signal so SAC is not trained only from sparse terminal reward
+#   - timeout/crash penalty equal to one map-derived progress bucket
+#   - gas_steer first, because gas_brake_steer made early exploration much worse
+REWARD_MODE = "delta_progress_time_block_penalty"
 TERMINAL_FITNESS_SCALE = 1_000_000.0
-INITIAL_MODEL_PATH = (
-    "logs/sb3_runs/"
-    "20260429_085707_sac_map_small_map_test_2_3d_lidar_terminal_fitness_gas_brake_steer/"
-    "best_model.zip"
-)
+PACE_TARGET_TIME = ENV_MAX_TIME / 2.0
+INITIAL_MODEL_PATH = None
 
-ACTION_LAYOUT = "gas_brake_steer"  # gas_steer / gas_brake_steer / throttle_steer / target_3d
+ACTION_LAYOUT = "gas_steer"  # gas_steer / gas_brake_steer / throttle_steer / target_3d
 VERTICAL_MODE = True
 MAX_TOUCHES = 1
 START_IDLE_MAX_TIME = 2.0
@@ -51,12 +50,12 @@ SAC_LEARNING_RATE = 3e-4
 SAC_BUFFER_SIZE = 300_000
 SAC_LEARNING_STARTS = 1_000
 SAC_BATCH_SIZE = 256
-SAC_GAMMA = 0.995
+SAC_GAMMA = 0.9995
 SAC_TAU = 0.005
-SAC_GRADIENT_STEPS = 64
+SAC_GRADIENT_STEPS = 8
 SAC_TRAIN_FREQ = (1, "episode")
-SAC_ENT_COEF = "auto"
-SAC_POLICY_NET_ARCH = [128, 128]
+SAC_ENT_COEF = "0.01"
+SAC_POLICY_NET_ARCH = [32, 32]
 SAC_ACTIVATION_FN = "relu"
 
 
@@ -67,6 +66,12 @@ def timestamp() -> str:
 def sanitize_name(value: str) -> str:
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
     return "".join(ch if ch in allowed else "_" for ch in value)
+
+
+def resolve_pace_target_time(env_max_time: float, pace_target_time: Optional[float] = None) -> float:
+    if pace_target_time is not None:
+        return float(pace_target_time)
+    return float(env_max_time) / 2.0
 
 
 class ContinuousTargetRacingEnv(RacingGameEnviroment):
@@ -114,6 +119,7 @@ class TrackmaniaSB3Env(gym.Env):
         max_touches: int = 1,
         start_idle_max_time: float = 2.0,
         terminal_fitness_scale: float = TERMINAL_FITNESS_SCALE,
+        pace_target_time: float = PACE_TARGET_TIME,
     ) -> None:
         super().__init__()
         self.reward_mode = str(reward_mode).strip().lower()
@@ -121,9 +127,18 @@ class TrackmaniaSB3Env(gym.Env):
             "terminal_progress",
             "terminal_fitness",
             "fitness_delta",
+            "delta_lexicographic",
+            "terminal_lexicographic",
+            "delta_progress_time_safety",
+            "terminal_progress_time_safety",
+            "delta_progress_time_block_penalty",
+            "terminal_progress_time_block_penalty",
         }:
             raise ValueError(
-                "reward_mode must be terminal_progress, terminal_fitness, or fitness_delta."
+                "reward_mode must be terminal_progress, terminal_fitness, fitness_delta, "
+                "delta_lexicographic, terminal_lexicographic, "
+                "delta_progress_time_safety, terminal_progress_time_safety, "
+                "delta_progress_time_block_penalty, or terminal_progress_time_block_penalty."
             )
         self.action_layout = str(action_layout).strip().lower()
         if self.action_layout not in {"gas_steer", "gas_brake_steer", "throttle_steer", "target_3d"}:
@@ -154,13 +169,18 @@ class TrackmaniaSB3Env(gym.Env):
             )
         else:
             self.action_space = spaces.Box(
-                    low=np.array([0.0, 0.0, -1.0], dtype=np.float32),
-                    high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
-                    dtype=np.float32,
-                )
+                low=np.array([0.0, 0.0, -1.0], dtype=np.float32),
+                high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
+                dtype=np.float32,
+            )
         self.terminal_fitness_scale = float(terminal_fitness_scale)
-        self.last_fitness_delta_score = 0.0
-        self.last_fitness_delta_progress = 0.0
+        self.pace_target_time = float(pace_target_time)
+        if not np.isfinite(self.pace_target_time) or self.pace_target_time <= 0.0:
+            raise ValueError("pace_target_time must be a positive finite number.")
+        self.path_tile_count = len(getattr(self.env.map, "path_tiles", []) or [])
+        self.progress_bucket = 100.0 / max(1, self.path_tile_count - 1)
+        self.estimated_path_length = max(1.0, max(1, self.path_tile_count - 1) * MAP_BLOCK_SIZE)
+        self.last_delta_score = 0.0
         self.last_info: Dict[str, Any] = {}
         self.episode_index = 0
 
@@ -198,7 +218,7 @@ class TrackmaniaSB3Env(gym.Env):
         progress = float(info.get("total_progress", 0.0))
         time_value = float(info.get("time", 0.0))
         if time_value <= 0.0 or not np.isfinite(time_value):
-            time_value = 1e-3
+            time_value = 0.0
         distance = float(info.get("distance", 0.0))
         term = int(getattr(self.env, "race_terminated", 0))
         if info.get("done", 0.0) == 1.0 and term == 0:
@@ -217,6 +237,93 @@ class TrackmaniaSB3Env(gym.Env):
             fitness=float(fitness),
         )
 
+    def _lexicographic_score(self, metrics: Dict[str, float]) -> float:
+        return Individual.compute_delta_lexicographic_score_for(
+            term=int(metrics["term"]),
+            progress=float(metrics["progress"]),
+            time_value=float(metrics["time"]),
+            distance=float(metrics["distance"]),
+            max_time=float(self.env.max_time),
+            path_tile_count=int(self.path_tile_count),
+            progress_bucket=float(self.progress_bucket),
+            estimated_path_length=float(self.estimated_path_length),
+        )
+
+    def _terminal_lexicographic_score(self, metrics: Dict[str, float]) -> float:
+        return Individual.compute_terminal_lexicographic_score_for(
+            term=int(metrics["term"]),
+            progress=float(metrics["progress"]),
+            time_value=float(metrics["time"]),
+            distance=float(metrics["distance"]),
+            max_time=float(self.env.max_time),
+            path_tile_count=int(self.path_tile_count),
+            progress_bucket=float(self.progress_bucket),
+            estimated_path_length=float(self.estimated_path_length),
+        )
+
+    def _progress_time_safety_score(
+        self,
+        metrics: Dict[str, float],
+        terminal_only: bool = False,
+    ) -> float:
+        return Individual.compute_progress_time_safety_score_for(
+            term=int(metrics["term"]),
+            progress=float(metrics["progress"]),
+            time_value=float(metrics["time"]),
+            distance=float(metrics["distance"]),
+            max_time=float(self.env.max_time),
+            path_tile_count=int(self.path_tile_count),
+            progress_bucket=float(self.progress_bucket),
+            terminal_only=terminal_only,
+        )
+
+    def _progress_time_block_penalty_score(
+        self,
+        metrics: Dict[str, float],
+        terminal_only: bool = False,
+    ) -> float:
+        return Individual.compute_progress_time_block_penalty_score_for(
+            term=int(metrics["term"]),
+            progress=float(metrics["progress"]),
+            time_value=float(metrics["time"]),
+            distance=float(metrics["distance"]),
+            max_time=float(self.env.max_time),
+            path_tile_count=int(self.path_tile_count),
+            progress_bucket=float(self.progress_bucket),
+            terminal_only=terminal_only,
+        )
+
+    def _delta_reward_score(
+        self,
+        metrics: Dict[str, float],
+        terminated: bool,
+        truncated: bool,
+    ) -> float:
+        progress = max(0.0, float(metrics["progress"]))
+        time_value = max(0.0, float(metrics["time"]))
+        expected_progress_by_time = 100.0 * time_value / self.pace_target_time
+        pace_score = progress - expected_progress_by_time
+        score = progress + pace_score
+
+        # Keep term out of the dense shaping. A crash should end the episode and
+        # remove future progress opportunities, not erase credit for good driving
+        # earlier in the same run. Finishing still gets the lexicographic finish
+        # bonus from Individual's scoring scale.
+        if terminated or truncated:
+            term = int(metrics["term"])
+            if term > 0:
+                score += Individual.TERM_WEIGHT / self.terminal_fitness_scale
+                score -= (
+                    max(0.0, float(metrics["distance"]))
+                    * Individual.DISTANCE_WEIGHT
+                    / self.terminal_fitness_scale
+                )
+
+        metrics["pace_target_time"] = float(self.pace_target_time)
+        metrics["pace_expected_progress"] = float(expected_progress_by_time)
+        metrics["pace_score"] = float(pace_score)
+        return float(score)
+
     def _reward(
         self,
         info: Dict[str, Any],
@@ -224,31 +331,53 @@ class TrackmaniaSB3Env(gym.Env):
         truncated: bool,
     ) -> tuple[float, Dict[str, float]]:
         metrics = self._terminal_metrics(info)
-        progress = float(metrics["progress"])
 
         reward = 0.0
-        if self.reward_mode == "fitness_delta":
-            scaled_fitness = float(metrics["fitness"]) / self.terminal_fitness_scale
-            should_emit_fitness_delta = (
-                progress > self.last_fitness_delta_progress + 1e-6
-                or terminated
-                or truncated
+        if self.reward_mode == "delta_lexicographic":
+            delta_score = self._lexicographic_score(metrics)
+            reward = delta_score - self.last_delta_score
+            self.last_delta_score = delta_score
+            metrics["lexicographic_score"] = float(delta_score)
+        elif self.reward_mode == "delta_progress_time_safety":
+            delta_score = self._progress_time_safety_score(metrics, terminal_only=False)
+            reward = delta_score - self.last_delta_score
+            self.last_delta_score = delta_score
+            metrics["progress_time_safety_score"] = float(delta_score)
+        elif self.reward_mode == "delta_progress_time_block_penalty":
+            delta_score = self._progress_time_block_penalty_score(metrics, terminal_only=False)
+            reward = delta_score - self.last_delta_score
+            self.last_delta_score = delta_score
+            metrics["progress_time_block_penalty_score"] = float(delta_score)
+        elif self.reward_mode == "fitness_delta":
+            delta_score = self._delta_reward_score(
+                metrics,
+                terminated=terminated,
+                truncated=truncated,
             )
-            if should_emit_fitness_delta:
-                reward = scaled_fitness - self.last_fitness_delta_score
-                self.last_fitness_delta_score = scaled_fitness
-                self.last_fitness_delta_progress = progress
+            reward = delta_score - self.last_delta_score
+            self.last_delta_score = delta_score
         elif terminated or truncated:
             if self.reward_mode == "terminal_progress":
-                reward = progress
+                reward = float(metrics["progress"])
             elif self.reward_mode == "terminal_fitness":
                 reward = float(metrics["fitness"]) / self.terminal_fitness_scale
+            elif self.reward_mode == "terminal_lexicographic":
+                reward = self._terminal_lexicographic_score(metrics)
+                metrics["lexicographic_score"] = float(reward)
+            elif self.reward_mode == "terminal_progress_time_safety":
+                reward = self._progress_time_safety_score(metrics, terminal_only=True)
+                metrics["progress_time_safety_score"] = float(reward)
+            elif self.reward_mode == "terminal_progress_time_block_penalty":
+                reward = self._progress_time_block_penalty_score(metrics, terminal_only=True)
+                metrics["progress_time_block_penalty_score"] = float(reward)
 
-        metrics["fitness_delta_score"] = float(
+        metrics["delta_score"] = float(self.last_delta_score)
+        metrics.setdefault("lexicographic_score", 0.0)
+        metrics.setdefault("progress_time_safety_score", 0.0)
+        metrics.setdefault("progress_time_block_penalty_score", 0.0)
+        metrics["terminal_fitness_score"] = float(
             float(metrics["fitness"]) / self.terminal_fitness_scale
         )
-        metrics["last_fitness_delta_score"] = float(self.last_fitness_delta_score)
-        metrics["last_fitness_delta_progress"] = float(self.last_fitness_delta_progress)
         metrics["reward"] = float(reward)
         return float(reward), metrics
 
@@ -257,10 +386,24 @@ class TrackmaniaSB3Env(gym.Env):
         while info.get("done", 0.0) != 0:
             obs, info = self.env.reset(seed=seed)
         reset_metrics = self._terminal_metrics(info)
-        self.last_fitness_delta_score = (
-            float(reset_metrics["fitness"]) / self.terminal_fitness_scale
-        )
-        self.last_fitness_delta_progress = float(reset_metrics["progress"])
+        if self.reward_mode == "delta_lexicographic":
+            self.last_delta_score = self._lexicographic_score(reset_metrics)
+        elif self.reward_mode == "delta_progress_time_safety":
+            self.last_delta_score = self._progress_time_safety_score(
+                reset_metrics,
+                terminal_only=False,
+            )
+        elif self.reward_mode == "delta_progress_time_block_penalty":
+            self.last_delta_score = self._progress_time_block_penalty_score(
+                reset_metrics,
+                terminal_only=False,
+            )
+        else:
+            self.last_delta_score = self._delta_reward_score(
+                reset_metrics,
+                terminated=False,
+                truncated=False,
+            )
         self.last_info = dict(info)
         self.episode_index += 1
         if LOG_LIVE_RESETS:
@@ -344,9 +487,14 @@ class EpisodeMetricsCallback:
             "time",
             "distance",
             "fitness",
-            "fitness_delta_score",
-            "last_fitness_delta_score",
-            "last_fitness_delta_progress",
+            "pace_target_time",
+            "pace_expected_progress",
+            "pace_score",
+            "delta_score",
+            "lexicographic_score",
+            "progress_time_safety_score",
+            "progress_time_block_penalty_score",
+            "terminal_fitness_score",
             "episode_reward",
             "timesteps",
         ]
@@ -365,9 +513,16 @@ class EpisodeMetricsCallback:
             time=float(metrics.get("time", 0.0)),
             distance=float(metrics.get("distance", 0.0)),
             fitness=float(metrics.get("fitness", 0.0)),
-            fitness_delta_score=float(metrics.get("fitness_delta_score", 0.0)),
-            last_fitness_delta_score=float(metrics.get("last_fitness_delta_score", 0.0)),
-            last_fitness_delta_progress=float(metrics.get("last_fitness_delta_progress", 0.0)),
+            pace_target_time=float(metrics.get("pace_target_time", 0.0)),
+            pace_expected_progress=float(metrics.get("pace_expected_progress", 0.0)),
+            pace_score=float(metrics.get("pace_score", 0.0)),
+            delta_score=float(metrics.get("delta_score", 0.0)),
+            lexicographic_score=float(metrics.get("lexicographic_score", 0.0)),
+            progress_time_safety_score=float(metrics.get("progress_time_safety_score", 0.0)),
+            progress_time_block_penalty_score=float(
+                metrics.get("progress_time_block_penalty_score", 0.0)
+            ),
+            terminal_fitness_score=float(metrics.get("terminal_fitness_score", 0.0)),
             episode_reward=episode_reward,
             timesteps=int(getattr(self.model, "num_timesteps", 0)) if self.model is not None else 0,
         )
@@ -471,6 +626,12 @@ def parse_args() -> argparse.Namespace:
             "terminal_progress",
             "terminal_fitness",
             "fitness_delta",
+            "delta_lexicographic",
+            "terminal_lexicographic",
+            "delta_progress_time_safety",
+            "terminal_progress_time_safety",
+            "delta_progress_time_block_penalty",
+            "terminal_progress_time_block_penalty",
         ],
     )
     parser.add_argument(
@@ -480,9 +641,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--net-arch", default=",".join(str(dim) for dim in SAC_POLICY_NET_ARCH))
     parser.add_argument("--activation-fn", default=SAC_ACTIVATION_FN, choices=["relu", "tanh", "elu", "leaky_relu"])
+    parser.add_argument("--learning-rate", type=float, default=SAC_LEARNING_RATE)
     parser.add_argument("--env-max-time", type=float, default=ENV_MAX_TIME)
     parser.add_argument("--checkpoint-every-episodes", type=int, default=CHECKPOINT_EVERY_EPISODES)
     parser.add_argument("--terminal-fitness-scale", type=float, default=TERMINAL_FITNESS_SCALE)
+    parser.add_argument(
+        "--pace-target-time",
+        type=float,
+        default=None,
+        help="Target finish time for fitness_delta pace shaping. Defaults to env_max_time / 2.",
+    )
     parser.add_argument("--initial-model-path", default=INITIAL_MODEL_PATH)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--run-dir", default=None)
@@ -499,6 +667,7 @@ def main() -> None:
     if args.import_check:
         print("Stable-Baselines3 import check OK.")
         return
+    pace_target_time = resolve_pace_target_time(args.env_max_time, args.pace_target_time)
 
     run_dir = Path(args.run_dir) if args.run_dir else build_run_dir(
         "logs/sb3_runs",
@@ -517,6 +686,7 @@ def main() -> None:
         max_touches=MAX_TOUCHES,
         start_idle_max_time=START_IDLE_MAX_TIME,
         terminal_fitness_scale=args.terminal_fitness_scale,
+        pace_target_time=pace_target_time,
     )
     env = Monitor(raw_env, filename=monitor_path, info_keywords=("episode_metrics",))
 
@@ -532,9 +702,13 @@ def main() -> None:
         action_layout=args.action_layout,
         vertical_mode=VERTICAL_MODE,
         terminal_fitness_scale=float(args.terminal_fitness_scale),
+        pace_target_time=float(pace_target_time),
+        path_tile_count=int(raw_env.path_tile_count),
+        progress_bucket=float(raw_env.progress_bucket),
+        estimated_path_length=float(raw_env.estimated_path_length),
         train_freq=list(SAC_TRAIN_FREQ),
         gradient_steps=SAC_GRADIENT_STEPS,
-        learning_rate=SAC_LEARNING_RATE,
+        learning_rate=float(args.learning_rate),
         buffer_size=SAC_BUFFER_SIZE,
         learning_starts=SAC_LEARNING_STARTS,
         batch_size=SAC_BATCH_SIZE,
@@ -554,11 +728,18 @@ def main() -> None:
     print(f"[SB3 SAC] run_dir={run_dir}")
     print(f"[SB3 SAC] map_name={MAP_NAME} lidar_mode={'3D' if VERTICAL_MODE else '2D'}")
     print(f"[SB3 SAC] reward_mode={args.reward_mode} action_layout={args.action_layout}")
+    print(f"[SB3 SAC] pace_target_time={float(pace_target_time):.2f}s")
+    print(
+        f"[SB3 SAC] path_tiles={int(raw_env.path_tile_count)} "
+        f"progress_bucket={float(raw_env.progress_bucket):.4f}% "
+        f"estimated_path_length={float(raw_env.estimated_path_length):.1f}"
+    )
     print(f"[SB3 SAC] initial_model_path={args.initial_model_path or 'None'}")
     print(
         f"[SB3 SAC] max_runtime_hours={float(args.max_runtime_hours):.2f} "
         f"episodes_cap={int(args.episodes)} total_timesteps_cap={int(args.total_timesteps)}"
     )
+    print(f"[SB3 SAC] learning_rate={float(args.learning_rate):.6g}")
     print(f"[SB3 SAC] train_freq={SAC_TRAIN_FREQ}, gradient_steps={SAC_GRADIENT_STEPS}")
     print(f"[SB3 SAC] action_space={env.action_space}")
     print(f"[SB3 SAC] observation_space={env.observation_space}")
@@ -581,7 +762,7 @@ def main() -> None:
         model = SAC.load(
             initial_model_path,
             env=env,
-            learning_rate=SAC_LEARNING_RATE,
+            learning_rate=float(args.learning_rate),
             buffer_size=SAC_BUFFER_SIZE,
             learning_starts=SAC_LEARNING_STARTS,
             batch_size=SAC_BATCH_SIZE,
@@ -598,7 +779,7 @@ def main() -> None:
         model = SAC(
             "MlpPolicy",
             env,
-            learning_rate=SAC_LEARNING_RATE,
+            learning_rate=float(args.learning_rate),
             buffer_size=SAC_BUFFER_SIZE,
             learning_starts=SAC_LEARNING_STARTS,
             batch_size=SAC_BATCH_SIZE,

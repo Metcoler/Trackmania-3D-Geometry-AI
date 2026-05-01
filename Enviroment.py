@@ -66,7 +66,7 @@ class RacingGameEnviroment(gym.Env):
         # Observations:
         # [lasers N] + [path instructions M] +
         # [speed, side_speed, segment_heading_error, next_segment_heading_error, dt_ratio,
-        #  slip_fl, slip_fr, slip_rl, slip_rr,
+        #  slip_mean,
         #  surface_instruction_0..4,
         #  height_instruction_0..4,
         #  longitudinal_accel, lateral_accel, yaw_rate,

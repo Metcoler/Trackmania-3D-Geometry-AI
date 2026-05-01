@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 from Car import Car
-from EvolutionPolicy import EvolutionPolicy
+from NeuralPolicy import NeuralPolicy
 from Individual import Individual
 from ObservationEncoder import ObservationEncoder
 from RankingKey import canonical_ranking_key_expression
@@ -422,7 +422,7 @@ class TrainingLogger:
         return extra
 
 
-class EvolutionTrainer:
+class GeneticTrainer:
     def __init__(
         self,
         env,
@@ -799,7 +799,7 @@ class EvolutionTrainer:
         if len(mutation_probs) != len(mutation_sigmas):
             raise ValueError("mutation_probs and mutation_sigmas must have the same length.")
 
-        loaded_policy, extra = EvolutionPolicy.load(model_path, map_location="cpu")
+        loaded_policy, extra = NeuralPolicy.load(model_path, map_location="cpu")
         loaded_hidden_dims = tuple(int(dim) for dim in loaded_policy.hidden_dims)
         if loaded_policy.obs_dim != self.obs_dim:
             raise ValueError(
@@ -1480,6 +1480,11 @@ class EvolutionTrainer:
         return max(files, key=os.path.getmtime)
 
 
+# Backward-compatible alias for historical scripts. New code should import and
+# instantiate GeneticTrainer.
+EvolutionTrainer = GeneticTrainer
+
+
 if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
@@ -1572,7 +1577,7 @@ if __name__ == "__main__":
             )
 
     if seed_model_path:
-        seed_policy, _ = EvolutionPolicy.load(seed_model_path, map_location="cpu")
+        seed_policy, _ = NeuralPolicy.load(seed_model_path, map_location="cpu")
         hidden_dim = list(seed_policy.hidden_dims)
         act_dim = seed_policy.act_dim
         action_mode = seed_policy.action_mode
@@ -1628,7 +1633,7 @@ if __name__ == "__main__":
         )
         logger = TrainingLogger(run_name=run_name)
 
-    trainer = EvolutionTrainer(
+    trainer = GeneticTrainer(
         env=env,
         obs_dim=obs_dim,
         hidden_dim=hidden_dim,

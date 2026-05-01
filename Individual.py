@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Optional, Tuple
 
-from EvolutionPolicy import EvolutionPolicy, HiddenActivations, HiddenDims
+from NeuralPolicy import HiddenActivations, HiddenDims, NeuralPolicy
 from RankingKey import evaluate_ranking_key, finite_or_large
 
 
@@ -30,7 +30,7 @@ class Individual:
         action_mode: str = "delta",
         hidden_activation: HiddenActivations = "tanh",
     ) -> None:
-        self.policy = EvolutionPolicy(
+        self.policy = NeuralPolicy(
             obs_dim=obs_dim,
             hidden_dim=hidden_dim,
             act_dim=act_dim,

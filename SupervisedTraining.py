@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-from EvolutionPolicy import EvolutionPolicy
+from NeuralPolicy import NeuralPolicy
 from ObservationEncoder import ObservationEncoder
 
 
@@ -438,7 +438,7 @@ if __name__ == "__main__":
     print(f"Dataset attempts: {len(attempt_files)}")
     print(f"Dataset stats: {dataset_stats}")
 
-    model = EvolutionPolicy(
+    model = NeuralPolicy(
         obs_dim=obs_dim,
         hidden_dim=hidden_dims,
         act_dim=act_dim,

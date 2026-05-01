@@ -4,10 +4,10 @@ This folder is a local sandbox for testing reward functions, observations and GA
 
 The simulator intentionally reuses the main project pieces where it matters:
 
-- `Map.py` parses `Maps/ExportedBlocks/*.txt` and resolves Trackmania block meshes.
+- `Map.py` parses map block layouts from `Maps/BlockLayouts/*.txt` (legacy fallback: `Maps/ExportedBlocks/*.txt`) and resolves Trackmania block meshes from `Assets/BlockMeshes/` (legacy fallback: `Meshes/`).
 - `.obj` road/wall meshes are projected into 2D XZ geometry.
 - `ObservationEncoder.py` builds the same flat observation shape used by live training.
-- `EvolutionPolicy.py` and `Individual.py` are reused for networks, GA individuals and scalar fitness.
+- `NeuralPolicy.py` and `Individual.py` are reused for networks, GA individuals and scalar fitness.
 
 The simulator is flat asphalt by default. Surface instructions are still emitted as map traction values and height instructions as zero/flat map values, so the observation remains compatible with the current 2D Trackmania setup.
 

@@ -6,8 +6,14 @@ class Program {
 
     static int Main(string[] args) {
         string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../"));
-        string mapsDir = Path.Combine(repoRoot, "Maps", "GameFiles");
-        string exportsDir = Path.Combine(repoRoot, "Maps", "ExportedBlocks");
+        string mapsDir = PreferredOrLegacy(
+            Path.Combine(repoRoot, "Maps", "Gbx"),
+            Path.Combine(repoRoot, "Maps", "GameFiles")
+        );
+        string exportsDir = PreferredOrLegacy(
+            Path.Combine(repoRoot, "Maps", "BlockLayouts"),
+            Path.Combine(repoRoot, "Maps", "ExportedBlocks")
+        );
 
         if (args.Length > 0 && IsHelpFlag(args[0])) {
             PrintUsage(mapsDir, exportsDir);
@@ -63,7 +69,7 @@ class Program {
         Console.WriteLine("Examples:");
         Console.WriteLine("  dotnet run --project \"Map Extractor C#/C# test.csproj\"");
         Console.WriteLine("  dotnet run --project \"Map Extractor C#/C# test.csproj\" -- \"AI Training #5\"");
-        Console.WriteLine("  dotnet run --project \"Map Extractor C#/C# test.csproj\" -- \"Maps/GameFiles/AI Training #5.Map.Gbx\"");
+        Console.WriteLine("  dotnet run --project \"Map Extractor C#/C# test.csproj\" -- \"Maps/Gbx/AI Training #5.Map.Gbx\"");
         Console.WriteLine();
         Console.WriteLine("Defaults:");
         Console.WriteLine("  default map name : " + DefaultMapName);
@@ -81,6 +87,10 @@ class Program {
         }
 
         return Path.Combine(mapsDir, mapInput + ".Map.Gbx");
+    }
+
+    private static string PreferredOrLegacy(string preferred, string legacy) {
+        return Directory.Exists(preferred) ? preferred : legacy;
     }
 
     private static string GetExportFileName(string mapPath) {

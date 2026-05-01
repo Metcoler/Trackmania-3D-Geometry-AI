@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from Enviroment import RacingGameEnviroment
-from EvolutionPolicy import EvolutionPolicy
+from NeuralPolicy import NeuralPolicy
 from Individual import Individual
 
 
@@ -429,7 +429,7 @@ def drive_model(
     vertical_mode: bool = True,
     target_steer_deadzone: float = 0.0,
 ) -> None:
-    policy, extra = EvolutionPolicy.load(model_file, map_location="cpu")
+    policy, extra = NeuralPolicy.load(model_file, map_location="cpu")
     print(f"Loaded model from: {model_file}")
     print(f"Model config: {policy.get_config()}")
     if extra:

@@ -2,7 +2,7 @@ import trimesh
 import numpy as np
 import trimesh.visual.color
 import time
-from pathlib import Path
+from ProjectPaths import block_mesh_path, map_block_layout_path, map_track_mesh_path
 from SurfaceTypes import traction_for_surface_prefix
 
 MAP_BLOCK_SIZE = 32
@@ -107,7 +107,7 @@ class MapBlock:
             block_size = int(block_info["block_size"])
             footprint = tuple(int(value) for value in block_info["footprint"])
             mesh_name = f"RoadTech{shape_name}"
-            mesh_path = Path("Meshes") / f"{mesh_name}.obj"
+            mesh_path = block_mesh_path(mesh_name)
             if not mesh_path.exists():
                 raise FileNotFoundError(
                     f"Could not resolve mesh for block '{raw_name}'. "
@@ -135,7 +135,7 @@ class MapBlock:
         else:
             mesh_name = raw_name
 
-        mesh_path = Path("Meshes") / f"{mesh_name}.obj"
+        mesh_path = block_mesh_path(mesh_name)
         if not mesh_path.exists():
             raise FileNotFoundError(
                 f"Could not resolve mesh for block '{raw_name}'. "
@@ -153,7 +153,7 @@ class MapBlock:
         self.mesh_name = mesh_name
         self.surface_name = surface_name
         
-        self.mesh = trimesh.load(f"Meshes/{mesh_name}.obj", force="mesh", process=True)
+        self.mesh = trimesh.load(str(block_mesh_path(mesh_name)), force="mesh", process=True)
         
         # get block logical size
         self.block_size = block_size
@@ -549,7 +549,7 @@ class Map:
         self.start_logical_position = None
         self.end_logical_position = None 
         
-        with open(f"Maps/ExportedBlocks/{map_name}.txt", 'r', encoding="utf-8") as file:
+        with open(map_block_layout_path(map_name), 'r', encoding="utf-8") as file:
             for line in file:
                 line = line.strip()
                 if len(line) == 0:
@@ -830,7 +830,7 @@ class Map:
         for block in self.blocks.values():
             scene.add_geometry(block.get_mesh())
         self.mesh = scene.dump(concatenate=True)
-        self.mesh.export(f"Maps/Meshes/{self.map_name}.obj")
+        self.mesh.export(str(map_track_mesh_path(self.map_name)))
 
     def generate_walls_mesh(self):
         # Create a mesh of the walls

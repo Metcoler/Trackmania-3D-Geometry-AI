@@ -57,7 +57,7 @@ def normalize_hidden_activations(
     return normalized
 
 
-class EvolutionPolicy(nn.Module):
+class NeuralPolicy(nn.Module):
     def __init__(
         self,
         obs_dim: int,
@@ -241,7 +241,7 @@ class EvolutionPolicy(nn.Module):
         cls,
         path: str,
         map_location: Optional[Union[str, torch.device]] = None,
-    ) -> Tuple["EvolutionPolicy", Dict[str, Any]]:
+    ) -> Tuple["NeuralPolicy", Dict[str, Any]]:
         if map_location is None:
             map_location = torch.device("cpu")
         payload = torch.load(path, map_location=map_location)
@@ -265,3 +265,8 @@ class EvolutionPolicy(nn.Module):
         policy.load_state_dict(payload["state_dict"])
         policy.to(policy.device)
         return policy, dict(payload.get("extra", {}))
+
+
+# Backward-compatible alias for older checkpoints/scripts. New code should
+# import and refer to NeuralPolicy.
+EvolutionPolicy = NeuralPolicy

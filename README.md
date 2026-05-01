@@ -43,7 +43,10 @@ Repozitár aktuálne obsahuje **dve hlavné vetvy prístupu**:
 - `Vizualizer.py` – vizualizácia výsledkov a správania agenta
 - `Plugins/get_data_driver` – skripty pre zber a spracovanie dát z hry
 - `Maps/` – použité mapy tratí
-- `Meshes/` – súbory s geometriou trate
+- `Assets/BlockMeshes/` – knižnica blokových mesh súborov (aktuálne fallback: `Meshes/`)
+- `Maps/BlockLayouts/` – textové layouty máp (aktuálne fallback: `Maps/ExportedBlocks/`)
+- `Maps/Gbx/` – pôvodné Trackmania `.Map.Gbx` súbory (aktuálne fallback: `Maps/GameFiles/`)
+- `Maps/TrackMeshes/` – celé vyexportované mesh trate (aktuálne fallback: `Maps/Meshes/`)
 - `logs/` – logy z tréningov a experimentov
 
 ### RL (Reinforcement Learning) časť
@@ -56,10 +59,10 @@ Repozitár aktuálne obsahuje **dve hlavné vetvy prístupu**:
 - `Individual.py` – reprezentácia jedinca:
   - chromozóm = parametre (váhy, biasy) neurónovej siete,
   - pomocné metódy na hodnotenie, porovnávanie a prácu s multi-metrickým hodnotením.
-- `EvolutionPolicy.py` – politika agenta založená na neurónovej sieti:
+- `NeuralPolicy.py` – politika agenta založená na neurónovej sieti:
   - mapuje stavový vektor (senzorické vstupy) na akcie,
   - používa sa pri evaluácii jednotlivcov v prostredí.
-- `EvolutionTrainer.py` – genetický algoritmus a tréningová slučka:
+- `GeneticTrainer.py` – genetický algoritmus a tréningová slučka:
   - inicializácia populácie,
   - vyhodnocovanie jedincov v prostredí Trackmanie,
   - selekcia, kríženie, mutácia, elitizmus,

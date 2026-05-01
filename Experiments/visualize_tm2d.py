@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from EvolutionPolicy import EvolutionPolicy
+from NeuralPolicy import NeuralPolicy
 
 from Experiments.tm2d_env import TM2DPhysicsConfig, TM2DRewardConfig, TM2DSimEnv
 from Experiments.tm2d_viewer import TM2DViewer
@@ -47,7 +47,7 @@ def main() -> None:
         physics_config=TM2DPhysicsConfig().with_fixed_fps(args.fixed_fps),
     )
     if args.model_path:
-        policy, _ = EvolutionPolicy.load(args.model_path)
+        policy, _ = NeuralPolicy.load(args.model_path)
     else:
         policy = HeuristicPolicy()
     viewer = TM2DViewer(env)

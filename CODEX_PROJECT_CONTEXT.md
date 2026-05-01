@@ -37,7 +37,7 @@ The sandbox intentionally reuses the main project pieces where possible:
 - `Experiments/tm2d_geometry.py` loads the same exported TM maps through `Map.py`, projects road/wall `.obj` meshes into 2D XZ geometry, keeps the 32-unit TM grid, path tiles, path instructions, surface instructions, and height instructions.
 - `Experiments/tm2d_env.py` implements a synchronous but variable-dt 2D car environment. The random dt simulates Trackmania running at different frame rates, while still being fully local and fast.
 - The flat observation is compatible with `ObservationEncoder.total_obs_dim(vertical_mode=False)`: lasers, path instructions, speed/side speed, signed segment heading errors, dt ratio, slip mean, surface instructions, height instructions, and temporal derivative features. Surface defaults to asphalt-like values and height defaults to flat values on flat maps.
-- `Experiments/train_ga.py` uses `Individual`/`EvolutionPolicy` for the same MLP architecture and genome semantics, but evaluates policies through a fast NumPy forward pass instead of calling torch every simulated frame.
+- `Experiments/train_ga.py` uses `Individual`/`NeuralPolicy` for the same MLP architecture and genome semantics, but evaluates policies through a fast NumPy forward pass instead of calling torch every simulated frame.
 - `Experiments/train_ga.py` also supports `--num-workers N` for process-based parallel evaluation of independent individuals. Each worker creates its own read-only map/environment once and receives flat genomes to evaluate.
 - `Experiments/train_ga.py`, `Experiments/train_sac.py`, and `Experiments/visualize_tm2d.py` support `--fixed-fps FPS`. When set, the local simulator uses deterministic `min_dt = max_dt = 1 / FPS`; when omitted, it keeps the default variable-dt range to mimic variable Trackmania FPS.
 - `Experiments/train_sac.py` wraps the same `TM2DSimEnv` as a Gymnasium environment and runs Stable-Baselines3 SAC locally, so reward modes can be tested quickly before using the realtime Trackmania SAC script.
@@ -68,7 +68,7 @@ Metric-parity note:
   in clean `[0, 1]` units.
 - 2D rollout diagnostic `fitness` now uses `dense_progress` when
   `Individual.RANKING_PROGRESS_SOURCE == "dense_progress"`, matching
-  `EvolutionTrainer._evaluate_single_rollout()`.
+  `GeneticTrainer._evaluate_single_rollout()`.
 - The remaining intentional mismatch is termination physics: local 2D uses
   road-containment collision (`center` or `corners`), while live TM uses
   lidar contact, stall, wall-ride, heading-error, timeout, and OpenPlanet
@@ -414,7 +414,7 @@ criteria are actually helping or only adding noise.
 
 Current real Trackmania GA overnight test:
 
-`EvolutionTrainer.py` is prepared for a real-game overnight GA run using tuple
+`GeneticTrainer.py` is prepared for a real-game overnight GA run using tuple
 selection rather than scalar fitness:
 
 ```python
@@ -446,7 +446,7 @@ Elite evaluation cache:
 Live Trackmania evaluation is expensive and non-headless, so unchanged elite
 copies are no longer re-driven every generation. `Individual.copy()` preserves
 the previous rollout metrics and `evaluation_valid=True`; genome changes
-through mutation reset that flag. `EvolutionTrainer.evaluate_population()` skips
+through mutation reset that flag. `GeneticTrainer.evaluate_population()` skips
 valid non-mirrored individuals and logs the count as `cached_evaluations` in
 `generation_summary.csv`. This should save roughly the elite fraction of live
 evaluation time when mirror evaluation is disabled. It intentionally does not
@@ -1379,14 +1379,18 @@ secondary helper and define it from observable quantities, for example
 1. Trackmania runs with the OpenPlanet plugin in `Plugins/get_data_driver/main.as`.
 2. The plugin streams one fixed-size packet per game frame over TCP on `127.0.0.1:9002`.
 3. `Car.py` connects to the socket, reads packets in a background thread, keeps only the latest decoded packet, and exposes it to the rest of the Python app.
-4. `Map.py` loads track geometry and logical path data from `Maps/ExportedBlocks/*.txt` and `Meshes/*.obj`.
+4. `Map.py` loads track geometry and logical path data from map block layouts and block meshes.
+   Preferred cleaned-up names are `Maps/BlockLayouts/*.txt` and
+   `Assets/BlockMeshes/*.obj`; the current code still falls back to the legacy
+   `Maps/ExportedBlocks/*.txt` and `Meshes/*.obj` folders until the physical
+   directory move is done.
 5. `Car.py` combines the live packet with map/path state and lidar-style raycasts to produce:
    - laser distances
    - upcoming path instructions
    - progress info
    - signed near/far heading alignment against upcoming path segments
 6. `ObservationEncoder.py` standardizes those values into the neural-network observation vector.
-7. A policy from `EvolutionPolicy.py` maps observation -> action.
+7. A policy from `NeuralPolicy.py` maps observation -> action.
 8. `Enviroment.py` applies that action through `vgamepad` to Trackmania and enforces training guards such as timeout, touches, idle detection, and wall-ride detection.
 9. `Enviroment.reset()` now performs a confirmed track restart handshake:
    - press `B` on the virtual gamepad
@@ -1396,9 +1400,9 @@ secondary helper and define it from observable quantities, for example
 
 ### GA training dataflow
 
-1. `EvolutionTrainer.py` initializes a population of `Individual` objects.
-2. Each `Individual` contains an `EvolutionPolicy` and a flattened genome view over model parameters.
-3. `EvolutionTrainer.py` evaluates each individual sequentially in Trackmania through `RacingGameEnviroment`.
+1. `GeneticTrainer.py` initializes a population of `Individual` objects.
+2. Each `Individual` contains a `NeuralPolicy` and a flattened genome view over model parameters.
+3. `GeneticTrainer.py` evaluates each individual sequentially in Trackmania through `RacingGameEnviroment`.
 4. The environment returns terminal status and telemetry.
 5. The individual is ranked by:
    - averaged rollout fitness across normal and mirrored evaluation
@@ -1471,7 +1475,35 @@ slow, non-headless, real-time evaluation:
 3. `SupervisedTraining.py` loads all saved attempts, preprocesses them, applies mirror augmentation, and trains a torch MLP policy in target-action mode.
 4. Trained models are stored under `logs/supervised_runs/.../best_model.pt`.
 5. `Driver.py` can load the latest supervised model and replay it in Trackmania.
-6. `EvolutionTrainer.py` can also seed a GA population from a `.pt` supervised model.
+6. `GeneticTrainer.py` can also seed a GA population from a `.pt` supervised model.
+
+Naming convention:
+
+- In the thesis text, use "genetic algorithm (GA)" for the concrete algorithm.
+- Explain once that GA is a subtype of evolutionary algorithms and that, because
+  the genome encodes neural-network weights, this is also neuroevolution.
+- In code, `NeuralPolicy.py` is the shared model implementation, `Individual.py`
+  is the GA genome/evaluation wrapper, and `GeneticTrainer.py` is the live
+  Trackmania GA trainer.
+- Historical names `EvolutionPolicy.py` and `EvolutionTrainer.py` were removed
+  from the active code after the rename to avoid mixing "evolutionary" and
+  "genetic algorithm" terminology. Old commits still document that transition.
+
+Directory naming convention:
+
+- Preferred block mesh library path: `Assets/BlockMeshes/`
+  - legacy fallback still used on disk for now: `Meshes/`
+- Preferred exported block-layout path: `Maps/BlockLayouts/`
+  - legacy fallback still used on disk for now: `Maps/ExportedBlocks/`
+- Preferred original Trackmania map path: `Maps/Gbx/`
+  - legacy fallback still used on disk for now: `Maps/GameFiles/`
+- Preferred full exported track-mesh path: `Maps/TrackMeshes/`
+  - legacy fallback still used on disk for now: `Maps/Meshes/`
+
+`ProjectPaths.py` centralizes these locations. The code can already read from
+the cleaned-up names if the directories exist, while still supporting the
+legacy layout. The physical folder move should be done only when no long-running
+experiments are active, because old processes may still read the legacy paths.
 
 
 ## Important Current Semantics
@@ -1758,9 +1790,9 @@ If another Codex instance needs to understand the project efficiently, index fil
 3. `Car.py`
 4. `Map.py`
 5. `Enviroment.py`
-6. `EvolutionPolicy.py`
+6. `NeuralPolicy.py`
 7. `Individual.py`
-8. `EvolutionTrainer.py`
+8. `GeneticTrainer.py`
 9. `Driver.py`
 10. `Actor.py`
 11. `SupervisedTraining.py`
@@ -1773,7 +1805,6 @@ Secondary files:
 - `GraphView.py`
 - `Vizualizer.py`
 - `installation.txt`
-- `Backup/numpy_logic_20260317_133951/*`
 
 
 ## File Responsibilities
@@ -1835,8 +1866,10 @@ Map geometry and logical path representation.
 
 Responsibilities:
 
-- parse exported block files from `Maps/ExportedBlocks/*.txt`
-- instantiate mesh blocks from `Meshes/*.obj`
+- parse exported block layout files from `Maps/BlockLayouts/*.txt`
+  with fallback to legacy `Maps/ExportedBlocks/*.txt`
+- instantiate mesh blocks from `Assets/BlockMeshes/*.obj`
+  with fallback to legacy `Meshes/*.obj`
 - construct the logical path from start to finish
 - expand block-level turn semantics into tile-aligned `path_instructions`
 - expand block-level surface semantics into tile-aligned `path_surface_instructions`
@@ -1889,7 +1922,7 @@ Important note:
 - current reward returned by `step()` is neutral (`0.0`)
 - GA optimization does not use per-step reward
 
-### `EvolutionPolicy.py`
+### `NeuralPolicy.py`
 
 Torch policy network.
 
@@ -1919,28 +1952,33 @@ Responsibilities:
 
 Current ranking logic:
 
-- `term < 0`
-  - crash-like failure
-  - lower values are worse, e.g. `-3` is worse than `-1`
-- `term = 0`
-  - timeout / truncation
-- `term = 1`
-  - reached finish
+- `finished`
+  - `1` only when the agent reaches finish
+  - `0` otherwise
+- `crashes`
+  - counted wall touches/crashes during the rollout
+  - can be greater than `1` when `max_touches > 1`
+- timeout is derived as `finished == 0 and crashes == 0`
 
 Current ranking policy in `Individual.ranking_key()`:
 
-- for unfinished runs (`term <= 0`):
-  - rank by `term`, then `progress`, then exact `time`
-  - `distance` is ignored
-- for finished runs (`term > 0`):
-  - rank by `term`, then `progress`, then `time_bucket`, then `distance`
+- ranking is configured by an explicit tuple expression such as
+  `(dense_progress, finished, -time, -crashes, -distance)` or
+  `(finished, progress, -time, -crashes)`
+- `progress` inside the ranking key can refer to either discrete or dense
+  progress according to `Individual.RANKING_PROGRESS_SOURCE`
+- scalar `fitness` remains a log-friendly numeric proxy; GA selection can
+  compare the tuple directly through `Individual.__lt__`
 
 Reason for this design:
 
-- unfinished agents were finding a local minimum where they drove into the first wall with a short traveled distance
-- to avoid rewarding that behavior, `distance` is only minimized among finished runs
+- explicit tuples avoid arbitrary weighted sums and make the priority order
+  visible in experiments
+- the trade-off is that tuple order matters: putting `-crashes` before `-time`
+  can favor safe but slow timeout policies, while putting `-time` first can
+  favor faster but riskier policies
 
-### `EvolutionTrainer.py`
+### `GeneticTrainer.py`
 
 Main GA trainer.
 
@@ -2477,10 +2515,10 @@ Recommended order:
 Run:
 
 ```powershell
-python EvolutionTrainer.py
+python GeneticTrainer.py
 ```
 
-This currently uses the baseline config from `EvolutionTrainer.py`.
+This currently uses the baseline config from `GeneticTrainer.py`.
 
 ### Driver replay
 
@@ -2555,4 +2593,4 @@ When opening this project on another machine:
 
 If another Codex/GPT-5.4 instance needs a starting prompt, use something like:
 
-> Read `CODEX_PROJECT_CONTEXT.md` first, then index `ObservationEncoder.py`, `Car.py`, `Map.py`, `Enviroment.py`, `EvolutionPolicy.py`, `Individual.py`, `EvolutionTrainer.py`, `Driver.py`, `Actor.py`, and `SupervisedTraining.py`. This repository is a Trackmania autonomous driving project with a live GA/neuroevolution pipeline and a newer supervised-learning pipeline. The current priority is to restore a reliable baseline training workflow, not to add new complex features. Preserve existing experimental mechanisms, but reason from the current baseline defaults and from the historical experiments summarized in `CODEX_PROJECT_CONTEXT.md`.
+> Read `CODEX_PROJECT_CONTEXT.md` first, then index `ObservationEncoder.py`, `Car.py`, `Map.py`, `Enviroment.py`, `NeuralPolicy.py`, `Individual.py`, `GeneticTrainer.py`, `Driver.py`, `Actor.py`, and `SupervisedTraining.py`. This repository is a Trackmania autonomous driving project with a live GA/neuroevolution pipeline and a newer supervised-learning pipeline. The current priority is to restore a reliable baseline training workflow, not to add new complex features. Preserve existing experimental mechanisms, but reason from the current baseline defaults and from the historical experiments summarized in `CODEX_PROJECT_CONTEXT.md`.

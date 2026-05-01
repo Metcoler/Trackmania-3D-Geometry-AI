@@ -19,6 +19,12 @@ Run a fast GA experiment:
 python Experiments/train_ga.py --map-name "AI Training #5" --generations 100 --population-size 48
 ```
 
+Run the current preferred lexicographic GA setup. Dense progress is the default progress source in the 2D simulator:
+
+```powershell
+python Experiments/train_ga.py --map-name "AI Training #5" --generations 300 --population-size 48 --elite-count 4 --parent-count 16 --max-time 45 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.18 --mutation-sigma 0.22 --fitness-mode ranking --ranking-key "(finished, progress, -time)" --collision-mode corners --num-workers 4 --log-dir Experiments/runs/lex_finished_progress_time_g300_p48_corners_variable_fps
+```
+
 Run a Pareto/NSGA-II style multi-objective GA experiment:
 
 ```powershell
@@ -45,6 +51,8 @@ python Experiments/train_ga.py --map-name "AI Training #5" --generations 100 --p
 
 For stricter collision checks, add `--collision-mode corners`. The default `center` mode is intentionally faster for reward experiments.
 
+Use `--fixed-fps 60` for deterministic stepping. Leave `--fixed-fps` unset to sample frame times from the configured 100-30 FPS range, which is closer to realtime Trackmania jitter.
+
 Compare reward score tables:
 
 ```powershell
@@ -69,7 +77,47 @@ Visualize a saved policy:
 python Experiments/visualize_tm2d.py --map-name "AI Training #5" --model-path Experiments/runs/<run>/best_policy.pt
 ```
 
+## GA Ranking
+
+The most important GA path is now `--fitness-mode ranking`. In this mode the scalar `fitness` column is kept mostly for plots/logging, while selection uses `Individual.__lt__` and the explicit lexicographic tuple from `--ranking-key`.
+
+Useful tuple symbols:
+
+- `finished`: `1` when the policy reaches finish, otherwise `0`.
+- `progress`: progress value selected by `--ranking-progress-source`.
+- `dense_progress`: continuous geometric progress along the path.
+- `discrete_progress`: checkpoint/block-style progress.
+- `time`: episode time in seconds.
+- `crashes`: number of crashes/touches.
+- `distance`: driven ground distance, useful as a late tie-breaker against S-turns.
+
+The `progress` symbol is deliberately configurable. In the 2D simulator the default is `dense_progress`, because discrete checkpoint/block progress leaves too many early policies tied.
+
+- `--ranking-progress-source discrete_progress` makes `progress` use discrete checkpoint/block progress.
+- `--ranking-progress-source dense_progress` makes `progress` use continuous path progress.
+- If the tuple directly contains `dense_progress`, the trainer automatically uses dense progress even when the source flag was not set.
+
+Current working candidate after the May 2026 local comparison:
+
+```text
+(finished, progress, -time)
+```
+
+Interpretation: first prefer policies that finish, then those that get farther, and among comparable progress levels prefer lower time. In the latest four-way comparison on `AI Training #5`, this tuple found the first finish earliest and produced the fastest best finish.
+
+Other useful comparison tuples:
+
+```text
+(finished, progress)
+(finished, progress, -crashes, -time)
+(finished, progress, -time, -crashes)
+```
+
+These are useful thesis baselines because they expose the tradeoff between progress-only behavior, safer driving, and more aggressive time pressure.
+
 ## Reward Modes
+
+Reward modes are still used by `TM2DSimEnv` and SAC. For GA ranking experiments they are logged and can still shape per-step environment reward, but GA selection is controlled by `--ranking-key` when `--fitness-mode ranking` is used.
 
 - `progress_delta`: score is only current progress.
 - `progress_primary_delta`: score is progress minus at most one map progress bucket over the full timeout. This keeps progress dominant and uses time only as a tie-breaker.
@@ -88,6 +136,44 @@ python Experiments/visualize_tm2d.py --map-name "AI Training #5" --model-path Ex
 Use `--fitness-mode reward` in `train_ga.py` when you want GA selection to optimize the selected step reward directly. The default `--fitness-mode scalar` keeps the live-project lexicographic scalar fitness.
 
 `train_sac.py` uses the same reward modes directly as Gym step rewards. This makes it useful for quick reward-shaping experiments before spending realtime Trackmania hours in `RL_test/train_sac_trackmania.py`.
+
+## Logging And Analysis
+
+GA runs write:
+
+- `config.json`: exact experiment configuration.
+- `generation_metrics.csv`: per-generation best values, percentiles, outcome counts, cache/evaluation counts, wall time and virtual driving time.
+- `individual_metrics.csv`: one row per individual per generation with ranking key, progress, dense progress, time, finished/crashes/timeout, distance, reward and step count.
+- `best_policy.pt`: best policy according to the configured selection mode.
+
+The detailed individual log is intentionally verbose. It lets us build thesis-grade plots such as progress distributions, finish-count curves, safety/time scatter plots, crash rates, and virtual-time learning efficiency.
+
+Latest generated comparison:
+
+```text
+Experiments/analysis/ga_lexicographic_reward_comparison_20260501
+```
+
+This folder contains:
+
+- `REPORT.md`: compact interpretation of the four reward/ranking candidates.
+- `summary.csv`: headline metrics for each run.
+- `combined_generation_metrics.csv`: merged generation metrics.
+- `combined_individual_metrics.csv`: merged individual metrics.
+- `01_best_dense_progress.png`
+- `02_population_progress_distribution.png`
+- `03_finish_count_and_best_finish_time.png`
+- `04_outcome_rates.png`
+- `05_final_population_scatter.png`
+- `06_summary_bars.png`
+- `07_virtual_time_efficiency.png`
+
+Latest local conclusion:
+
+- `(finished, progress, -time)` was the strongest tuple in the four-way dense-progress comparison.
+- `(finished, progress, -crashes, -time)` is a useful safer alternative.
+- `(finished, progress)` is a good baseline, but tends to learn slower driving because it ignores time.
+- `(finished, progress, -time, -crashes)` can be more aggressive because crash safety is considered only after time.
 
 ## Multi-Objective GA
 

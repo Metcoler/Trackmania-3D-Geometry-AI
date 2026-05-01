@@ -605,6 +605,7 @@ class GeneticTrainer:
             print(
                 f"{index + 1}/{total} "
                 f"{status} | progress={individual.discrete_progress:.1f}% | "
+                f"dense={individual.dense_progress:.1f}% | "
                 f"time={individual.time:.2f}s | score={individual.fitness:.2f}{mirror_tag}"
             )
 
@@ -1116,6 +1117,7 @@ class GeneticTrainer:
                     print(
                         f"Screening best: {status} | "
                         f"progress={screened_best.discrete_progress:.1f}% | "
+                        f"dense={screened_best.dense_progress:.1f}% | "
                         f"time={screened_best.time:.2f}s"
                     )
                     print(
@@ -1204,7 +1206,9 @@ class GeneticTrainer:
                 from_status = self._outcome_status_text(best_gen.finished, best_gen.crashes)
                 print(
                     f"Best of generation: {from_status} | "
-                    f"progress={dist_best_gen:.1f}% | time={best_gen.time:.2f}s"
+                    f"progress={dist_best_gen:.1f}% | "
+                    f"dense={best_gen.dense_progress:.1f}% | "
+                    f"time={best_gen.time:.2f}s"
                 )
 
             self.generation = current_generation
@@ -1490,7 +1494,7 @@ if __name__ == "__main__":
 
     # map dependend constants
     map_name = "AI Training #5"
-    env_max_time = 30
+    env_max_time = 45
     
     # neural network architecture
     hidden_dim = [32, 16]
@@ -1508,10 +1512,11 @@ if __name__ == "__main__":
     #
     # With selection_fitness_mode="ranking", Individual.fitness remains a
     # log-friendly scalar, but population sorting uses Individual.ranking_key().
-    # This run tests: (dense_progress, finished, -time, -crashes, -distance).
+    # This mirrors the best current TM2D candidate:
+    # (finished, progress, -time), where progress resolves to dense_progress.
     selection_fitness_mode = "ranking"  # scalar / ranking
     ranking_mode = "lexicographic"
-    ranking_key = "(dense_progress, finished, -time, -crashes, -distance)"
+    ranking_key = "(finished, progress, -time)"
     ranking_progress_source = "dense_progress"
 
     mutation_prob = 0.20
@@ -1726,6 +1731,7 @@ if __name__ == "__main__":
                 f"\nBest overall: finished={trainer.best_individual.finished}, "
                 f"crashes={trainer.best_individual.crashes}, "
                 f"progress={trainer.best_individual.discrete_progress:.1f}%, "
+                f"dense={trainer.best_individual.dense_progress:.1f}%, "
                 f"time={trainer.best_individual.time:.2f}s"
             )
         if logger is not None:

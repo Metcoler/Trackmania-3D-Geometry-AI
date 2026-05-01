@@ -359,7 +359,7 @@ def main() -> None:
     parser.add_argument(
         "--ranking-progress-source",
         choices=list(Individual.RANKING_PROGRESS_SOURCES),
-        default="discrete_progress",
+        default="dense_progress",
         help="Progress value used inside ranking tuples: discrete checkpoints or dense geometry.",
     )
     parser.add_argument("--collision-mode", choices=["center", "corners"], default="center")
@@ -401,7 +401,7 @@ def main() -> None:
     if (
         args.ranking_key is not None
         and "dense_progress" in ranking_key_expression
-        and ranking_progress_source == "discrete_progress"
+        and ranking_progress_source != "dense_progress"
     ):
         ranking_progress_source = "dense_progress"
     Individual.RANKING_KEY = ranking_key

@@ -17,7 +17,7 @@ class Individual:
     DISTANCE_WEIGHT = 1.0
     COMPARE_BY_RANKING_KEY = False
     RANKING_KEY = "(finished, progress, -time, -crashes, -distance)"
-    RANKING_PROGRESS_SOURCE = "discrete_progress"
+    RANKING_PROGRESS_SOURCE = "dense_progress"
     RANKING_PROGRESS_SOURCES = ("discrete_progress", "dense_progress")
 
     def __init__(

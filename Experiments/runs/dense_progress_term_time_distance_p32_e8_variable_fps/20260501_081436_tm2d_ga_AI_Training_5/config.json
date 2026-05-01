@@ -1,0 +1,42 @@
+{
+  "map_name": "AI Training #5",
+  "generations": 300,
+  "population_size": 32,
+  "elite_count": 8,
+  "parent_count": 16,
+  "max_time": 45.0,
+  "hidden_dim": [
+    32,
+    16
+  ],
+  "hidden_activation": [
+    "relu",
+    "tanh"
+  ],
+  "mutation_prob": 0.2,
+  "mutation_sigma": 0.2,
+  "fixed_fps": null,
+  "fitness_mode": "ranking",
+  "ranking_key_mode": "progress_term_time_distance",
+  "ranking_progress_source": "dense_progress",
+  "reward_mode": "terminal_fitness",
+  "collision_mode": "corners",
+  "obs_dim": 44,
+  "act_dim": 3,
+  "progress_bucket": 2.857142857142857,
+  "physics": {
+    "min_dt": 0.01,
+    "max_dt": 0.03333333333333333,
+    "max_speed": 145.0,
+    "reverse_speed": 10.0,
+    "gas_accel": 28.187,
+    "brake_accel": 16.648,
+    "drag": 0.0966,
+    "rolling_drag": 15.985,
+    "lateral_grip": 5.5,
+    "max_yaw_rate": 2.35,
+    "car_length": 4.8,
+    "car_width": 2.6
+  },
+  "num_workers": 8
+}

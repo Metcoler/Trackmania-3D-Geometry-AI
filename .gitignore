@@ -29,5 +29,3 @@ Cars Evolution Training Project/
 logs/sb3_runs/**/*.zip
 RL_test/logs/sb3_runs/**/*.zip
 
-# Fast local experiment outputs
-Experiments/runs/

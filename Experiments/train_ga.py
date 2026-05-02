@@ -419,6 +419,14 @@ def main() -> None:
     )
     parser.add_argument("--log-dir", default="Experiments/runs")
     parser.add_argument("--render-best", action="store_true")
+    parser.add_argument(
+        "--disable-elite-cache",
+        action="store_true",
+        help=(
+            "Force copied elites to be re-evaluated in the next generation. "
+            "Use this for fair stochastic/seed comparison sweeps."
+        ),
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -493,6 +501,7 @@ def main() -> None:
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),
+        "elite_cache_enabled": bool(not args.disable_elite_cache),
         "obs_dim": env.obs_dim,
         "act_dim": env.act_dim,
         "progress_bucket": env.progress_bucket,
@@ -718,6 +727,9 @@ def main() -> None:
 
                 if generation < args.generations:
                     elites = [individual.copy() for individual in population[: args.elite_count]]
+                    if args.disable_elite_cache:
+                        for elite in elites:
+                            elite.invalidate_evaluation()
                     parents = [individual.copy() for individual in population[: args.parent_count]]
                     children = make_child_pool(parents, args.population_size - len(elites))
                     for child in children:

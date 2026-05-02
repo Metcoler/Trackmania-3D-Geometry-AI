@@ -276,6 +276,7 @@ class TrainingLogger:
         current_mutation_sigma: Optional[float] = None,
         observation_layout: Optional[Sequence[str]] = None,
         vertical_mode: bool = False,
+        multi_surface_mode: bool = True,
     ) -> str:
         checkpoint_path = os.path.join(
             self.checkpoints_dir, f"population_gen_{generation:04d}.npz"
@@ -329,6 +330,7 @@ class TrainingLogger:
             act_dim=np.array([act_dim], dtype=np.int32),
             hidden_dims=np.array(normalize_hidden_dims(hidden_dim), dtype=np.int32),
             vertical_mode=np.array([int(bool(vertical_mode))], dtype=np.int32),
+            multi_surface_mode=np.array([int(bool(multi_surface_mode))], dtype=np.int32),
         )
         if observation_layout is not None:
             payload["observation_layout"] = np.array(list(observation_layout), dtype=str)
@@ -393,6 +395,7 @@ class TrainingLogger:
         best_individual: Optional[Individual] = None,
         observation_layout: Optional[Sequence[str]] = None,
         vertical_mode: bool = False,
+        multi_surface_mode: bool = True,
     ) -> str:
         final_path = self.final_population_path
         genomes = np.stack([ind.genome for ind in population]).astype(np.float32)
@@ -443,6 +446,7 @@ class TrainingLogger:
             act_dim=np.array([act_dim], dtype=np.int32),
             hidden_dims=np.array(normalize_hidden_dims(hidden_dim), dtype=np.int32),
             vertical_mode=np.array([int(bool(vertical_mode))], dtype=np.int32),
+            multi_surface_mode=np.array([int(bool(multi_surface_mode))], dtype=np.int32),
         )
         if observation_layout is not None:
             payload["observation_layout"] = np.array(list(observation_layout), dtype=str)
@@ -469,6 +473,7 @@ class TrainingLogger:
                     generation,
                     observation_layout=observation_layout,
                     vertical_mode=vertical_mode,
+                    multi_surface_mode=multi_surface_mode,
                 ),
             )
         return final_path
@@ -479,6 +484,7 @@ class TrainingLogger:
         generation: Optional[int] = None,
         observation_layout: Optional[Sequence[str]] = None,
         vertical_mode: bool = False,
+        multi_surface_mode: bool = True,
     ) -> str:
         payload = dict(
             genome=best.genome.astype(np.float32),
@@ -526,6 +532,7 @@ class TrainingLogger:
             generation,
             observation_layout=observation_layout,
             vertical_mode=vertical_mode,
+            multi_surface_mode=multi_surface_mode,
         )
         best.policy.save(self.global_best_model_path, extra=extra)
         best.policy.save(self.best_individual_model_path, extra=extra)
@@ -537,6 +544,7 @@ class TrainingLogger:
         generation: Optional[int],
         observation_layout: Optional[Sequence[str]] = None,
         vertical_mode: bool = False,
+        multi_surface_mode: bool = True,
     ) -> Dict:
         extra: Dict = dict(
             discrete_progress=float(best.discrete_progress),
@@ -564,9 +572,13 @@ class TrainingLogger:
             observation_layout=list(
                 observation_layout
                 if observation_layout is not None
-                else ObservationEncoder.feature_names(vertical_mode=vertical_mode)
+                else ObservationEncoder.feature_names(
+                    vertical_mode=vertical_mode,
+                    multi_surface_mode=multi_surface_mode,
+                )
             ),
             vertical_mode=bool(vertical_mode),
+            multi_surface_mode=bool(multi_surface_mode),
         )
         if generation is not None:
             extra["generation"] = int(generation)
@@ -615,10 +627,16 @@ class GeneticTrainer:
         self.vertical_mode = bool(
             getattr(getattr(env, "obs_encoder", None), "vertical_mode", False)
         )
+        self.multi_surface_mode = bool(
+            getattr(getattr(env, "obs_encoder", None), "multi_surface_mode", True)
+        )
         self.observation_layout = list(
             observation_layout
             if observation_layout is not None
-            else ObservationEncoder.feature_names(vertical_mode=self.vertical_mode)
+            else ObservationEncoder.feature_names(
+                vertical_mode=self.vertical_mode,
+                multi_surface_mode=self.multi_surface_mode,
+            )
         )
         self.target_steer_deadzone = float(target_steer_deadzone)
         self.logger = logger
@@ -906,6 +924,7 @@ class GeneticTrainer:
         return ObservationEncoder.mirror_observation(
             obs,
             vertical_mode=self.vertical_mode,
+            multi_surface_mode=self.multi_surface_mode,
         )
 
     @staticmethod
@@ -1448,6 +1467,7 @@ class GeneticTrainer:
                 obs_dim=self.obs_dim,
                 observation_layout=list(self.observation_layout),
                 vertical_mode=bool(self.vertical_mode),
+                multi_surface_mode=bool(self.multi_surface_mode),
                 hidden_dim=self.hidden_dim,
                 act_dim=self.act_dim,
                 pop_size=self.pop_size,
@@ -1574,6 +1594,7 @@ class GeneticTrainer:
                 generation=self.generation,
                 observation_layout=self.observation_layout,
                 vertical_mode=self.vertical_mode,
+                multi_surface_mode=self.multi_surface_mode,
             )
 
         for local_gen in range(generations):
@@ -1669,6 +1690,7 @@ class GeneticTrainer:
                     generation=current_generation,
                     observation_layout=self.observation_layout,
                     vertical_mode=self.vertical_mode,
+                    multi_surface_mode=self.multi_surface_mode,
                 )
                 if verbose:
                     print(f"Global best updated: {global_best_path}")
@@ -1693,6 +1715,7 @@ class GeneticTrainer:
                     current_mutation_sigma=current_mutation_sigma,
                     observation_layout=self.observation_layout,
                     vertical_mode=self.vertical_mode,
+                    multi_surface_mode=self.multi_surface_mode,
                 )
                 if verbose:
                     print(f"Checkpoint saved: {checkpoint_path}")
@@ -1720,6 +1743,7 @@ class GeneticTrainer:
                 generation=self.generation,
                 observation_layout=self.observation_layout,
                 vertical_mode=self.vertical_mode,
+                multi_surface_mode=self.multi_surface_mode,
             )
             self.logger.save_final_population(
                 population=self.population,
@@ -1730,6 +1754,7 @@ class GeneticTrainer:
                 best_individual=self.best_individual,
                 observation_layout=self.observation_layout,
                 vertical_mode=self.vertical_mode,
+                multi_surface_mode=self.multi_surface_mode,
             )
 
         return history
@@ -1981,6 +2006,7 @@ if __name__ == "__main__":
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
     vertical_mode = True
+    multi_surface_mode = True
 
     # Evolution
     pop_size = 64
@@ -2089,6 +2115,7 @@ if __name__ == "__main__":
         dt_ref=env_dt_ref,
         dt_ratio_clip=env_dt_ratio_clip,
         vertical_mode=vertical_mode,
+        multi_surface_mode=multi_surface_mode,
         surface_probe_height=surface_probe_height,
         surface_ray_lift=surface_ray_lift,
         max_time=env_max_time,
@@ -2109,7 +2136,8 @@ if __name__ == "__main__":
             source_run_name = os.path.basename(os.path.dirname(os.path.dirname(resume_checkpoint)))
             run_name = (
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                f"_tm_finetune_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+                f"_tm_finetune_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_"
+                f"{'surface' if multi_surface_mode else 'asphalt'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
                 f"_src_{source_run_name}_{source_checkpoint_name}"
             )
             logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
@@ -2117,7 +2145,8 @@ if __name__ == "__main__":
         source_model_name = os.path.splitext(os.path.basename(seed_model_path))[0]
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            f"_tm_seed_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+            f"_tm_seed_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_"
+            f"{'surface' if multi_surface_mode else 'asphalt'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
             f"_src_{source_model_name}"
         )
         logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
@@ -2132,7 +2161,8 @@ if __name__ == "__main__":
         )
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            f"_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+            f"_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_"
+            f"{'surface' if multi_surface_mode else 'asphalt'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
             f"_{selection_tag}"
         )
         logger = TrainingLogger(run_name=run_name)
@@ -2149,7 +2179,10 @@ if __name__ == "__main__":
         hidden_activation=hidden_activation,
         target_steer_deadzone=target_steer_deadzone,
         logger=logger,
-        observation_layout=env.obs_encoder.feature_names(vertical_mode=env.obs_encoder.vertical_mode),
+        observation_layout=env.obs_encoder.feature_names(
+            vertical_mode=env.obs_encoder.vertical_mode,
+            multi_surface_mode=env.obs_encoder.multi_surface_mode,
+        ),
         selection_mode=selection_mode,
         moo_objective_mode=moo_objective_mode,
         moo_objective_subset=moo_objective_subset,
@@ -2199,6 +2232,7 @@ if __name__ == "__main__":
                 env_dt_ref=env_dt_ref,
                 env_dt_ratio_clip=env_dt_ratio_clip,
                 vertical_mode=vertical_mode,
+                multi_surface_mode=multi_surface_mode,
                 surface_probe_height=surface_probe_height,
                 surface_ray_lift=surface_ray_lift,
                 action_mode=action_mode,

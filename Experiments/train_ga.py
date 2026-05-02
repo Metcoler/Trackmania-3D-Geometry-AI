@@ -230,6 +230,10 @@ def _init_worker(config: dict) -> None:
         physics_config=TM2DPhysicsConfig().with_fixed_fps(config.get("fixed_fps")),
         seed=int(config["seed"]),
         collision_mode=str(config["collision_mode"]),
+        collision_distance_threshold=float(config.get("collision_distance_threshold", 2.0)),
+        vertical_mode=bool(config.get("vertical_mode", False)),
+        multi_surface_mode=bool(config.get("multi_surface_mode", False)),
+        binary_gas_brake=bool(config.get("binary_gas_brake", True)),
     )
 
 
@@ -362,7 +366,31 @@ def main() -> None:
         default="dense_progress",
         help="Progress value used inside ranking tuples: discrete checkpoints or dense geometry.",
     )
-    parser.add_argument("--collision-mode", choices=["center", "corners"], default="center")
+    parser.add_argument("--collision-mode", choices=["center", "corners", "laser", "lidar"], default="laser")
+    parser.add_argument(
+        "--collision-distance-threshold",
+        type=float,
+        default=2.0,
+        help="Laser/lidar collision threshold used when --collision-mode laser is selected.",
+    )
+    parser.add_argument(
+        "--vertical-mode",
+        action="store_true",
+        help=(
+            "Use the 3D-compatible observation layout with neutral "
+            "vertical features while keeping TM2D physics flat."
+        ),
+    )
+    parser.add_argument(
+        "--multi-surface-mode",
+        action="store_true",
+        help="Append surface traction instructions to the observation.",
+    )
+    parser.add_argument(
+        "--continuous-gas-brake",
+        action="store_true",
+        help="Disable live-TM-style gas/brake binarization in TM2D diagnostics.",
+    )
     parser.add_argument(
         "--reward-mode",
         choices=[
@@ -421,6 +449,10 @@ def main() -> None:
         physics_config=physics_config,
         seed=args.seed,
         collision_mode=args.collision_mode,
+        collision_distance_threshold=args.collision_distance_threshold,
+        vertical_mode=args.vertical_mode,
+        multi_surface_mode=args.multi_surface_mode,
+        binary_gas_brake=not args.continuous_gas_brake,
     )
     action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
     population = [
@@ -457,6 +489,10 @@ def main() -> None:
         "ranking_progress_source": ranking_progress_source,
         "reward_mode": args.reward_mode,
         "collision_mode": args.collision_mode,
+        "collision_distance_threshold": float(args.collision_distance_threshold),
+        "vertical_mode": bool(args.vertical_mode),
+        "multi_surface_mode": bool(args.multi_surface_mode),
+        "binary_gas_brake": bool(not args.continuous_gas_brake),
         "obs_dim": env.obs_dim,
         "act_dim": env.act_dim,
         "progress_bucket": env.progress_bucket,
@@ -492,6 +528,10 @@ def main() -> None:
                 "ranking_key": ranking_key,
                 "ranking_progress_source": ranking_progress_source,
                 "collision_mode": args.collision_mode,
+                "collision_distance_threshold": float(args.collision_distance_threshold),
+                "vertical_mode": bool(args.vertical_mode),
+                "multi_surface_mode": bool(args.multi_surface_mode),
+                "binary_gas_brake": bool(not args.continuous_gas_brake),
                 "seed": args.seed,
                 "fixed_fps": args.fixed_fps,
                 "obs_dim": env.obs_dim,
@@ -707,6 +747,10 @@ def main() -> None:
             physics_config=physics_config,
             seed=args.seed + 1,
             collision_mode=args.collision_mode,
+            collision_distance_threshold=args.collision_distance_threshold,
+            vertical_mode=args.vertical_mode,
+            multi_surface_mode=args.multi_surface_mode,
+            binary_gas_brake=not args.continuous_gas_brake,
         )
         viewer = TM2DViewer(viewer_env)
         obs, info = viewer_env.reset()

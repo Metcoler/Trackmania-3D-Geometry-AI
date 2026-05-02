@@ -69,11 +69,15 @@ class TM2DSB3Env(gym.Env):
         reward_mode: str,
         env_max_time: float,
         action_layout: str = DEFAULT_ACTION_LAYOUT,
-        collision_mode: str = "center",
+        collision_mode: str = "laser",
+        collision_distance_threshold: float = 2.0,
         seed: int | None = None,
         terminal_fitness_scale: float = 1_000_000.0,
         pace_target_time: float | None = None,
         fixed_fps: float | None = None,
+        vertical_mode: bool = False,
+        multi_surface_mode: bool = False,
+        binary_gas_brake: bool = True,
     ) -> None:
         super().__init__()
         self.reward_config = TM2DRewardConfig(
@@ -88,6 +92,10 @@ class TM2DSB3Env(gym.Env):
             physics_config=TM2DPhysicsConfig().with_fixed_fps(fixed_fps),
             seed=seed,
             collision_mode=collision_mode,
+            collision_distance_threshold=collision_distance_threshold,
+            vertical_mode=vertical_mode,
+            multi_surface_mode=multi_surface_mode,
+            binary_gas_brake=binary_gas_brake,
         )
         low, high = self.env.obs_encoder.get_observation_bounds(action_mode="target")
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
@@ -143,7 +151,12 @@ class TM2DSB3Env(gym.Env):
         dense_progress = float(info.get("dense_progress", progress))
         time_value = float(info.get("time", 0.0))
         distance = float(info.get("distance", 0.0))
-        fitness = Individual.compute_scalar_fitness_for(finished, crashes, progress, time_value, distance)
+        fitness_progress = (
+            dense_progress
+            if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
+            else progress
+        )
+        fitness = Individual.compute_scalar_fitness_for(finished, crashes, fitness_progress, time_value, distance)
         return {
             "finished": float(finished),
             "crashes": float(crashes),
@@ -367,7 +380,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--total-timesteps", type=int, default=300_000)
     parser.add_argument("--max-runtime-minutes", type=float, default=30.0)
     parser.add_argument("--checkpoint-every-episodes", type=int, default=50)
-    parser.add_argument("--collision-mode", choices=["center", "corners"], default="center")
+    parser.add_argument("--collision-mode", choices=["center", "corners", "laser", "lidar"], default="laser")
+    parser.add_argument(
+        "--collision-distance-threshold",
+        type=float,
+        default=2.0,
+        help="Laser/lidar collision threshold used when --collision-mode laser is selected.",
+    )
+    parser.add_argument(
+        "--vertical-mode",
+        action="store_true",
+        help=(
+            "Use the 3D-compatible observation layout with neutral "
+            "vertical features while keeping TM2D physics flat."
+        ),
+    )
+    parser.add_argument(
+        "--multi-surface-mode",
+        action="store_true",
+        help="Append surface traction instructions to the observation.",
+    )
+    parser.add_argument(
+        "--continuous-gas-brake",
+        action="store_true",
+        help="Disable live-TM-style gas/brake binarization in TM2D diagnostics.",
+    )
     parser.add_argument(
         "--fixed-fps",
         type=float,
@@ -424,10 +461,14 @@ def main() -> None:
         env_max_time=args.env_max_time,
         action_layout=args.action_layout,
         collision_mode=args.collision_mode,
+        collision_distance_threshold=args.collision_distance_threshold,
         seed=args.seed,
         terminal_fitness_scale=args.terminal_fitness_scale,
         pace_target_time=args.pace_target_time,
         fixed_fps=args.fixed_fps,
+        vertical_mode=args.vertical_mode,
+        multi_surface_mode=args.multi_surface_mode,
+        binary_gas_brake=not args.continuous_gas_brake,
     )
     env = Monitor(raw_env, filename=str(run_dir / "monitor.csv"), info_keywords=("episode_metrics",))
     net_arch = parse_int_list(args.net_arch)
@@ -442,6 +483,10 @@ def main() -> None:
         "total_timesteps": int(args.total_timesteps),
         "max_runtime_minutes": float(args.max_runtime_minutes),
         "collision_mode": args.collision_mode,
+        "collision_distance_threshold": float(args.collision_distance_threshold),
+        "vertical_mode": bool(args.vertical_mode),
+        "multi_surface_mode": bool(args.multi_surface_mode),
+        "binary_gas_brake": bool(not args.continuous_gas_brake),
         "fixed_fps": args.fixed_fps,
         "seed": int(args.seed),
         "learning_rate": float(args.learning_rate),

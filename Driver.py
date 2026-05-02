@@ -136,6 +136,7 @@ def load_population(
             "hidden_dim": _read_optional_scalar_int(data, "hidden_dim"),
             "act_dim": _read_optional_scalar_int(data, "act_dim"),
             "vertical_mode": _read_optional_scalar_int(data, "vertical_mode"),
+            "multi_surface_mode": _read_optional_scalar_int(data, "multi_surface_mode"),
         }
         hidden_dims = _read_optional_int_tuple(data, "hidden_dims")
         if hidden_dims is not None:
@@ -230,6 +231,7 @@ def replay_population(
     never_quit: bool = True,
     action_mode: str = "delta",
     vertical_mode: bool = True,
+    multi_surface_mode: bool = True,
     pause_between: bool = True,
     sort_by_fitness: bool = True,
     rank_start: int = 1,
@@ -257,12 +259,15 @@ def replay_population(
         print(f"Checkpoint generation: {meta['generation']}")
     if meta.get("vertical_mode") is not None:
         print(f"Checkpoint vertical_mode: {bool(meta['vertical_mode'])}")
+    if meta.get("multi_surface_mode") is not None:
+        print(f"Checkpoint multi_surface_mode: {bool(meta['multi_surface_mode'])}")
 
     env = RacingGameEnviroment(
         map_name=map_name,
         never_quit=never_quit,
         action_mode=action_mode,
         vertical_mode=vertical_mode,
+        multi_surface_mode=multi_surface_mode,
         max_time=env_max_time,
         max_touches=max_touches,
     )
@@ -290,6 +295,12 @@ def replay_population(
             print(
                 "WARNING: checkpoint vertical_mode does not match replay vertical_mode. "
                 "Set Driver.VERTICAL_MODE accordingly."
+            )
+        file_multi_surface_mode = meta.get("multi_surface_mode")
+        if file_multi_surface_mode is not None and bool(file_multi_surface_mode) != bool(multi_surface_mode):
+            print(
+                "WARNING: checkpoint multi_surface_mode does not match replay multi_surface_mode. "
+                "Set Driver.MULTI_SURFACE_MODE accordingly."
             )
         if file_act_dim is not None and file_act_dim != act_dim:
             print(
@@ -427,6 +438,7 @@ def drive_model(
     never_quit: bool = True,
     action_mode: str = "target",
     vertical_mode: bool = True,
+    multi_surface_mode: bool = True,
     target_steer_deadzone: float = 0.0,
 ) -> None:
     policy, extra = NeuralPolicy.load(model_file, map_location="cpu")
@@ -439,12 +451,18 @@ def drive_model(
                 "WARNING: model vertical_mode does not match replay vertical_mode. "
                 "Set Driver.VERTICAL_MODE accordingly."
             )
+        if "multi_surface_mode" in extra and bool(extra["multi_surface_mode"]) != bool(multi_surface_mode):
+            print(
+                "WARNING: model multi_surface_mode does not match replay multi_surface_mode. "
+                "Set Driver.MULTI_SURFACE_MODE accordingly."
+            )
 
     env = RacingGameEnviroment(
         map_name=map_name,
         never_quit=never_quit,
         action_mode=action_mode,
         vertical_mode=vertical_mode,
+        multi_surface_mode=multi_surface_mode,
         max_time=env_max_time,
         max_touches=max_touches,
     )
@@ -503,6 +521,7 @@ if __name__ == "__main__":
     NEVER_QUIT = True
     ACTION_MODE = "target"
     VERTICAL_MODE = True
+    MULTI_SURFACE_MODE = True
     TARGET_STEER_DEADZONE = 0.05
     PAUSE_BETWEEN = False
 
@@ -522,6 +541,7 @@ if __name__ == "__main__":
             never_quit=NEVER_QUIT,
             action_mode=ACTION_MODE,
             vertical_mode=VERTICAL_MODE,
+            multi_surface_mode=MULTI_SURFACE_MODE,
             target_steer_deadzone=TARGET_STEER_DEADZONE,
         )
     else:
@@ -535,6 +555,7 @@ if __name__ == "__main__":
             never_quit=NEVER_QUIT,
             action_mode=ACTION_MODE,
             vertical_mode=VERTICAL_MODE,
+            multi_surface_mode=MULTI_SURFACE_MODE,
             pause_between=PAUSE_BETWEEN,
             sort_by_fitness=SORT_BY_FITNESS,
             rank_start=RANK_START,

@@ -42,6 +42,7 @@ INITIAL_MODEL_PATH = None
 
 ACTION_LAYOUT = "gas_steer"  # gas_steer / gas_brake_steer / throttle_steer / target_3d
 VERTICAL_MODE = True
+MULTI_SURFACE_MODE = True
 MAX_TOUCHES = 1
 START_IDLE_MAX_TIME = 2.0
 LOG_LIVE_RESETS = True
@@ -116,6 +117,7 @@ class TrackmaniaSB3Env(gym.Env):
         action_layout: str,
         env_max_time: float,
         vertical_mode: bool = True,
+        multi_surface_mode: bool = True,
         max_touches: int = 1,
         start_idle_max_time: float = 2.0,
         terminal_fitness_scale: float = TERMINAL_FITNESS_SCALE,
@@ -153,6 +155,7 @@ class TrackmaniaSB3Env(gym.Env):
             dt_ref=1.0 / 100.0,
             dt_ratio_clip=3.0,
             vertical_mode=vertical_mode,
+            multi_surface_mode=multi_surface_mode,
             surface_probe_height=Car.SURFACE_PROBE_HEIGHT,
             surface_ray_lift=Car.SURFACE_RAY_LIFT,
             max_time=env_max_time,
@@ -655,10 +658,12 @@ def build_run_dir(
     reward_mode: str,
     action_layout: str,
     vertical_mode: bool,
+    multi_surface_mode: bool,
 ) -> Path:
     lidar_mode = "3d_lidar" if vertical_mode else "2d_lidar"
+    surface_mode = "surface" if multi_surface_mode else "asphalt"
     run_name = (
-        f"{timestamp()}_sac_map_{map_name}_{lidar_mode}_{reward_mode}_{action_layout}"
+        f"{timestamp()}_sac_map_{map_name}_{lidar_mode}_{surface_mode}_{reward_mode}_{action_layout}"
     )
     run_dir = Path(base_dir) / sanitize_name(run_name)
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -726,6 +731,7 @@ def main() -> None:
         reward_mode=args.reward_mode,
         action_layout=args.action_layout,
         vertical_mode=VERTICAL_MODE,
+        multi_surface_mode=MULTI_SURFACE_MODE,
     )
     monitor_path = str(run_dir / "monitor.csv")
     raw_env = TrackmaniaSB3Env(
@@ -734,6 +740,7 @@ def main() -> None:
         action_layout=args.action_layout,
         env_max_time=args.env_max_time,
         vertical_mode=VERTICAL_MODE,
+        multi_surface_mode=MULTI_SURFACE_MODE,
         max_touches=MAX_TOUCHES,
         start_idle_max_time=START_IDLE_MAX_TIME,
         terminal_fitness_scale=args.terminal_fitness_scale,
@@ -752,6 +759,7 @@ def main() -> None:
         reward_mode=args.reward_mode,
         action_layout=args.action_layout,
         vertical_mode=VERTICAL_MODE,
+        multi_surface_mode=MULTI_SURFACE_MODE,
         terminal_fitness_scale=float(args.terminal_fitness_scale),
         pace_target_time=float(pace_target_time),
         path_tile_count=int(raw_env.path_tile_count),

@@ -77,10 +77,16 @@ class TM2DSimEnv:
         physics_config: TM2DPhysicsConfig | None = None,
         seed: int | None = None,
         random_start_jitter: float = 0.0,
-        collision_mode: str = "center",
+        collision_mode: str = "laser",
+        collision_distance_threshold: float = 2.0,
         start_idle_max_time: float = 5.0,
         start_idle_progress_epsilon: float = 0.5,
         start_idle_speed_threshold: float = 3.0,
+        stuck_timeout_speed_threshold: float = 2.5,
+        stuck_timeout_duration: float = 2.5,
+        vertical_mode: bool = False,
+        multi_surface_mode: bool = False,
+        binary_gas_brake: bool = True,
     ) -> None:
         self.geometry = TM2DGeometry(map_name=map_name)
         self.max_time = float(max_time)
@@ -88,13 +94,20 @@ class TM2DSimEnv:
         self.physics = physics_config or TM2DPhysicsConfig()
         self.random_start_jitter = float(random_start_jitter)
         self.collision_mode = str(collision_mode).strip().lower()
-        if self.collision_mode not in {"center", "corners"}:
-            raise ValueError("collision_mode must be 'center' or 'corners'.")
+        if self.collision_mode not in {"center", "corners", "laser", "lidar"}:
+            raise ValueError("collision_mode must be 'center', 'corners', or 'laser'.")
+        self.collision_distance_threshold = float(collision_distance_threshold)
         self.start_idle_max_time = float(start_idle_max_time)
         self.start_idle_progress_epsilon = float(start_idle_progress_epsilon)
         self.start_idle_speed_threshold = float(start_idle_speed_threshold)
+        self.stuck_timeout_speed_threshold = float(stuck_timeout_speed_threshold)
+        self.stuck_timeout_duration = float(stuck_timeout_duration)
+        self.binary_gas_brake = bool(binary_gas_brake)
         self.rng = np.random.default_rng(seed)
-        self.obs_encoder = ObservationEncoder(vertical_mode=False)
+        self.obs_encoder = ObservationEncoder(
+            vertical_mode=bool(vertical_mode),
+            multi_surface_mode=bool(multi_surface_mode),
+        )
         self._clearance_windows = ObservationEncoder.clearance_window_bounds()
         self._obs_buffer = np.zeros(self.obs_encoder.obs_dim, dtype=np.float32)
         self._path_instr_buffer = np.zeros(Car.SIGHT_TILES, dtype=np.float32)
@@ -135,6 +148,7 @@ class TM2DSimEnv:
         self.finished = 0
         self.crashes = 0
         self.done = False
+        self._stuck_since_time = None
         self.last_score = self._score_state(
             finished=0,
             crashes=0,
@@ -162,6 +176,9 @@ class TM2DSimEnv:
         gas = float(np.clip(action[0], 0.0, 1.0))
         brake = float(np.clip(action[1], 0.0, 1.0))
         steer = float(np.clip(action[2], -1.0, 1.0))
+        if self.binary_gas_brake:
+            gas = 1.0 if gas > 0.5 else 0.0
+            brake = 1.0 if brake > 0.5 else 0.0
 
         dt = float(self.rng.uniform(self.physics.min_dt, self.physics.max_dt))
         self.current_dt = dt
@@ -197,12 +214,15 @@ class TM2DSimEnv:
 
         self.path_index = self.geometry.update_path_index(self.position, self.path_index)
         progress = self.geometry.progress_for_index(self.path_index)
+        raycast = None
+        if self.collision_mode in {"laser", "lidar"}:
+            raycast = self.geometry.cast_lasers(self.position, self.heading)
 
         terminated = False
         truncated = False
         finished = 0
         crashes = 0
-        if not self._car_on_road():
+        if self._crash_detected(raycast=raycast):
             terminated = True
             crashes = 1
         elif self.path_index >= len(self.geometry.path_tiles_xz) - 1:
@@ -217,11 +237,22 @@ class TM2DSimEnv:
         ):
             terminated = True
             crashes = 1
+        elif (
+            progress > self.start_idle_progress_epsilon
+            and self.speed <= self.stuck_timeout_speed_threshold
+        ):
+            if self._stuck_since_time is None:
+                self._stuck_since_time = self.time
+            elif (self.time - float(self._stuck_since_time)) >= self.stuck_timeout_duration:
+                terminated = True
+                crashes = 1
+        else:
+            self._stuck_since_time = None
 
         self.done = bool(terminated or truncated)
         self.finished = int(finished)
         self.crashes = int(crashes)
-        obs, info = self._build_observation()
+        obs, info = self._build_observation(raycast=raycast)
         score_progress = float(info.get("dense_progress", progress))
         score = self._score_state(
             finished=finished if self.done else 0,
@@ -252,10 +283,19 @@ class TM2DSimEnv:
         mode = str(self.reward_config.mode).strip().lower()
         return mode in {"progress_delta", "progress_primary_delta", "pace_delta", "progress_rate"}
 
-    def _car_on_road(self) -> bool:
+    def _crash_detected(self, raycast=None) -> bool:
+        if self.collision_mode in {"laser", "lidar"}:
+            if raycast is None:
+                raycast = self.geometry.cast_lasers(self.position, self.heading)
+            distances = np.asarray(raycast.distances, dtype=np.float32)
+            if distances.size <= 0:
+                return False
+            return bool(float(np.min(distances)) < self.collision_distance_threshold)
+
         if self.collision_mode == "center":
-            return self.geometry.point_on_road(self.position)
-        return self.geometry.car_on_road(
+            return not self.geometry.point_on_road(self.position)
+
+        return not self.geometry.car_on_road(
             self.position,
             self.heading,
             length=self.physics.car_length,
@@ -515,8 +555,9 @@ class TM2DSimEnv:
 
         return float(score)
 
-    def _build_observation(self) -> tuple[np.ndarray, dict]:
-        raycast = self.geometry.cast_lasers(self.position, self.heading)
+    def _build_observation(self, raycast=None) -> tuple[np.ndarray, dict]:
+        if raycast is None:
+            raycast = self.geometry.cast_lasers(self.position, self.heading)
         path_vec, next_path_vec = self.geometry.next_path_vectors(self.path_index)
         forward = _normalize_2d(self.forward)
         progress = self.geometry.progress_for_index(self.path_index)
@@ -542,6 +583,9 @@ class TM2DSimEnv:
             "finished": int(self.finished),
             "crashes": int(self.crashes),
             "timeout": int(self.done and int(self.finished) == 0 and int(self.crashes) == 0),
+            "collision_mode": self.collision_mode,
+            "min_laser_distance": float(np.min(raycast.distances)) if len(raycast.distances) else float("inf"),
+            "collision_distance_threshold": float(self.collision_distance_threshold),
             "slip_mean": slip_mean,
             "slip_fl": slip_mean,
             "slip_fr": slip_mean,
@@ -562,8 +606,10 @@ class TM2DSimEnv:
     def _build_fast_observation(self, distances: np.ndarray, info: dict) -> np.ndarray:
         distances = np.asarray(distances, dtype=np.float32)
         self._path_instr_buffer[:] = self.geometry.path_instructions_at(self.path_index)
-        self._surface_instr_buffer[:] = info["next_surface_instructions"]
-        self._height_instr_buffer[:] = info["next_height_instructions"]
+        if self.obs_encoder.multi_surface_mode:
+            self._surface_instr_buffer[:] = info["next_surface_instructions"]
+        if self.obs_encoder.vertical_mode:
+            self._height_instr_buffer[:] = info["next_height_instructions"]
         speed = float(info["speed"])
         side_speed = float(info["side_speed"])
         dt = max(1e-6, float(self.current_dt))
@@ -620,13 +666,15 @@ class TM2DSimEnv:
         obs[offset] = min(1.0, max(0.0, float(info["slip_mean"])))
         offset += 1
 
-        obs[offset:offset + Car.SIGHT_TILES] = self._surface_instr_buffer
-        np.clip(obs[offset:offset + Car.SIGHT_TILES], 0.0, 1.0, out=obs[offset:offset + Car.SIGHT_TILES])
-        offset += Car.SIGHT_TILES
+        if self.obs_encoder.multi_surface_mode:
+            obs[offset:offset + Car.SIGHT_TILES] = self._surface_instr_buffer
+            np.clip(obs[offset:offset + Car.SIGHT_TILES], 0.0, 1.0, out=obs[offset:offset + Car.SIGHT_TILES])
+            offset += Car.SIGHT_TILES
 
-        obs[offset:offset + Car.SIGHT_TILES] = self._height_instr_buffer
-        np.clip(obs[offset:offset + Car.SIGHT_TILES], -1.0, 1.0, out=obs[offset:offset + Car.SIGHT_TILES])
-        offset += Car.SIGHT_TILES
+        if self.obs_encoder.vertical_mode:
+            obs[offset:offset + Car.SIGHT_TILES] = self._height_instr_buffer
+            np.clip(obs[offset:offset + Car.SIGHT_TILES], -1.0, 1.0, out=obs[offset:offset + Car.SIGHT_TILES])
+            offset += Car.SIGHT_TILES
 
         obs[offset] = min(1.0, max(-1.0, longitudinal_accel / self.obs_encoder.accel_abs_max))
         obs[offset + 1] = min(1.0, max(-1.0, lateral_accel / self.obs_encoder.accel_abs_max))
@@ -640,6 +688,29 @@ class TM2DSimEnv:
             1.0,
             out=obs[offset + 3:offset + 3 + len(clearance_rates)],
         )
+        offset += 3 + len(clearance_rates)
+
+        if self.obs_encoder.vertical_mode:
+            vertical_speed = 0.0
+            forward_y = 0.0
+            support_normal_y = 1.0
+            cross_slope = 0.0
+            elevation_windows = np.zeros(
+                len(ObservationEncoder.VERTICAL_FEATURE_NAMES) - 4,
+                dtype=np.float32,
+            )
+            info["vertical_speed"] = vertical_speed
+            info["forward_y"] = forward_y
+            info["support_normal_y"] = support_normal_y
+            info["cross_slope"] = cross_slope
+            for idx, value in enumerate(elevation_windows):
+                info[f"surface_elevation_sector_{idx}"] = float(value)
+
+            obs[offset] = vertical_speed
+            obs[offset + 1] = forward_y
+            obs[offset + 2] = support_normal_y
+            obs[offset + 3] = cross_slope
+            obs[offset + 4:offset + 4 + len(elevation_windows)] = elevation_windows
         return obs.copy()
 
     def rollout_policy(

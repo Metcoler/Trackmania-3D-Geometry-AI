@@ -130,7 +130,10 @@ def build_debug_panel(frame: int, data_dictionary, instructions, observation, mi
         f"ray_modes={mode_counts_text if mode_counts_text else '-'}"
     )
     material_name, slip_min, slip_avg, slip_max = current_surface_summary(data_dictionary)
-    slices = ObservationEncoder.section_slices(vertical_mode=encoder.vertical_mode)
+    slices = ObservationEncoder.section_slices(
+        vertical_mode=encoder.vertical_mode,
+        multi_surface_mode=encoder.multi_surface_mode,
+    )
 
     lines = [
         summary_line,
@@ -141,18 +144,22 @@ def build_debug_panel(frame: int, data_dictionary, instructions, observation, mi
         f"obs path     : {format_feature_block(observation[slices['path']])}",
         f"obs base     : {format_feature_block(observation[slices['base']])}",
         f"obs slip     : {format_feature_block(observation[slices['slip']])}",
-        f"obs surface  : {format_feature_block(observation[slices['surface']])}",
-        f"obs height   : {format_feature_block(observation[slices['height']])}",
         f"obs temporal : {format_feature_block(observation[slices['temporal']])}",
         "",
         f"mir lasers   : {format_feature_block(mirrored_observation[slices['lasers']])}",
         f"mir path     : {format_feature_block(mirrored_observation[slices['path']])}",
         f"mir base     : {format_feature_block(mirrored_observation[slices['base']])}",
         f"mir slip     : {format_feature_block(mirrored_observation[slices['slip']])}",
-        f"mir surface  : {format_feature_block(mirrored_observation[slices['surface']])}",
-        f"mir height   : {format_feature_block(mirrored_observation[slices['height']])}",
         f"mir temporal : {format_feature_block(mirrored_observation[slices['temporal']])}",
     ]
+    if "surface" in slices:
+        lines.insert(8, f"obs surface  : {format_feature_block(observation[slices['surface']])}")
+        lines.insert(16, f"mir surface  : {format_feature_block(mirrored_observation[slices['surface']])}")
+    if "height" in slices:
+        insert_obs_at = 9 if "surface" in slices else 8
+        insert_mir_at = 17 if "surface" in slices else 16
+        lines.insert(insert_obs_at, f"obs height   : {format_feature_block(observation[slices['height']])}")
+        lines.insert(insert_mir_at, f"mir height   : {format_feature_block(mirrored_observation[slices['height']])}")
     if "vertical" in slices:
         lines.extend(
             [
@@ -228,15 +235,16 @@ def build_dashboard_lines(frame: int, data_dictionary, instructions, observation
     ]
 
     if DEBUG_SURFACE_DASHBOARD_ROWS > 4:
-        slices = ObservationEncoder.section_slices(vertical_mode=encoder.vertical_mode)
-        lines.extend(
-            [
-                f"obs slip     : {format_feature_block(observation[slices['slip']])}",
-                f"obs surface  : {format_feature_block(observation[slices['surface']])}",
-                f"obs height   : {format_feature_block(observation[slices['height']])}",
-                f"obs temporal : {format_feature_block(observation[slices['temporal']])}",
-            ]
+        slices = ObservationEncoder.section_slices(
+            vertical_mode=encoder.vertical_mode,
+            multi_surface_mode=encoder.multi_surface_mode,
         )
+        lines.append(f"obs slip     : {format_feature_block(observation[slices['slip']])}")
+        if "surface" in slices:
+            lines.append(f"obs surface  : {format_feature_block(observation[slices['surface']])}")
+        if "height" in slices:
+            lines.append(f"obs height   : {format_feature_block(observation[slices['height']])}")
+        lines.append(f"obs temporal : {format_feature_block(observation[slices['temporal']])}")
     return lines
 
 
@@ -278,10 +286,14 @@ if __name__ == "__main__":
     map_name = "AI Training #5"
     vizualize = True
     vertical_mode = True
+    multi_surface_mode = True
 
     game_map = Map(map_name)
     car = Car(game_map, vertical_mode=vertical_mode)
-    encoder = ObservationEncoder(vertical_mode=vertical_mode)
+    encoder = ObservationEncoder(
+        vertical_mode=vertical_mode,
+        multi_surface_mode=multi_surface_mode,
+    )
 
     start_time_fps = time()
     current_fps = 0.0
@@ -303,6 +315,7 @@ if __name__ == "__main__":
         mirrored_observation = ObservationEncoder.mirror_observation(
             observation,
             vertical_mode=encoder.vertical_mode,
+            multi_surface_mode=encoder.multi_surface_mode,
         )
         print_fps(frame)
         print_dashboard_debug(frame, data_dictionary, instructions, observation)

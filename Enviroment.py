@@ -30,6 +30,7 @@ class RacingGameEnviroment(gym.Env):
         dt_ref: float = 1.0 / 100.0,
         dt_ratio_clip: float = 3.0,
         vertical_mode: bool = True,
+        multi_surface_mode: bool = True,
         surface_probe_height: float = Car.SURFACE_PROBE_HEIGHT,
         surface_ray_lift: float = Car.SURFACE_RAY_LIFT,
         max_touches: int = 1,
@@ -50,10 +51,12 @@ class RacingGameEnviroment(gym.Env):
         super().__init__()
         print("Creating the RacingGameEnviroment")
         self.vertical_mode = bool(vertical_mode)
+        self.multi_surface_mode = bool(multi_surface_mode)
         self.obs_encoder = ObservationEncoder(
             dt_ref=dt_ref,
             dt_ratio_clip=dt_ratio_clip,
             vertical_mode=self.vertical_mode,
+            multi_surface_mode=self.multi_surface_mode,
         )
         self.dt_ref = self.obs_encoder.dt_ref
         self.dt_ratio_clip = self.obs_encoder.dt_ratio_clip
@@ -67,13 +70,14 @@ class RacingGameEnviroment(gym.Env):
         # [lasers N] + [path instructions M] +
         # [speed, side_speed, segment_heading_error, next_segment_heading_error, dt_ratio,
         #  slip_mean,
-        #  surface_instruction_0..4,
-        #  height_instruction_0..4,
         #  longitudinal_accel, lateral_accel, yaw_rate,
         #  clearance_rate_sector_0..4]
+        # optional surface block (when multi_surface_mode=True):
+        # [surface_instruction_0..4]
         # optional vertical block (when vertical_mode=True):
+        # [height_instruction_0..4,
         # [vertical_speed, forward_y, support_normal_y, cross_slope,
-        #  surface_elevation_sector_0..4]
+        #  surface_elevation_sector_0..4]]
         obs_dim = self.obs_encoder.obs_dim
         obs_low, obs_high = self.obs_encoder.get_observation_bounds(action_mode=self.action_mode)
         self.observation_space = gym.spaces.Box(

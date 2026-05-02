@@ -12,6 +12,55 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from ObservationEncoder import ObservationEncoder
+
+
+def _feature_index(name: str, observation_dim: int) -> int | None:
+    """Return the current canonical observation index, if it fits the sample."""
+
+    for vertical_mode in (True, False):
+        names = ObservationEncoder.feature_names(vertical_mode=vertical_mode)
+        if observation_dim == len(names) and name in names:
+            return names.index(name)
+    names = ObservationEncoder.feature_names(vertical_mode=False)
+    if name in names:
+        index = names.index(name)
+        if index < observation_dim:
+            return index
+    return None
+
+
+def _legacy_feature_index(name: str, observation_dim: int) -> int | None:
+    """Best-effort support for pre-5-lookahead supervised datasets.
+
+    Historical datasets used 15 lasers + 10 path instructions, so the base
+    feature block started at index 25. Current datasets use 15 + 5 and start
+    at index 20. Prefer explicit raw arrays when available.
+    """
+
+    legacy = {
+        "speed": 25,
+        "side_speed": 26,
+    }
+    index = legacy.get(name)
+    if index is None or index >= observation_dim:
+        return None
+    return index
+
+
+def _read_feature(data, observations: np.ndarray, raw_key: str, feature_name: str) -> np.ndarray:
+    if raw_key in data.files:
+        return np.asarray(data[raw_key], dtype=np.float64)
+
+    index = _feature_index(feature_name, observations.shape[1])
+    if index is None:
+        index = _legacy_feature_index(feature_name, observations.shape[1])
+    if index is None:
+        return np.zeros(observations.shape[0], dtype=np.float64)
+
+    scale = 1000.0 if feature_name in {"speed", "side_speed"} else 1.0
+    return np.asarray(observations[:, index], dtype=np.float64) * scale
+
 
 def load_supervised_samples(data_root: str) -> dict[str, np.ndarray]:
     files = sorted(glob.glob(str(Path(data_root) / "**" / "attempts" / "attempt_*.npz"), recursive=True))
@@ -35,14 +84,11 @@ def load_supervised_samples(data_root: str) -> dict[str, np.ndarray]:
         actions = np.asarray(data["actions"], dtype=np.float64)
         times = np.asarray(data["game_times"], dtype=np.float64)
         distances = np.asarray(data["distances"], dtype=np.float64)
-        if observations.ndim != 2 or observations.shape[1] < 26:
+        if observations.ndim != 2:
             continue
 
-        # Historical supervised observations used 15 lasers + 10 path instructions,
-        # then speed at index 25. This held for the 29/32-dim datasets available
-        # in this repository. Newer 44/53-dim data still keeps the same prefix.
-        speed = observations[:, 25] * 1000.0
-        side_speed = observations[:, 26] * 1000.0 if observations.shape[1] > 26 else np.zeros_like(speed)
+        speed = _read_feature(data, observations, "speeds", "speed")
+        side_speed = _read_feature(data, observations, "side_speeds", "side_speed")
         dt = np.diff(times)
         ds = np.diff(distances)
         valid = (
@@ -82,7 +128,12 @@ def load_supervised_samples(data_root: str) -> dict[str, np.ndarray]:
                 "frames": int(len(times)),
                 "finish_time": float(data.get("finish_time", [times[-1]])[0]),
                 "finish_progress": float(data.get("finish_progress", [np.nan])[0]),
+                "finish_dense_progress": float(
+                    data.get("finish_dense_progress", data.get("finish_progress", [np.nan]))[0]
+                ),
                 "finish_distance": float(data.get("finish_distance", [distances[-1]])[0]),
+                "finish_finished": int(data.get("finish_finished", [0])[0]),
+                "finish_crashes": int(data.get("finish_crashes", [0])[0]),
             }
         )
 
@@ -168,6 +219,7 @@ def main() -> None:
         "notes": [
             "Fit model: accel ~= intercept + gas*gas_coef + brake*brake_coef + speed*speed_coef.",
             "TM2DPhysicsConfig implements this as gas_accel, brake_accel, rolling_drag and drag.",
+            "New supervised datasets save raw speeds/side_speeds directly. Older datasets fall back to observation layout indices.",
             "Steering/yaw is not directly present in older supervised attempts, so max_yaw_rate remains a hand-tuned curve feasibility parameter.",
         ],
     }

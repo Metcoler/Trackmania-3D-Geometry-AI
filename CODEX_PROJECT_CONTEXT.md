@@ -272,10 +272,25 @@ The sandbox intentionally reuses the main project pieces where possible:
 
 - `Experiments/tm2d_geometry.py` loads the same exported TM maps through `Map.py`, projects road/wall `.obj` meshes into 2D XZ geometry, keeps the 32-unit TM grid, path tiles, path instructions, surface instructions, and height instructions.
 - `Experiments/tm2d_env.py` implements a synchronous but variable-dt 2D car environment. The random dt simulates Trackmania running at different frame rates, while still being fully local and fast.
-- The flat observation is compatible with `ObservationEncoder.total_obs_dim(vertical_mode=False)`: lasers, path instructions, speed/side speed, signed segment heading errors, dt ratio, slip mean, surface instructions, height instructions, and temporal derivative features. Surface defaults to asphalt-like values and height defaults to flat values on flat maps.
+- The default flat sandbox observation is compatible with
+  `ObservationEncoder.total_obs_dim(vertical_mode=False, multi_surface_mode=False)`:
+  lasers, path instructions, speed/side speed, signed segment heading errors,
+  dt ratio, slip mean, and temporal derivative features. Surface and height
+  blocks can be appended explicitly through `--multi-surface-mode` and
+  `--vertical-mode`.
 - `Experiments/train_ga.py` uses `Individual`/`NeuralPolicy` for the same MLP architecture and genome semantics, but evaluates policies through a fast NumPy forward pass instead of calling torch every simulated frame.
 - `Experiments/train_ga.py` also supports `--num-workers N` for process-based parallel evaluation of independent individuals. Each worker creates its own read-only map/environment once and receives flat genomes to evaluate.
 - `Experiments/train_ga.py`, `Experiments/train_sac.py`, and `Experiments/visualize_tm2d.py` support `--fixed-fps FPS`. When set, the local simulator uses deterministic `min_dt = max_dt = 1 / FPS`; when omitted, it keeps the default variable-dt range to mimic variable Trackmania FPS.
+- TM2D binarizes gas and brake by default (`> 0.5` becomes `1`, otherwise
+  `0`) to match the current live Trackmania target-action controller path.
+  Use `--continuous-gas-brake` only for diagnostics where continuous trigger
+  physics is intentionally being tested.
+- TM2D now has live-like guard termination:
+  - `start_idle`: if the car stays near the start for too long at very low
+    speed, the rollout is counted as a crash/failure.
+  - `stuck_after_progress`: after measurable progress, if the car remains below
+    the stuck speed threshold for the configured duration, the rollout also
+    terminates as a crash/failure.
 - `Experiments/train_sac.py` wraps the same `TM2DSimEnv` as a Gymnasium environment and runs Stable-Baselines3 RL locally. Despite the historical filename, it now supports `--algorithm SAC`, `--algorithm PPO`, and `--algorithm TD3`, so reward modes can be tested quickly before using the realtime Trackmania RL scripts.
 - `Experiments/reward_lab.py` prints reward score tables for one map, including `progress_delta`, `progress_primary_delta`, `pace_delta`, and `terminal_fitness`.
 - `Experiments/visualize_tm2d.py` opens a small tkinter visualizer for the projected map, car, and lidar rays.
@@ -305,11 +320,16 @@ Metric-parity note:
 - 2D rollout diagnostic `fitness` now uses `dense_progress` when
   `Individual.RANKING_PROGRESS_SOURCE == "dense_progress"`, matching
   `GeneticTrainer._evaluate_single_rollout()`.
-- The remaining intentional mismatch is termination physics: local 2D uses
-  road-containment collision (`center` or `corners`), while live TM uses
-  lidar contact, stall, wall-ride, heading-error, timeout, and OpenPlanet
-  finish signals. Reward functions that work locally should therefore be
-  re-tested with the strictest local settings before being trusted in live TM.
+- TM2D supports collision modes `laser`/`lidar`, `center`, and `corners`.
+  The default `laser` mode matches the current live Trackmania crash heuristic
+  most closely: a rollout crashes when the minimum lidar distance falls below
+  the configured threshold, currently `2.0`.
+- The remaining intentional mismatch is vehicle physics and realtime execution:
+  TM2D is still a simplified synchronous 2D approximation, while live TM uses
+  real Trackmania physics, OpenPlanet state packets, reset handshakes and
+  realtime FPS variability. Reward functions that work locally should therefore
+  still be validated in live TM, but the observation/action/metric contract is
+  now much closer than in earlier experiments.
 
 Default GA experiment outputs go to ignored `Experiments/runs/`.
 Default local RL experiment outputs go to ignored `Experiments/runs_rl/`, so GA and RL artifacts stay separated.
@@ -1956,8 +1976,10 @@ Current observation layout:
 - `next_segment_heading_error`
 - `dt_ratio`
 - `slip_mean`, computed as the clipped average of FL/FR/RL/RR slip coefficients
-- `5` `surface_instruction_*` traction estimates aligned with the path lookahead
-- `5` `height_instruction_*` values aligned with the path lookahead
+- optional `5` `surface_instruction_*` traction estimates aligned with the path
+  lookahead when `multi_surface_mode=True`
+- optional `5` `height_instruction_*` values aligned with the path lookahead
+  when `vertical_mode=True`
   - `0.0` means same height
   - `+0.5` / `-0.5` means one logical height step up/down
   - `+1.0` / `-1.0` means two or more logical height steps up/down
@@ -1966,10 +1988,21 @@ Current observation layout:
 - `yaw_rate`
 - `5` overlapping laser clearance-rate sector averages
 
-Current observation dimension:
+Current observation dimensions:
 
-- canonical/default training observation: `53`
-- legacy/debug flat observation: `44`
+- `vertical_mode=False`, `multi_surface_mode=False`: `34`
+  - 2D asphalt baseline
+  - this is the observation layout that should be used when comparing live
+    Trackmania against the local TM2D asphalt simulator
+- `vertical_mode=False`, `multi_surface_mode=True`: `39`
+  - 2D surface-aware layout
+  - appends `surface_instruction_0..4`
+- `vertical_mode=True`, `multi_surface_mode=False`: `48`
+  - 3D/asphalt layout
+  - appends height instructions and vertical terrain features but no surface
+    traction lookahead
+- `vertical_mode=True`, `multi_surface_mode=True`: `53`
+  - full layout with vertical terrain and surface traction
 
 Historical observation layout milestones:
 
@@ -1984,18 +2017,28 @@ Historical observation layout milestones:
 - after adding surface and height instructions while still keeping all four wheel slips:
   - flat observation was `47`
   - vertical/canonical observation was `56`
-- the current `44` / `53` layout is intentionally not checkpoint-compatible with those older SAC/GA/supervised models
+- the current `34` / `39` / `48` / `53` layout matrix is intentionally not checkpoint-compatible with older SAC/GA/supervised models
 - the latest reduction from four slip inputs to one `slip_mean` was made because all four wheel slip values were usually highly correlated in practice, and the smaller input should reduce noise and model size
 - old SAC `.zip` checkpoints from the 56-dim observation were removed because they cannot be safely loaded into the new 53-dim policy
 
-Current canonical training standard:
+Current observation-mode standard:
 
-- new supervised data collection uses `vertical_mode=True`
-- new supervised models are trained against the 53-dim 3D-compatible observation
-- new GA runs/checkpoints use `vertical_mode=True`
-- new SAC/RL runs use `vertical_mode=True`
-- surface grip instructions are always part of the canonical observation
-- on all-asphalt maps the surface instructions naturally stay at `1.0`, which keeps the input compatible without needing a separate surface toggle
+- live Trackmania, TM2D GA, TM2D MOO, TM2D RL, supervised data collection,
+  supervised training, driver replay, visualizer and live SB3 scripts all use
+  the same `ObservationEncoder` mode flags:
+  `vertical_mode` and `multi_surface_mode`
+- this gives four explicit modes instead of one implicit canonical layout:
+  - 2D asphalt: `vertical_mode=False`, `multi_surface_mode=False`
+  - 2D surface-aware: `vertical_mode=False`, `multi_surface_mode=True`
+  - 3D asphalt: `vertical_mode=True`, `multi_surface_mode=False`
+  - full 3D + surface: `vertical_mode=True`, `multi_surface_mode=True`
+- old models/checkpoints should not be mixed across these layouts unless the
+  saved `vertical_mode` and `multi_surface_mode` metadata matches the runtime
+  mode exactly
+- on all-asphalt maps, `multi_surface_mode=True` naturally yields surface
+  instructions near `1.0`, but the new toggle lets us run a true 2D asphalt
+  observation that matches the local TM2D baseline instead of carrying constant
+  surface features
 
 Current short-horizon settings:
 
@@ -2005,19 +2048,29 @@ Current short-horizon settings:
 Optional vertical-mode extension:
 
 - `vertical_mode=False`
-  - debug/performance fallback only
-  - uses the legacy flat observation at `44`
-  - uses the legacy flat wall-only lidar
+  - uses the flat wall-only lidar and omits vertical observation features
 - `vertical_mode=True`
-  - default/canonical mode for training and data collection
-  - keeps the same leading `44` features
+  - enables block-grid surface-following lidar and appends vertical terrain
+    features
   - appends:
+    - `height_instruction_0..4`
     - `vertical_speed`
     - `forward_y`
     - `support_normal_y`
     - `cross_slope`
     - `5` overlapping `surface_elevation_sector_*` features
-  - current vertical-mode observation dimension is `53`
+  - adds `14` dimensions over the corresponding flat mode
+
+Optional multi-surface extension:
+
+- `multi_surface_mode=False`
+  - omits `surface_instruction_0..4`
+  - use this for asphalt-only experiments and for direct TM2D-vs-live 2D
+    parity checks
+- `multi_surface_mode=True`
+  - appends `surface_instruction_0..4`
+  - use this when maps contain grass/dirt/plastic/ice/snow or when testing the
+    full final-agent observation
 
 Current vertical-mode sensor semantics:
 

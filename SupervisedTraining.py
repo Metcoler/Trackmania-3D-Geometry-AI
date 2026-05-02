@@ -16,6 +16,7 @@ from ObservationEncoder import ObservationEncoder
 
 
 DEFAULT_VERTICAL_MODE = True
+DEFAULT_MULTI_SURFACE_MODE = True
 
 
 def choose_device() -> torch.device:
@@ -56,13 +57,19 @@ def find_attempt_files(base_dir: str = "logs/supervised_data") -> List[str]:
 
 
 def load_attempt(path: str) -> Dict[str, np.ndarray]:
-    encoder = ObservationEncoder(vertical_mode=DEFAULT_VERTICAL_MODE)
+    encoder = ObservationEncoder(
+        vertical_mode=DEFAULT_VERTICAL_MODE,
+        multi_surface_mode=DEFAULT_MULTI_SURFACE_MODE,
+    )
     expected_obs_dim = encoder.obs_dim
     base_obs_dim = encoder.base_obs_dim()
     slip_obs_dim = encoder.slip_obs_dim()
     surface_obs_dim = encoder.surface_obs_dim()
     height_obs_dim = encoder.height_obs_dim()
-    non_vertical_obs_dim = ObservationEncoder.total_obs_dim(vertical_mode=False)
+    non_vertical_obs_dim = ObservationEncoder.total_obs_dim(
+        vertical_mode=False,
+        multi_surface_mode=DEFAULT_MULTI_SURFACE_MODE,
+    )
     old_slip_temporal_obs_dim = slip_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
     old_surface_temporal_obs_dim = surface_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
     with np.load(path) as data:
@@ -535,9 +542,11 @@ if __name__ == "__main__":
         "dataset_stats": dataset_stats,
         "obs_dim": obs_dim,
         "observation_layout": ObservationEncoder.feature_names(
-            vertical_mode=DEFAULT_VERTICAL_MODE
+            vertical_mode=DEFAULT_VERTICAL_MODE,
+            multi_surface_mode=DEFAULT_MULTI_SURFACE_MODE,
         ),
         "vertical_mode": bool(DEFAULT_VERTICAL_MODE),
+        "multi_surface_mode": bool(DEFAULT_MULTI_SURFACE_MODE),
         "act_dim": act_dim,
         "hidden_dims": list(hidden_dims),
         "hidden_activation": hidden_activations[0] if len(hidden_activations) == 1 else list(hidden_activations),

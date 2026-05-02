@@ -38,6 +38,13 @@ def main() -> None:
         default=None,
         help="Use deterministic fixed simulation FPS by setting min_dt=max_dt=1/fps.",
     )
+    parser.add_argument("--vertical-mode", action="store_true")
+    parser.add_argument("--multi-surface-mode", action="store_true")
+    parser.add_argument(
+        "--continuous-gas-brake",
+        action="store_true",
+        help="Disable live-TM-style gas/brake binarization in TM2D diagnostics.",
+    )
     args = parser.parse_args()
 
     env = TM2DSimEnv(
@@ -45,6 +52,9 @@ def main() -> None:
         max_time=args.max_time,
         reward_config=TM2DRewardConfig(mode="progress_primary_delta"),
         physics_config=TM2DPhysicsConfig().with_fixed_fps(args.fixed_fps),
+        vertical_mode=args.vertical_mode,
+        multi_surface_mode=args.multi_surface_mode,
+        binary_gas_brake=not args.continuous_gas_brake,
     )
     if args.model_path:
         policy, _ = NeuralPolicy.load(args.model_path)

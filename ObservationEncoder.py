@@ -56,6 +56,7 @@ class ObservationEncoder:
         dt_ref: float = 1.0 / 100.0,
         dt_ratio_clip: float = 3.0,
         vertical_mode: bool = True,
+        multi_surface_mode: bool = True,
     ) -> None:
         self.laser_max_distance = float(laser_max_distance)
         self.path_instruction_abs_max = float(path_instruction_abs_max)
@@ -69,6 +70,7 @@ class ObservationEncoder:
         self.dt_ref = float(dt_ref)
         self.dt_ratio_clip = float(dt_ratio_clip)
         self.vertical_mode = bool(vertical_mode)
+        self.multi_surface_mode = bool(multi_surface_mode)
         if not np.isfinite(self.dt_ref) or self.dt_ref <= 0.0:
             raise ValueError("dt_ref must be a positive finite number.")
         if not np.isfinite(self.dt_ratio_clip) or self.dt_ratio_clip <= 0.0:
@@ -97,7 +99,10 @@ class ObservationEncoder:
 
     @property
     def obs_dim(self) -> int:
-        return self.total_obs_dim(vertical_mode=self.vertical_mode)
+        return self.total_obs_dim(
+            vertical_mode=self.vertical_mode,
+            multi_surface_mode=self.multi_surface_mode,
+        )
 
     @classmethod
     def base_obs_dim(cls) -> int:
@@ -116,29 +121,48 @@ class ObservationEncoder:
         return cls.surface_obs_dim() + len(cls.HEIGHT_FEATURE_NAMES)
 
     @classmethod
-    def total_obs_dim(cls, vertical_mode: bool = False) -> int:
-        total = cls.height_obs_dim() + len(cls.TEMPORAL_FEATURE_NAMES)
+    def total_obs_dim(
+        cls,
+        vertical_mode: bool = False,
+        multi_surface_mode: bool = True,
+    ) -> int:
+        total = cls.slip_obs_dim()
+        if multi_surface_mode:
+            total += len(cls.SURFACE_FEATURE_NAMES)
+        if vertical_mode:
+            total += len(cls.HEIGHT_FEATURE_NAMES)
+        total += len(cls.TEMPORAL_FEATURE_NAMES)
         if vertical_mode:
             total += len(cls.VERTICAL_FEATURE_NAMES)
         return total
 
     @classmethod
-    def feature_names(cls, vertical_mode: bool = False) -> list[str]:
+    def feature_names(
+        cls,
+        vertical_mode: bool = False,
+        multi_surface_mode: bool = True,
+    ) -> list[str]:
         names = (
             [f"laser_{i}" for i in range(Car.NUM_LASERS)]
             + [f"path_instruction_{i}" for i in range(Car.SIGHT_TILES)]
             + list(cls.BASE_FEATURE_NAMES)
             + list(cls.WHEEL_SLIP_FEATURE_NAMES)
-            + list(cls.SURFACE_FEATURE_NAMES)
-            + list(cls.HEIGHT_FEATURE_NAMES)
-            + list(cls.TEMPORAL_FEATURE_NAMES)
         )
+        if multi_surface_mode:
+            names += list(cls.SURFACE_FEATURE_NAMES)
+        if vertical_mode:
+            names += list(cls.HEIGHT_FEATURE_NAMES)
+        names += list(cls.TEMPORAL_FEATURE_NAMES)
         if vertical_mode:
             names += list(cls.VERTICAL_FEATURE_NAMES)
         return names
 
     @classmethod
-    def section_slices(cls, vertical_mode: bool = False) -> dict[str, slice]:
+    def section_slices(
+        cls,
+        vertical_mode: bool = False,
+        multi_surface_mode: bool = True,
+    ) -> dict[str, slice]:
         offset = 0
         slices = {}
         slices["lasers"] = slice(offset, offset + Car.NUM_LASERS)
@@ -149,15 +173,29 @@ class ObservationEncoder:
         offset = slices["base"].stop
         slices["slip"] = slice(offset, offset + len(cls.WHEEL_SLIP_FEATURE_NAMES))
         offset = slices["slip"].stop
-        slices["surface"] = slice(offset, offset + len(cls.SURFACE_FEATURE_NAMES))
-        offset = slices["surface"].stop
-        slices["height"] = slice(offset, offset + len(cls.HEIGHT_FEATURE_NAMES))
-        offset = slices["height"].stop
+        if multi_surface_mode:
+            slices["surface"] = slice(offset, offset + len(cls.SURFACE_FEATURE_NAMES))
+            offset = slices["surface"].stop
+        if vertical_mode:
+            slices["height"] = slice(offset, offset + len(cls.HEIGHT_FEATURE_NAMES))
+            offset = slices["height"].stop
         slices["temporal"] = slice(offset, offset + len(cls.TEMPORAL_FEATURE_NAMES))
         offset = slices["temporal"].stop
         if vertical_mode:
             slices["vertical"] = slice(offset, offset + len(cls.VERTICAL_FEATURE_NAMES))
         return slices
+
+    @classmethod
+    def infer_modes_from_dim(cls, obs_dim: int) -> tuple[bool, bool] | None:
+        obs_dim = int(obs_dim)
+        for vertical_mode in (False, True):
+            for multi_surface_mode in (False, True):
+                if cls.total_obs_dim(
+                    vertical_mode=vertical_mode,
+                    multi_surface_mode=multi_surface_mode,
+                ) == obs_dim:
+                    return vertical_mode, multi_surface_mode
+        return None
 
     def reset(self) -> None:
         self.previous_game_time = None
@@ -198,34 +236,44 @@ class ObservationEncoder:
         return np.asarray(windows, dtype=np.float32)
 
     def get_observation_bounds(self, action_mode: str = "delta"):
-        obs_low = np.array(
-            [0.0] * Car.NUM_LASERS
-            + [-1.0] * Car.SIGHT_TILES
-            + [-1.0, -1.0, -1.0, -1.0, 0.0]
-            + [0.0] * len(self.WHEEL_SLIP_FEATURE_NAMES)
-            + [0.0] * len(self.SURFACE_FEATURE_NAMES)
-            + [-1.0] * len(self.HEIGHT_FEATURE_NAMES),
-            dtype=np.float32,
+        low_parts = [
+            np.array(
+                [0.0] * Car.NUM_LASERS
+                + [-1.0] * Car.SIGHT_TILES
+                + [-1.0, -1.0, -1.0, -1.0, 0.0]
+                + [0.0] * len(self.WHEEL_SLIP_FEATURE_NAMES),
+                dtype=np.float32,
+            )
+        ]
+        high_parts = [
+            np.array(
+                [1.0] * Car.NUM_LASERS
+                + [1.0] * Car.SIGHT_TILES
+                + [1.0, 1.0, 1.0, 1.0, self.dt_ratio_clip]
+                + [1.0] * len(self.WHEEL_SLIP_FEATURE_NAMES),
+                dtype=np.float32,
+            )
+        ]
+        if self.multi_surface_mode:
+            low_parts.append(
+                np.array([0.0] * len(self.SURFACE_FEATURE_NAMES), dtype=np.float32)
+            )
+            high_parts.append(
+                np.array([1.0] * len(self.SURFACE_FEATURE_NAMES), dtype=np.float32)
+            )
+        if self.vertical_mode:
+            low_parts.append(
+                np.array([-1.0] * len(self.HEIGHT_FEATURE_NAMES), dtype=np.float32)
+            )
+            high_parts.append(
+                np.array([1.0] * len(self.HEIGHT_FEATURE_NAMES), dtype=np.float32)
+            )
+        low_parts.append(
+            np.array([-1.0] * len(self.TEMPORAL_FEATURE_NAMES), dtype=np.float32)
         )
-        temporal_low = np.array(
-            [-1.0] * len(self.TEMPORAL_FEATURE_NAMES),
-            dtype=np.float32,
+        high_parts.append(
+            np.array([1.0] * len(self.TEMPORAL_FEATURE_NAMES), dtype=np.float32)
         )
-        obs_high = np.array(
-            [1.0] * Car.NUM_LASERS
-            + [1.0] * Car.SIGHT_TILES
-            + [1.0, 1.0, 1.0, 1.0, self.dt_ratio_clip]
-            + [1.0] * len(self.WHEEL_SLIP_FEATURE_NAMES)
-            + [1.0] * len(self.SURFACE_FEATURE_NAMES)
-            + [1.0] * len(self.HEIGHT_FEATURE_NAMES),
-            dtype=np.float32,
-        )
-        temporal_high = np.array(
-            [1.0] * len(self.TEMPORAL_FEATURE_NAMES),
-            dtype=np.float32,
-        )
-        low_parts = [obs_low, temporal_low]
-        high_parts = [obs_high, temporal_high]
         if self.vertical_mode:
             vertical_low = np.array(
                 [-1.0, -1.0, 0.0, -1.0] + [-1.0] * (len(self.VERTICAL_FEATURE_NAMES) - 4),
@@ -335,18 +383,22 @@ class ObservationEncoder:
             slip_mean = float(np.mean(raw_slips))
         wheel_slips = np.array([np.clip(slip_mean, 0.0, 1.0)], dtype=np.float32)
         info["slip_mean"] = float(wheel_slips[0])
-        surface_instructions = self.fit_vector(
-            values=info.get("next_surface_instructions", [1.0 for _ in range(Car.SIGHT_TILES)]),
-            expected_size=len(self.SURFACE_FEATURE_NAMES),
-            pad_value=1.0,
-        )
-        surface_instructions = np.clip(surface_instructions, 0.0, 1.0)
-        height_instructions = self.fit_vector(
-            values=info.get("next_height_instructions", [0.0 for _ in range(Car.SIGHT_TILES)]),
-            expected_size=len(self.HEIGHT_FEATURE_NAMES),
-            pad_value=0.0,
-        )
-        height_instructions = np.clip(height_instructions, -1.0, 1.0)
+        surface_instructions = np.empty(0, dtype=np.float32)
+        if self.multi_surface_mode:
+            surface_instructions = self.fit_vector(
+                values=info.get("next_surface_instructions", [1.0 for _ in range(Car.SIGHT_TILES)]),
+                expected_size=len(self.SURFACE_FEATURE_NAMES),
+                pad_value=1.0,
+            )
+            surface_instructions = np.clip(surface_instructions, 0.0, 1.0)
+        height_instructions = np.empty(0, dtype=np.float32)
+        if self.vertical_mode:
+            height_instructions = self.fit_vector(
+                values=info.get("next_height_instructions", [0.0 for _ in range(Car.SIGHT_TILES)]),
+                expected_size=len(self.HEIGHT_FEATURE_NAMES),
+                pad_value=0.0,
+            )
+            height_instructions = np.clip(height_instructions, -1.0, 1.0)
         current_yaw = self._extract_yaw(info)
         current_clearance_windows = self._compute_clearance_windows(distances_vec)
 
@@ -446,28 +498,39 @@ class ObservationEncoder:
                 dtype=np.float32,
             ),
             wheel_slips.astype(np.float32, copy=False),
-            surface_instructions.astype(np.float32, copy=False),
-            height_instructions.astype(np.float32, copy=False),
-            temporal_features,
         ]
+        if self.multi_surface_mode:
+            observation_parts.append(surface_instructions.astype(np.float32, copy=False))
+        if self.vertical_mode:
+            observation_parts.append(height_instructions.astype(np.float32, copy=False))
+        observation_parts.append(temporal_features)
         if self.vertical_mode:
             observation_parts.append(vertical_features)
 
         return np.concatenate(observation_parts).astype(np.float32, copy=False)
 
     @staticmethod
-    def mirror_observation(obs, vertical_mode: bool | None = None) -> np.ndarray:
+    def mirror_observation(
+        obs,
+        vertical_mode: bool | None = None,
+        multi_surface_mode: bool | None = None,
+    ) -> np.ndarray:
         x = np.asarray(obs, dtype=np.float32).copy()
         if x.ndim != 1:
             return x
 
-        base_expected = ObservationEncoder.total_obs_dim(vertical_mode=False)
-        vertical_expected = ObservationEncoder.total_obs_dim(vertical_mode=True)
-        if x.shape[0] < base_expected:
+        inferred = ObservationEncoder.infer_modes_from_dim(x.shape[0])
+        if inferred is None:
             return x
+        inferred_vertical_mode, inferred_multi_surface_mode = inferred
         if vertical_mode is None:
-            vertical_mode = x.shape[0] >= vertical_expected
-        slices = ObservationEncoder.section_slices(vertical_mode=bool(vertical_mode))
+            vertical_mode = inferred_vertical_mode
+        if multi_surface_mode is None:
+            multi_surface_mode = inferred_multi_surface_mode
+        slices = ObservationEncoder.section_slices(
+            vertical_mode=bool(vertical_mode),
+            multi_surface_mode=bool(multi_surface_mode),
+        )
 
         laser_slice = slices["lasers"]
         x[laser_slice] = x[laser_slice][::-1]
@@ -482,8 +545,9 @@ class ObservationEncoder:
         x[side_speed_idx] = -x[side_speed_idx]
         x[segment_heading_error_idx] = -x[segment_heading_error_idx]
         x[next_segment_heading_error_idx] = -x[next_segment_heading_error_idx]
-        surface_slice = slices["surface"]
-        x[surface_slice] = x[surface_slice][::-1]
+        if "surface" in slices:
+            surface_slice = slices["surface"]
+            x[surface_slice] = x[surface_slice][::-1]
         temporal_offset = slices["temporal"].start
         lateral_accel_idx = temporal_offset + 1
         yaw_rate_idx = temporal_offset + 2

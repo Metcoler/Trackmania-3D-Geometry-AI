@@ -213,16 +213,45 @@ class TrackmaniaSB3Env(gym.Env):
             dtype=np.float32,
         )
 
-    def _terminal_metrics(self, info: Dict[str, Any]) -> Dict[str, float]:
-        progress = float(info.get("discrete_progress", 0.0))
-        time_value = float(info.get("time", 0.0))
+    def _terminal_metrics(
+        self,
+        info: Dict[str, Any],
+        *,
+        terminated: bool | None = None,
+        truncated: bool | None = None,
+    ) -> Dict[str, float]:
+        if hasattr(self.env, "raw_metrics_from_info"):
+            raw_metrics = self.env.raw_metrics_from_info(
+                info,
+                terminated=terminated,
+                truncated=truncated,
+                timed_out=bool(truncated),
+            )
+        else:
+            raw_metrics = dict(
+                progress=float(info.get("discrete_progress", 0.0)),
+                discrete_progress=float(info.get("discrete_progress", 0.0)),
+                dense_progress=float(info.get("dense_progress", info.get("discrete_progress", 0.0))),
+                time=float(info.get("time", 0.0)),
+                distance=float(info.get("distance", 0.0)),
+                finished=int(info.get("finished", int(getattr(self.env, "finished", 0)))),
+                crashes=int(info.get("crashes", int(getattr(self.env, "crashes", 0)))),
+                timeout=0,
+            )
+
+        discrete_progress = float(raw_metrics.get("discrete_progress", raw_metrics.get("progress", 0.0)))
+        dense_progress = float(raw_metrics.get("dense_progress", discrete_progress))
+        progress = (
+            dense_progress
+            if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
+            else discrete_progress
+        )
+        time_value = float(raw_metrics.get("time", 0.0))
         if time_value <= 0.0 or not np.isfinite(time_value):
             time_value = 0.0
-        distance = float(info.get("distance", 0.0))
-        finished = int(info.get("finished", int(getattr(self.env, "finished", 0))))
-        crashes = int(info.get("crashes", int(getattr(self.env, "crashes", 0))))
-        if info.get("done", 0.0) == 1.0 and finished == 0:
-            finished = 1
+        distance = float(raw_metrics.get("distance", 0.0))
+        finished = int(raw_metrics.get("finished", 0))
+        crashes = int(raw_metrics.get("crashes", 0))
         fitness = Individual.compute_scalar_fitness_for(
             finished=finished,
             crashes=crashes,
@@ -233,8 +262,10 @@ class TrackmaniaSB3Env(gym.Env):
         return dict(
             finished=float(finished),
             crashes=float(crashes),
-            timeout=float(int(finished <= 0 and crashes <= 0)),
+            timeout=float(raw_metrics.get("timeout", int(finished <= 0 and crashes <= 0))),
             progress=progress,
+            discrete_progress=discrete_progress,
+            dense_progress=dense_progress,
             time=time_value,
             distance=distance,
             fitness=float(fitness),
@@ -337,7 +368,11 @@ class TrackmaniaSB3Env(gym.Env):
         terminated: bool,
         truncated: bool,
     ) -> tuple[float, Dict[str, float]]:
-        metrics = self._terminal_metrics(info)
+        metrics = self._terminal_metrics(
+            info,
+            terminated=terminated,
+            truncated=truncated,
+        )
 
         reward = 0.0
         if self.reward_mode == "delta_lexicographic":
@@ -392,7 +427,11 @@ class TrackmaniaSB3Env(gym.Env):
         obs, info = self.env.reset(seed=seed)
         while info.get("done", 0.0) != 0:
             obs, info = self.env.reset(seed=seed)
-        reset_metrics = self._terminal_metrics(info)
+        reset_metrics = self._terminal_metrics(
+            info,
+            terminated=False,
+            truncated=False,
+        )
         if self.reward_mode == "delta_lexicographic":
             self.last_delta_score = self._lexicographic_score(reset_metrics)
         elif self.reward_mode == "delta_progress_time_safety":

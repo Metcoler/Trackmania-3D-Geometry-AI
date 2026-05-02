@@ -52,6 +52,11 @@ class Individual:
         self.evaluation_steps: int = 0
         self.evaluation_terminated: bool = False
         self.evaluation_truncated: bool = False
+        self.selection_rank: Optional[int] = None
+        self.selection_crowding: float = 0.0
+        self.selection_objectives: Optional[Tuple[float, ...]] = None
+        self.selection_objective_names: Tuple[str, ...] = ()
+        self.selection_mode: str = ""
 
     @property
     def genome(self) -> np.ndarray:
@@ -80,6 +85,11 @@ class Individual:
         self.evaluation_steps = 0
         self.evaluation_terminated = False
         self.evaluation_truncated = False
+        self.selection_rank = None
+        self.selection_crowding = 0.0
+        self.selection_objectives = None
+        self.selection_objective_names = ()
+        self.selection_mode = ""
 
     def act(self, obs: np.ndarray) -> np.ndarray:
         return self.policy.act(obs)
@@ -445,6 +455,99 @@ class Individual:
         )
 
     @classmethod
+    def compute_finished_progress_time_score_for(
+        cls,
+        finished: int,
+        crashes: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+        terminal_only: bool = False,
+    ) -> float:
+        """Dense RL score matching the GA tuple `(finished, progress, -time)`.
+
+        The score is intentionally minimal:
+        - finish adds one full normalized completion unit;
+        - progress is the primary dense curriculum signal;
+        - time is only a progress-gated tie-breaker smaller than one map tile.
+
+        Crash/timeout are not given an extra terminal bonus or penalty here.
+        They simply stop future progress from accumulating, which avoids the
+        old problem where a late crash retroactively punished good driving.
+        """
+
+        del distance
+        if terminal_only and not cls._is_terminal_score_state(finished, crashes, time_value, max_time):
+            return 0.0
+
+        max_time = max(1e-6, float(max_time))
+        progress = float(np.clip(float(progress), 0.0, 100.0))
+        progress_norm = progress / 100.0
+        time_value = max(0.0, float(time_value))
+        tile_unit = cls._progress_unit_norm(path_tile_count, progress_bucket)
+
+        score = progress_norm
+        if cls._is_terminal_score_state(finished, crashes, time_value, max_time) and int(finished) > 0:
+            score += 1.0
+
+        if progress_norm > 0.0:
+            time_norm = float(np.clip(time_value / max_time, 0.0, 1.0))
+            score += tile_unit * progress_norm * (1.0 - time_norm)
+
+        return float(score)
+
+    @classmethod
+    def compute_delta_finished_progress_time_score_for(
+        cls,
+        finished: int,
+        crashes: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+    ) -> float:
+        return cls.compute_finished_progress_time_score_for(
+            finished=finished,
+            crashes=crashes,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            terminal_only=False,
+        )
+
+    @classmethod
+    def compute_terminal_finished_progress_time_score_for(
+        cls,
+        finished: int,
+        crashes: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+        max_time: float,
+        path_tile_count: int | None = None,
+        progress_bucket: float | None = None,
+    ) -> float:
+        return cls.compute_finished_progress_time_score_for(
+            finished=finished,
+            crashes=crashes,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+            max_time=max_time,
+            path_tile_count=path_tile_count,
+            progress_bucket=progress_bucket,
+            terminal_only=True,
+        )
+
+    @classmethod
     def compute_progress_time_safety_score_for(
         cls,
         finished: int,
@@ -701,6 +804,11 @@ class Individual:
         new.evaluation_steps = self.evaluation_steps
         new.evaluation_terminated = self.evaluation_terminated
         new.evaluation_truncated = self.evaluation_truncated
+        new.selection_rank = self.selection_rank
+        new.selection_crowding = self.selection_crowding
+        new.selection_objectives = self.selection_objectives
+        new.selection_objective_names = self.selection_objective_names
+        new.selection_mode = self.selection_mode
         return new
 
     def mutate(self, mutation_prob: float = 0.1, sigma: float = 0.1) -> None:

@@ -14,6 +14,14 @@ TRACKMANIA_RACING_OBJECTIVES = [
     "path_efficiency",
 ]
 
+LEXICOGRAPHIC_PRIMITIVE_OBJECTIVES = [
+    "finished",
+    "progress",
+    "neg_time",
+    "neg_crashes",
+    "neg_distance",
+]
+
 
 @dataclass(frozen=True)
 class ParetoOrdering:
@@ -29,7 +37,9 @@ def objective_names_for_mode(mode: str) -> list[str]:
     mode = str(mode).strip().lower()
     if mode == "trackmania_racing":
         return list(TRACKMANIA_RACING_OBJECTIVES)
-    raise ValueError("objective mode must be trackmania_racing.")
+    if mode == "lexicographic_primitives":
+        return list(LEXICOGRAPHIC_PRIMITIVE_OBJECTIVES)
+    raise ValueError("objective mode must be trackmania_racing or lexicographic_primitives.")
 
 
 def trackmania_racing_objectives(
@@ -79,6 +89,48 @@ def trackmania_racing_objectives(
     )
 
 
+def lexicographic_primitive_objectives(
+    metrics: dict,
+    max_time: float,
+    max_episode_distance: float,
+) -> np.ndarray:
+    """Return Pareto objectives matching the simple GA ranking metrics.
+
+    This objective vector is the multi-objective counterpart of the
+    lexicographic tuple `(finished, progress, -time, -crashes, -distance)`.
+    Values are normalized but monotonic-equivalent to the raw tuple terms, so
+    dominance stays easy to interpret while objectives have comparable scale.
+    """
+
+    finished = 1.0 if int(metrics.get("finished", 0)) > 0 else 0.0
+    progress = max(
+        float(metrics.get("progress", 0.0)),
+        float(metrics.get("dense_progress", metrics.get("progress", 0.0))),
+    )
+    progress_norm = float(np.clip(progress / 100.0, 0.0, 1.0))
+
+    time_value = max(0.0, float(metrics.get("time", 0.0)))
+    time_norm = float(np.clip(time_value / max(1e-6, float(max_time)), 0.0, 1.0))
+
+    crashes = max(0.0, float(metrics.get("crashes", 0.0)))
+    max_crashes = max(1.0, float(metrics.get("max_crashes", metrics.get("max_touches", 1.0))))
+    crashes_norm = float(np.clip(crashes / max_crashes, 0.0, 1.0))
+
+    distance = max(0.0, float(metrics.get("distance", 0.0)))
+    distance_norm = float(np.clip(distance / max(1e-6, float(max_episode_distance)), 0.0, 1.0))
+
+    return np.asarray(
+        [
+            finished,
+            progress_norm,
+            -time_norm,
+            -crashes_norm,
+            -distance_norm,
+        ],
+        dtype=np.float64,
+    )
+
+
 def objectives_from_metrics(
     metrics: dict,
     mode: str,
@@ -94,7 +146,13 @@ def objectives_from_metrics(
             estimated_path_length=estimated_path_length,
             max_episode_distance=max_episode_distance,
         )
-    raise ValueError("objective mode must be trackmania_racing.")
+    if mode == "lexicographic_primitives":
+        return lexicographic_primitive_objectives(
+            metrics=metrics,
+            max_time=max_time,
+            max_episode_distance=max_episode_distance,
+        )
+    raise ValueError("objective mode must be trackmania_racing or lexicographic_primitives.")
 
 
 def dominates(left: np.ndarray, right: np.ndarray, eps: float = 1e-12) -> bool:
@@ -179,6 +237,7 @@ def pareto_order(
     objectives: np.ndarray,
     priority_indices: Sequence[int] | None = None,
     tiebreak: str = "priority",
+    objective_names: Sequence[str] | None = None,
 ) -> ParetoOrdering:
     """Order individuals with NSGA-II fronts and optional priority tie-break.
 
@@ -221,5 +280,9 @@ def pareto_order(
         crowding=crowding,
         fronts=fronts,
         objectives=objectives,
-        objective_names=list(TRACKMANIA_RACING_OBJECTIVES),
+        objective_names=(
+            list(objective_names)
+            if objective_names is not None
+            else [str(index) for index in range(objectives.shape[1])]
+        ),
     )

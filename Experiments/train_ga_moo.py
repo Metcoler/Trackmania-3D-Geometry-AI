@@ -29,6 +29,8 @@ from Experiments.train_ga import (
     NumpyPolicyView,
     _evaluate_genome_worker,
     _init_worker,
+    generation_metric_fieldnames,
+    individual_metric_fieldnames,
     make_child_pool,
     metric_stats,
     parse_list,
@@ -56,12 +58,22 @@ def apply_metrics_to_individual(individual: Individual, metrics: dict, selection
 
 def objective_priority_indices(names: list[str], priority: str) -> list[int]:
     priority_names = [part.strip() for part in str(priority).split(",") if part.strip()]
-    if not priority_names:
+    if not priority_names or [name.lower() for name in priority_names] == ["auto"]:
         return list(range(len(names)))
     missing = [name for name in priority_names if name not in names]
     if missing:
         raise ValueError(f"Unknown objective priority names: {missing}. Available: {names}")
     return [names.index(name) for name in priority_names]
+
+
+def select_objective_subset(names: list[str], subset: str) -> list[int]:
+    subset_names = [part.strip() for part in str(subset).split(",") if part.strip()]
+    if not subset_names or [name.lower() for name in subset_names] == ["auto"]:
+        return list(range(len(names)))
+    missing = [name for name in subset_names if name not in names]
+    if missing:
+        raise ValueError(f"Unknown objective subset names: {missing}. Available: {names}")
+    return [names.index(name) for name in subset_names]
 
 
 def build_run_dir(log_dir: str, map_name: str, objective_mode: str) -> Path:
@@ -89,7 +101,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collision-mode", choices=["center", "corners"], default="center")
     parser.add_argument(
         "--objective-mode",
-        choices=["trackmania_racing"],
+        choices=["trackmania_racing", "lexicographic_primitives"],
         default="trackmania_racing",
         help="Objective vector used for Pareto selection.",
     )
@@ -108,8 +120,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--objective-priority",
-        default="finish,progress,speed_for_progress,safe_progress,path_efficiency",
+        default="auto",
         help="Comma-separated objective names for within-front ordering.",
+    )
+    parser.add_argument(
+        "--objective-subset",
+        default="auto",
+        help=(
+            "Optional comma-separated objective names to keep before Pareto sorting. "
+            "Use this to compare simpler objective sets such as "
+            "finished,progress,neg_time."
+        ),
     )
     parser.add_argument(
         "--pareto-tiebreak",
@@ -161,7 +182,9 @@ def main() -> None:
         for _ in range(args.population_size)
     ]
 
-    objective_names = objective_names_for_mode(args.objective_mode)
+    available_objective_names = objective_names_for_mode(args.objective_mode)
+    objective_subset_indices = select_objective_subset(available_objective_names, args.objective_subset)
+    objective_names = [available_objective_names[index] for index in objective_subset_indices]
     priority_indices = objective_priority_indices(objective_names, args.objective_priority)
     max_episode_distance = float(env.physics.max_speed) * float(args.max_time)
     run_dir = Path(args.run_dir) if args.run_dir else build_run_dir(args.log_dir, args.map_name, args.objective_mode)
@@ -179,6 +202,8 @@ def main() -> None:
         "mutation_sigma": args.mutation_sigma,
         "selection_mode": "pareto",
         "objective_mode": args.objective_mode,
+        "available_objective_names": available_objective_names,
+        "objective_subset": objective_names,
         "objective_names": objective_names,
         "objective_priority": [objective_names[index] for index in priority_indices],
         "pareto_tiebreak": args.pareto_tiebreak,
@@ -202,62 +227,41 @@ def main() -> None:
 
     csv_path = run_dir / "generation_metrics.csv"
     individual_csv_path = run_dir / "individual_metrics.csv"
-    fieldnames = [
-        "generation",
+    common_generation_fields = generation_metric_fieldnames()
+    moo_generation_fields = [
         "front0_size",
         "best_rank",
         "best_crowding",
         "best_priority_score",
-        "best_progress",
-        "best_dense_progress",
-        "best_time",
-        "best_finished",
-        "best_crashes",
-        "best_reward",
         "best_scalar_fitness",
-        "best_distance",
-        "best_steps",
-        "finish_count",
-        "crash_count",
-        "timeout_count",
-        "virtual_time_sum",
-        "cumulative_virtual_time",
-        "virtual_steps_sum",
-        "cumulative_virtual_steps",
-        "generation_wall_seconds",
-        "cumulative_wall_seconds",
-        "mean_progress",
-        "mean_dense_progress",
-        "mean_reward",
-        "mean_time",
     ] + [f"best_obj_{name}" for name in objective_names] + [f"mean_obj_{name}" for name in objective_names]
-    for prefix in ("progress", "dense_progress", "time", "distance", "reward", "fitness", "steps"):
-        for field in metric_stats(prefix, [0.0]).keys():
-            if field not in fieldnames:
-                fieldnames.append(field)
-
-    individual_fieldnames = [
-        "generation",
-        "rank",
-        "front_rank",
-        "crowding",
-        "front0",
-        "is_elite",
-        "is_parent",
-        "priority_score",
+    fieldnames = common_generation_fields + [
+        field for field in moo_generation_fields if field not in common_generation_fields
+    ]
+    for prefix in (
         "progress",
         "dense_progress",
+        "ranking_progress",
         "time",
-        "finished",
-        "crashes",
-        "timeout",
         "distance",
         "reward",
         "fitness",
         "steps",
-        "terminated",
-        "truncated",
+    ):
+        for field in metric_stats(prefix, [0.0]).keys():
+            if field not in fieldnames:
+                fieldnames.append(field)
+
+    common_individual_fields = individual_metric_fieldnames()
+    moo_individual_fields = [
+        "front_rank",
+        "crowding",
+        "front0",
+        "priority_score",
     ] + [f"obj_{name}" for name in objective_names]
+    individual_fieldnames = common_individual_fields + [
+        field for field in moo_individual_fields if field not in common_individual_fields
+    ]
 
     with (
         csv_path.open("w", newline="", encoding="utf-8") as handle,
@@ -297,6 +301,9 @@ def main() -> None:
         try:
             for generation in range(1, args.generations + 1):
                 generation_wall_start = time.perf_counter()
+                original_index_by_id: dict[int, int] = {
+                    id(individual): idx for idx, individual in enumerate(population)
+                }
                 if worker_pool is None:
                     metrics = [evaluate_individual(env, individual) for individual in population]
                 else:
@@ -317,7 +324,7 @@ def main() -> None:
                             max_time=args.max_time,
                             estimated_path_length=env.geometry.estimated_path_length,
                             max_episode_distance=max_episode_distance,
-                        )
+                        )[objective_subset_indices]
                         for metric in metrics
                     ]
                 )
@@ -325,12 +332,14 @@ def main() -> None:
                     objective_matrix,
                     priority_indices=priority_indices,
                     tiebreak=args.pareto_tiebreak,
+                    objective_names=objective_names,
                 )
                 population = [population[index] for index in ordering.order]
                 metrics = [metrics[index] for index in ordering.order]
                 ordered_objectives = ordering.objectives[ordering.order]
                 ordered_crowding = ordering.crowding[ordering.order]
                 ordered_ranks = ordering.ranks[ordering.order]
+                ordered_original_indices = list(ordering.order)
 
                 for local_idx, individual in enumerate(population):
                     priority_score = tuple(float(ordered_objectives[local_idx, idx]) for idx in priority_indices)
@@ -350,6 +359,8 @@ def main() -> None:
                     [float(metric["dense_progress"]) for metric in metrics],
                     dtype=np.float64,
                 )
+                # MOO uses dense progress as the common analysis progress source.
+                ranking_progress_values = dense_progress_values.copy()
                 reward_values = np.asarray([float(metric["reward"]) for metric in metrics], dtype=np.float64)
                 fitness_values = np.asarray([float(metric["fitness"]) for metric in metrics], dtype=np.float64)
                 time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
@@ -372,22 +383,25 @@ def main() -> None:
                 cumulative_wall_seconds = float(time.perf_counter() - training_wall_start)
                 row = {
                     "generation": generation,
-                    "front0_size": len(ordering.fronts[0]) if ordering.fronts else 0,
-                    "best_rank": int(ordered_ranks[0]),
-                    "best_crowding": float(ordered_crowding[0]),
-                    "best_priority_score": float(best.fitness),
+                    "best_fitness": float(best.fitness),
                     "best_progress": float(best_metric["progress"]),
                     "best_dense_progress": float(best_metric["dense_progress"]),
+                    "best_ranking_progress": float(best_metric["dense_progress"]),
                     "best_time": float(best_metric["time"]),
                     "best_finished": int(best_metric.get("finished", 0)),
                     "best_crashes": int(best_metric.get("crashes", 0)),
-                    "best_reward": float(best_metric["reward"]),
-                    "best_scalar_fitness": float(best_metric["fitness"]),
                     "best_distance": float(best_metric["distance"]),
                     "best_steps": int(best_metric.get("steps", 0)),
+                    "best_reward": float(best_metric["reward"]),
+                    "best_ranking_key": json.dumps([float(value) for value in best_objectives]),
+                    "cached_evaluations": 0,
+                    "evaluated_count": int(len(population)),
+                    "population_size": int(len(population)),
                     "finish_count": int(np.sum(finished_values > 0)),
                     "crash_count": int(np.sum(crash_values > 0)),
                     "timeout_count": int(np.sum(timeout_values > 0)),
+                    "terminated_count": int(sum(bool(metric.get("terminated", False)) for metric in metrics)),
+                    "truncated_count": int(sum(bool(metric.get("truncated", False)) for metric in metrics)),
                     "virtual_time_sum": virtual_time_sum,
                     "cumulative_virtual_time": cumulative_virtual_time,
                     "virtual_steps_sum": virtual_steps_sum,
@@ -396,14 +410,21 @@ def main() -> None:
                     "cumulative_wall_seconds": cumulative_wall_seconds,
                     "mean_progress": float(np.mean(progress_values)),
                     "mean_dense_progress": float(np.mean(dense_progress_values)),
+                    "mean_ranking_progress": float(np.mean(ranking_progress_values)),
                     "mean_reward": float(np.mean(reward_values)),
                     "mean_time": float(np.mean(time_values)),
+                    "front0_size": len(ordering.fronts[0]) if ordering.fronts else 0,
+                    "best_rank": int(ordered_ranks[0]),
+                    "best_crowding": float(ordered_crowding[0]),
+                    "best_priority_score": float(best.fitness),
+                    "best_scalar_fitness": float(best_metric["fitness"]),
                 }
                 for objective_idx, name in enumerate(objective_names):
                     row[f"best_obj_{name}"] = float(best_objectives[objective_idx])
                     row[f"mean_obj_{name}"] = float(np.mean(ordered_objectives[:, objective_idx]))
                 row.update(metric_stats("progress", progress_values))
                 row.update(metric_stats("dense_progress", dense_progress_values))
+                row.update(metric_stats("ranking_progress", ranking_progress_values))
                 row.update(metric_stats("time", time_values))
                 row.update(metric_stats("distance", distance_values))
                 row.update(metric_stats("reward", reward_values))
@@ -419,12 +440,15 @@ def main() -> None:
                     individual_row = {
                         "generation": generation,
                         "rank": rank,
-                        "front_rank": int(ordered_ranks[rank - 1]),
-                        "crowding": float(ordered_crowding[rank - 1]),
-                        "front0": int(int(ordered_ranks[rank - 1]) == 0),
+                        "original_index": int(
+                            original_index_by_id.get(id(individual), ordered_original_indices[rank - 1])
+                        ),
+                        "cached": 0,
                         "is_elite": int(rank <= int(args.elite_count)),
                         "is_parent": int(rank <= int(args.parent_count)),
-                        "priority_score": float(individual.fitness),
+                        "fitness": float(metric["fitness"]),
+                        "ranking_key": json.dumps([float(value) for value in objective_row]),
+                        "ranking_progress": float(metric["dense_progress"]),
                         "progress": float(metric["progress"]),
                         "dense_progress": float(metric["dense_progress"]),
                         "time": float(metric["time"]),
@@ -436,23 +460,29 @@ def main() -> None:
                         ),
                         "distance": float(metric["distance"]),
                         "reward": float(metric["reward"]),
-                        "fitness": float(metric["fitness"]),
                         "steps": int(metric.get("steps", 0)),
                         "terminated": int(bool(metric.get("terminated", False))),
                         "truncated": int(bool(metric.get("truncated", False))),
+                        "front_rank": int(ordered_ranks[rank - 1]),
+                        "crowding": float(ordered_crowding[rank - 1]),
+                        "front0": int(int(ordered_ranks[rank - 1]) == 0),
+                        "priority_score": float(individual.fitness),
                     }
                     for objective_idx, name in enumerate(objective_names):
                         individual_row[f"obj_{name}"] = float(objective_row[objective_idx])
                     individual_writer.writerow(individual_row)
                 individual_handle.flush()
 
+                objective_summary = " ".join(
+                    f"{name}={row[f'best_obj_{name}']:.3f}"
+                    for name in objective_names[:3]
+                )
                 print(
                     f"gen={generation:04d} front0={row['front0_size']:02d} "
                     f"best_dense={row['best_dense_progress']:.2f}% "
                     f"best_time={row['best_time']:.2f}s "
                     f"fin={row['best_finished']} crashes={row['best_crashes']} "
-                    f"obj_progress={row['best_obj_progress']:.3f} "
-                    f"obj_speed={row['best_obj_speed_for_progress']:.3f}"
+                    f"{objective_summary}"
                 )
 
                 if generation < args.generations:

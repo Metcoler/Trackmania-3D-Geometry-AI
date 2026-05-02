@@ -11,6 +11,11 @@ from Car import Car
 from NeuralPolicy import NeuralPolicy
 from Individual import Individual
 from ObservationEncoder import ObservationEncoder
+from Experiments.multiobjective import (
+    objective_names_for_mode,
+    objectives_from_metrics,
+    pareto_order,
+)
 from RankingKey import canonical_ranking_key_expression
 
 
@@ -48,6 +53,30 @@ def safe_ranking_key_tag(ranking_key: str) -> str:
     while "__" in tag:
         tag = tag.replace("__", "_")
     return tag.strip("_")
+
+
+def _parse_name_list(value: str) -> List[str]:
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def _resolve_objective_indices(available_names: Sequence[str], value: str) -> List[int]:
+    names = list(available_names)
+    requested = _parse_name_list(value)
+    if not requested or [name.lower() for name in requested] == ["auto"]:
+        return list(range(len(names)))
+    missing = [name for name in requested if name not in names]
+    if missing:
+        raise ValueError(f"Unknown objective names: {missing}. Available: {names}")
+    return [names.index(name) for name in requested]
+
+
+def safe_objective_tag(value: str) -> str:
+    names = _parse_name_list(value)
+    if not names or [name.lower() for name in names] == ["auto"]:
+        return "auto"
+    tag = "_".join(names)
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+    return "".join(ch if ch in allowed else "_" for ch in tag).strip("_")
 
 
 def normalize_hidden_activations(
@@ -94,23 +123,42 @@ class TrainingLogger:
         "individual_index",
         "finished",
         "crashes",
+        "timeout",
+        "progress",
         "discrete_progress",
         "dense_progress",
+        "ranking_progress",
         "distance",
         "time",
+        "reward",
         "fitness",
+        "ranking_key",
+        "selection_mode",
+        "selection_rank",
+        "selection_crowding",
+        "selection_objectives",
+        "selection_objective_names",
+        "evaluation_steps",
+        "evaluation_terminated",
+        "evaluation_truncated",
+        "evaluation_valid",
     ]
 
     SUMMARY_HEADERS = [
         "timestamp_utc",
         "generation",
         "cached_evaluations",
+        "evaluated_count",
+        "population_size",
         "dist_avg",
         "dist_best_gen",
         "dist_best_global",
         "time_avg",
         "time_best_gen",
         "time_best_global",
+        "finish_count",
+        "crash_count",
+        "timeout_count",
         "finish_rate",
         "crash_rate",
         "timeout_rate",
@@ -118,10 +166,26 @@ class TrainingLogger:
         "best_crashes",
         "best_progress",
         "best_dense_progress",
+        "best_ranking_progress",
+        "best_ranking_key",
+        "mean_discrete_progress",
         "mean_dense_progress",
+        "mean_ranking_progress",
+        "std_dense_progress",
+        "std_ranking_progress",
         "best_distance",
         "best_time",
+        "best_reward",
         "best_fitness",
+        "selection_mode",
+        "front0_size",
+        "best_selection_rank",
+        "best_selection_crowding",
+        "best_selection_objectives",
+        "selection_objective_names",
+        "virtual_time_sum",
+        "virtual_distance_sum",
+        "evaluation_steps_sum",
     ]
 
     def __init__(
@@ -190,12 +254,15 @@ class TrainingLogger:
             return
         with open(self.individual_metrics_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=self.INDIVIDUAL_HEADERS)
-            writer.writerows(rows)
+            writer.writerows(
+                {key: row.get(key, "") for key in self.INDIVIDUAL_HEADERS}
+                for row in rows
+            )
 
     def log_generation_summary(self, row: Dict) -> None:
         with open(self.generation_summary_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=self.SUMMARY_HEADERS)
-            writer.writerow(row)
+            writer.writerow({key: row.get(key, "") for key in self.SUMMARY_HEADERS})
 
     def save_population_checkpoint(
         self,
@@ -225,6 +292,19 @@ class TrainingLogger:
         finisheds = np.array([int(ind.finished) for ind in population], dtype=np.int32)
         crashes = np.array([int(ind.crashes) for ind in population], dtype=np.int32)
         distances = np.array([float(ind.distance) for ind in population], dtype=np.float32)
+        rewards = np.array([float(ind.reward) for ind in population], dtype=np.float32)
+        evaluation_steps = np.array(
+            [int(ind.evaluation_steps) for ind in population], dtype=np.int32
+        )
+        evaluation_terminated = np.array(
+            [int(bool(ind.evaluation_terminated)) for ind in population], dtype=np.int32
+        )
+        evaluation_truncated = np.array(
+            [int(bool(ind.evaluation_truncated)) for ind in population], dtype=np.int32
+        )
+        evaluation_valid = np.array(
+            [int(bool(ind.evaluation_valid)) for ind in population], dtype=np.int32
+        )
         fitnesses = np.array(
             [np.nan if ind.fitness is None else float(ind.fitness) for ind in population],
             dtype=np.float32,
@@ -239,6 +319,11 @@ class TrainingLogger:
             finisheds=finisheds,
             crashes=crashes,
             distances=distances,
+            rewards=rewards,
+            evaluation_steps=evaluation_steps,
+            evaluation_terminated=evaluation_terminated,
+            evaluation_truncated=evaluation_truncated,
+            evaluation_valid=evaluation_valid,
             fitnesses=fitnesses,
             obs_dim=np.array([obs_dim], dtype=np.int32),
             act_dim=np.array([act_dim], dtype=np.int32),
@@ -279,6 +364,16 @@ class TrainingLogger:
                 best_finished=np.array([int(best_individual.finished)], dtype=np.int32),
                 best_crashes=np.array([int(best_individual.crashes)], dtype=np.int32),
                 best_distance=np.array([float(best_individual.distance)], dtype=np.float32),
+                best_reward=np.array([float(best_individual.reward)], dtype=np.float32),
+                best_evaluation_steps=np.array([int(best_individual.evaluation_steps)], dtype=np.int32),
+                best_evaluation_terminated=np.array(
+                    [int(bool(best_individual.evaluation_terminated))],
+                    dtype=np.int32,
+                ),
+                best_evaluation_truncated=np.array(
+                    [int(bool(best_individual.evaluation_truncated))],
+                    dtype=np.int32,
+                ),
                 best_fitness=np.array(
                     [np.nan if best_individual.fitness is None else float(best_individual.fitness)],
                     dtype=np.float32,
@@ -311,6 +406,19 @@ class TrainingLogger:
         finisheds = np.array([int(ind.finished) for ind in population], dtype=np.int32)
         crashes = np.array([int(ind.crashes) for ind in population], dtype=np.int32)
         distances = np.array([float(ind.distance) for ind in population], dtype=np.float32)
+        rewards = np.array([float(ind.reward) for ind in population], dtype=np.float32)
+        evaluation_steps = np.array(
+            [int(ind.evaluation_steps) for ind in population], dtype=np.int32
+        )
+        evaluation_terminated = np.array(
+            [int(bool(ind.evaluation_terminated)) for ind in population], dtype=np.int32
+        )
+        evaluation_truncated = np.array(
+            [int(bool(ind.evaluation_truncated)) for ind in population], dtype=np.int32
+        )
+        evaluation_valid = np.array(
+            [int(bool(ind.evaluation_valid)) for ind in population], dtype=np.int32
+        )
         fitnesses = np.array(
             [np.nan if ind.fitness is None else float(ind.fitness) for ind in population],
             dtype=np.float32,
@@ -325,6 +433,11 @@ class TrainingLogger:
             finisheds=finisheds,
             crashes=crashes,
             distances=distances,
+            rewards=rewards,
+            evaluation_steps=evaluation_steps,
+            evaluation_terminated=evaluation_terminated,
+            evaluation_truncated=evaluation_truncated,
+            evaluation_valid=evaluation_valid,
             fitnesses=fitnesses,
             obs_dim=np.array([obs_dim], dtype=np.int32),
             act_dim=np.array([act_dim], dtype=np.int32),
@@ -375,6 +488,29 @@ class TrainingLogger:
             finished=int(best.finished),
             crashes=int(best.crashes),
             distance=float(best.distance),
+            reward=float(best.reward),
+            ranking_progress=float(best.ranking_progress()),
+            ranking_key=np.array([json.dumps([float(value) for value in best.ranking_key()])]),
+            selection_mode=np.array([getattr(best, "selection_mode", "")]),
+            selection_rank=np.array(
+                [-1 if best.selection_rank is None else int(best.selection_rank)],
+                dtype=np.int32,
+            ),
+            selection_crowding=np.array([float(best.selection_crowding)], dtype=np.float32),
+            selection_objectives=np.array(
+                [
+                    json.dumps(
+                        [] if best.selection_objectives is None else list(best.selection_objectives)
+                    )
+                ]
+            ),
+            selection_objective_names=np.array(
+                [json.dumps(list(best.selection_objective_names))]
+            ),
+            evaluation_steps=int(best.evaluation_steps),
+            evaluation_terminated=int(bool(best.evaluation_terminated)),
+            evaluation_truncated=int(bool(best.evaluation_truncated)),
+            evaluation_valid=int(bool(best.evaluation_valid)),
             fitness=np.nan if best.fitness is None else float(best.fitness),
         )
         if generation is not None:
@@ -409,6 +545,21 @@ class TrainingLogger:
             finished=int(best.finished),
             crashes=int(best.crashes),
             distance=float(best.distance),
+            reward=float(best.reward),
+            ranking_progress=float(best.ranking_progress()),
+            ranking_key=json.dumps([float(value) for value in best.ranking_key()]),
+            selection_rank=best.selection_rank,
+            selection_crowding=float(best.selection_crowding),
+            selection_objectives=(
+                []
+                if best.selection_objectives is None
+                else list(best.selection_objectives)
+            ),
+            selection_objective_names=list(best.selection_objective_names),
+            evaluation_steps=int(best.evaluation_steps),
+            evaluation_terminated=bool(best.evaluation_terminated),
+            evaluation_truncated=bool(best.evaluation_truncated),
+            evaluation_valid=bool(best.evaluation_valid),
             fitness=np.nan if best.fitness is None else float(best.fitness),
             observation_layout=list(
                 observation_layout
@@ -437,6 +588,11 @@ class GeneticTrainer:
         target_steer_deadzone: float = 0.0,
         logger: Optional[TrainingLogger] = None,
         observation_layout: Optional[Sequence[str]] = None,
+        selection_mode: str = "lexicographic",
+        moo_objective_mode: str = "lexicographic_primitives",
+        moo_objective_subset: str = "auto",
+        moo_objective_priority: str = "auto",
+        pareto_tiebreak: str = "priority",
     ) -> None:
         self.env = env
         self.obs_dim = obs_dim
@@ -466,6 +622,29 @@ class GeneticTrainer:
         )
         self.target_steer_deadzone = float(target_steer_deadzone)
         self.logger = logger
+        self.selection_mode = str(selection_mode).strip().lower()
+        if self.selection_mode in {"ranking", "lexicographic"}:
+            self.selection_mode = "lexicographic"
+        if self.selection_mode not in {"lexicographic", "pareto"}:
+            raise ValueError("selection_mode must be 'lexicographic' or 'pareto'.")
+        self.moo_objective_mode = str(moo_objective_mode).strip().lower()
+        self.moo_available_objective_names = objective_names_for_mode(self.moo_objective_mode)
+        self.moo_objective_subset_indices = _resolve_objective_indices(
+            self.moo_available_objective_names,
+            moo_objective_subset,
+        )
+        self.moo_objective_names = [
+            self.moo_available_objective_names[index]
+            for index in self.moo_objective_subset_indices
+        ]
+        self.moo_priority_indices = _resolve_objective_indices(
+            self.moo_objective_names,
+            moo_objective_priority,
+        )
+        self.pareto_tiebreak = str(pareto_tiebreak).strip().lower()
+        if self.pareto_tiebreak not in {"priority", "crowding"}:
+            raise ValueError("pareto_tiebreak must be 'priority' or 'crowding'.")
+        self._last_front0_size: Optional[int] = None
 
         self.population: List[Individual] = [
             Individual(
@@ -552,12 +731,20 @@ class GeneticTrainer:
             mean_distance = float(
                 np.mean([metrics["distance"] for metrics in rollout_metrics])
             )
+            mean_reward = float(np.mean([metrics["reward"] for metrics in rollout_metrics]))
             mean_fitness = float(np.mean([metrics["fitness"] for metrics in rollout_metrics]))
+            mean_steps = int(round(float(np.mean([metrics["steps"] for metrics in rollout_metrics]))))
             representative_finished = int(
                 min(int(metrics["finished"]) for metrics in rollout_metrics)
             )
             representative_crashes = int(
                 round(float(np.mean([metrics["crashes"] for metrics in rollout_metrics])))
+            )
+            representative_terminated = bool(
+                any(bool(metrics["terminated"]) for metrics in rollout_metrics)
+            )
+            representative_truncated = bool(
+                any(bool(metrics["truncated"]) for metrics in rollout_metrics)
             )
 
             individual.discrete_progress = mean_discrete_progress
@@ -566,8 +753,12 @@ class GeneticTrainer:
             individual.finished = representative_finished
             individual.crashes = representative_crashes
             individual.distance = mean_distance
+            individual.reward = mean_reward
             individual.fitness = mean_fitness
             individual.evaluation_valid = True
+            individual.evaluation_steps = mean_steps
+            individual.evaluation_terminated = representative_terminated
+            individual.evaluation_truncated = representative_truncated
 
             if verbose and index is not None and total is not None:
                 normal_status = self._outcome_status_text(
@@ -596,8 +787,12 @@ class GeneticTrainer:
         individual.finished = int(rollout_metrics["finished"])
         individual.crashes = int(rollout_metrics["crashes"])
         individual.distance = float(rollout_metrics["distance"])
+        individual.reward = float(rollout_metrics["reward"])
         individual.fitness = float(rollout_metrics["fitness"])
         individual.evaluation_valid = True
+        individual.evaluation_steps = int(rollout_metrics["steps"])
+        individual.evaluation_terminated = bool(rollout_metrics["terminated"])
+        individual.evaluation_truncated = bool(rollout_metrics["truncated"])
 
         if verbose and index is not None and total is not None:
             status = self._outcome_status_text(individual.finished, individual.crashes)
@@ -625,8 +820,11 @@ class GeneticTrainer:
         last_info = info
 
         step_count = 0
+        terminated = False
+        truncated = False
         while True:
             if self.max_steps is not None and step_count >= self.max_steps:
+                truncated = True
                 break
             policy_obs = self._mirror_observation(obs) if mirrored else obs
             action = individual.act(policy_obs)
@@ -645,18 +843,40 @@ class GeneticTrainer:
             if terminated:
                 break
 
-        discrete_progress = float(last_info.get("discrete_progress", 0.0))
-        dense_progress = float(last_info.get("dense_progress", discrete_progress))
-        t = float(last_info.get("time", 0.0))
+        if hasattr(self.env, "raw_metrics_from_info"):
+            raw_metrics = self.env.raw_metrics_from_info(
+                last_info,
+                timed_out=bool(truncated),
+                step_count=step_count,
+                terminated=bool(terminated and not truncated),
+                truncated=bool(truncated),
+            )
+        else:
+            discrete_progress = float(last_info.get("discrete_progress", 0.0))
+            dense_progress = float(last_info.get("dense_progress", discrete_progress))
+            raw_metrics = dict(
+                progress=discrete_progress,
+                discrete_progress=discrete_progress,
+                dense_progress=dense_progress,
+                time=float(last_info.get("time", 0.0)),
+                distance=float(last_info.get("distance", 0.0)),
+                finished=int(last_info.get("finished", int(getattr(self.env, "finished", 0)))),
+                crashes=int(last_info.get("crashes", int(getattr(self.env, "crashes", 0)))),
+                timeout=int(bool(truncated)),
+                steps=step_count,
+                terminated=bool(terminated and not truncated),
+                truncated=bool(truncated),
+            )
+
+        discrete_progress = float(raw_metrics["discrete_progress"])
+        dense_progress = float(raw_metrics["dense_progress"])
+        t = float(raw_metrics["time"])
         if t <= 0:
             t = 1e-3
 
-        distance = float(last_info.get("distance", 0.0))
-        finished = int(last_info.get("finished", int(getattr(self.env, "finished", 0))))
-        crashes = int(last_info.get("crashes", int(getattr(self.env, "crashes", 0))))
-        info_done = last_info.get("done", 0.0) == 1.0
-        if info_done and finished == 0:
-            finished = 1
+        distance = float(raw_metrics["distance"])
+        finished = int(raw_metrics["finished"])
+        crashes = int(raw_metrics["crashes"])
 
         scalar = Individual.compute_scalar_fitness_for(
             finished=finished,
@@ -674,7 +894,12 @@ class GeneticTrainer:
             finished=finished,
             crashes=crashes,
             distance=distance,
+            reward=float(scalar),
             fitness=scalar,
+            timeout=int(raw_metrics.get("timeout", 0)),
+            steps=int(raw_metrics.get("steps", step_count)),
+            terminated=bool(raw_metrics.get("terminated", terminated)),
+            truncated=bool(raw_metrics.get("truncated", truncated)),
         )
 
     def _mirror_observation(self, obs: np.ndarray) -> np.ndarray:
@@ -754,13 +979,156 @@ class GeneticTrainer:
         self.last_cached_evaluations = cached_count
         return fitnesses
 
+    def _selection_max_time(self) -> float:
+        return max(1e-6, float(getattr(self.env, "max_time", 1.0)))
+
+    def _estimated_path_length(self) -> float:
+        game_map = getattr(self.env, "map", None)
+        if game_map is not None:
+            for attr_name in ("estimated_path_length", "estimated_path_lenght"):
+                attr = getattr(game_map, attr_name, None)
+                if callable(attr):
+                    return max(1e-6, float(attr()))
+                if attr is not None:
+                    return max(1e-6, float(attr))
+            path_tiles = getattr(game_map, "path_tiles", None)
+            if path_tiles is not None:
+                return max(1e-6, float(len(path_tiles)) * 32.0)
+        return 1.0
+
+    def _max_episode_distance(self) -> float:
+        estimated_path_length = self._estimated_path_length()
+        observed_distance = max(
+            [float(ind.distance) for ind in self.population] + [estimated_path_length]
+        )
+        return max(1e-6, observed_distance)
+
+    def _metrics_for_objectives(self, individual: Individual) -> Dict[str, float]:
+        return dict(
+            finished=int(individual.finished),
+            crashes=int(individual.crashes),
+            max_crashes=int(getattr(self.env, "max_touches", 1)),
+            max_touches=int(getattr(self.env, "max_touches", 1)),
+            progress=float(individual.discrete_progress),
+            dense_progress=float(individual.dense_progress),
+            time=float(individual.time),
+            distance=float(individual.distance),
+            reward=float(individual.reward),
+            fitness=(
+                float(individual.compute_scalar_fitness())
+                if individual.fitness is None
+                else float(individual.fitness)
+            ),
+        )
+
+    @staticmethod
+    def _priority_score(objectives: np.ndarray, priority_indices: Sequence[int]) -> float:
+        values = [float(objectives[int(index)]) for index in priority_indices]
+        return float(sum((10.0 ** -position) * value for position, value in enumerate(values)))
+
+    def _pareto_objective_matrix(self) -> np.ndarray:
+        estimated_path_length = self._estimated_path_length()
+        max_episode_distance = self._max_episode_distance()
+        rows = []
+        for individual in self.population:
+            objectives = self._objectives_for_individual(
+                individual,
+                estimated_path_length=estimated_path_length,
+                max_episode_distance=max_episode_distance,
+            )
+            rows.append(objectives[self.moo_objective_subset_indices])
+        return np.vstack(rows).astype(np.float64)
+
+    def _objectives_for_individual(
+        self,
+        individual: Individual,
+        estimated_path_length: Optional[float] = None,
+        max_episode_distance: Optional[float] = None,
+    ) -> np.ndarray:
+        return objectives_from_metrics(
+            self._metrics_for_objectives(individual),
+            mode=self.moo_objective_mode,
+            max_time=self._selection_max_time(),
+            estimated_path_length=(
+                self._estimated_path_length()
+                if estimated_path_length is None
+                else float(estimated_path_length)
+            ),
+            max_episode_distance=(
+                self._max_episode_distance()
+                if max_episode_distance is None
+                else float(max_episode_distance)
+            ),
+        )
+
+    def _order_population_for_selection(self) -> None:
+        if self.selection_mode != "pareto":
+            self.population.sort(reverse=True)
+            self._last_front0_size = None
+            for rank, individual in enumerate(self.population):
+                individual.selection_mode = self.selection_mode
+                individual.selection_rank = rank
+                individual.selection_crowding = 0.0
+                individual.selection_objectives = tuple(float(value) for value in individual.ranking_key())
+                individual.selection_objective_names = tuple(
+                    f"ranking_{idx}" for idx in range(len(individual.selection_objectives))
+                )
+            return
+
+        objective_matrix = self._pareto_objective_matrix()
+        ordering = pareto_order(
+            objective_matrix,
+            priority_indices=self.moo_priority_indices,
+            tiebreak=self.pareto_tiebreak,
+            objective_names=self.moo_objective_names,
+        )
+        original_population = list(self.population)
+        self.population = [original_population[index] for index in ordering.order]
+        self._last_front0_size = len(ordering.fronts[0]) if ordering.fronts else 0
+
+        for original_index, objectives in enumerate(ordering.objectives):
+            individual = original_population[original_index]
+            individual.selection_mode = self.selection_mode
+            individual.selection_rank = int(ordering.ranks[original_index])
+            individual.selection_crowding = float(ordering.crowding[original_index])
+            individual.selection_objectives = tuple(float(value) for value in objectives)
+            individual.selection_objective_names = tuple(self.moo_objective_names)
+            individual.fitness = self._priority_score(objectives, self.moo_priority_indices)
+
+    def _global_best_key(self, individual: Individual) -> Tuple[float, ...]:
+        if self.selection_mode == "pareto":
+            objectives = individual.selection_objectives
+            if objectives is None:
+                objectives = tuple(
+                    float(value)
+                    for value in self._objectives_for_individual(individual)[
+                        self.moo_objective_subset_indices
+                    ]
+                )
+            priority_values = tuple(
+                float(objectives[int(index)]) for index in self.moo_priority_indices
+            )
+            return priority_values + tuple(float(value) for value in individual.ranking_key())
+        if (
+            not Individual.COMPARE_BY_RANKING_KEY
+            and individual.fitness is not None
+            and np.isfinite(float(individual.fitness))
+        ):
+            return (float(individual.fitness),)
+        return tuple(float(value) for value in individual.ranking_key())
+
+    def _is_better_global_best(self, candidate: Individual, incumbent: Optional[Individual]) -> bool:
+        if incumbent is None:
+            return True
+        return self._global_best_key(candidate) > self._global_best_key(incumbent)
+
     def next_generation(
         self,
         elite_fraction: float = 0.2,
         mutation_prob: float = 0.1,
         mutation_sigma: float = 0.1,
     ) -> None:
-        self.population.sort(reverse=True)
+        self._order_population_for_selection()
 
         elite_count = max(1, int(self.pop_size * elite_fraction))
         parent_pool_size = max(2, self.pop_size // 2)
@@ -926,35 +1294,73 @@ class GeneticTrainer:
                     individual_index=idx,
                     finished=int(ind.finished),
                     crashes=int(ind.crashes),
+                    timeout=int(int(ind.finished) <= 0 and int(ind.crashes) <= 0),
+                    progress=float(ind.discrete_progress),
                     discrete_progress=float(ind.discrete_progress),
                     dense_progress=float(ind.dense_progress),
+                    ranking_progress=float(ind.ranking_progress()),
                     distance=float(ind.distance),
                     time=float(ind.time),
+                    reward=float(ind.reward),
                     fitness=np.nan if ind.fitness is None else float(ind.fitness),
+                    ranking_key=json.dumps([float(value) for value in ind.ranking_key()]),
+                    selection_mode=self.selection_mode,
+                    selection_rank=(
+                        "" if ind.selection_rank is None else int(ind.selection_rank)
+                    ),
+                    selection_crowding=float(ind.selection_crowding),
+                    selection_objectives=json.dumps(
+                        [] if ind.selection_objectives is None else list(ind.selection_objectives)
+                    ),
+                    selection_objective_names=json.dumps(
+                        list(ind.selection_objective_names)
+                    ),
+                    evaluation_steps=int(ind.evaluation_steps),
+                    evaluation_terminated=int(bool(ind.evaluation_terminated)),
+                    evaluation_truncated=int(bool(ind.evaluation_truncated)),
+                    evaluation_valid=int(bool(ind.evaluation_valid)),
                 )
             )
         self.logger.log_individual_batch(individual_rows)
 
+        discrete_progresses = np.array(
+            [float(ind.discrete_progress) for ind in self.population],
+            dtype=np.float32,
+        )
         finisheds = np.array([int(ind.finished) for ind in self.population], dtype=np.int32)
         crashes = np.array([int(ind.crashes) for ind in self.population], dtype=np.int32)
         dense_progresses = np.array(
             [float(ind.dense_progress) for ind in self.population],
             dtype=np.float32,
         )
+        ranking_progresses = np.array(
+            [float(ind.ranking_progress()) for ind in self.population],
+            dtype=np.float32,
+        )
+        times = np.array([float(ind.time) for ind in self.population], dtype=np.float32)
+        distances = np.array([float(ind.distance) for ind in self.population], dtype=np.float32)
+        rewards = np.array([float(ind.reward) for ind in self.population], dtype=np.float32)
+        steps = np.array([int(ind.evaluation_steps) for ind in self.population], dtype=np.int32)
         finish_rate = float((finisheds > 0).mean())
         crash_rate = float((crashes > 0).mean())
-        timeout_rate = float(((finisheds <= 0) & (crashes <= 0)).mean())
+        timeouts = (finisheds <= 0) & (crashes <= 0)
+        timeout_rate = float(timeouts.mean())
 
         summary_row = dict(
             timestamp_utc=timestamp,
             generation=generation,
             cached_evaluations=int(self.last_cached_evaluations),
+            evaluated_count=int(len(self.population) - self.last_cached_evaluations),
+            population_size=int(len(self.population)),
             dist_avg=history["dist_avg"][-1],
             dist_best_gen=history["dist_best_gen"][-1],
             dist_best_global=history["dist_best_global"][-1],
             time_avg=history["time_avg"][-1],
             time_best_gen=history["time_best_gen"][-1],
             time_best_global=history["time_best_global"][-1],
+            finish_count=int((finisheds > 0).sum()),
+            crash_count=int((crashes > 0).sum()),
+            timeout_count=int(timeouts.sum()),
             finish_rate=finish_rate,
             crash_rate=crash_rate,
             timeout_rate=timeout_rate,
@@ -962,12 +1368,48 @@ class GeneticTrainer:
             best_crashes=int(best_gen.crashes),
             best_progress=float(best_gen.discrete_progress),
             best_dense_progress=float(best_gen.dense_progress),
+            best_ranking_progress=float(best_gen.ranking_progress()),
+            best_ranking_key=json.dumps([float(value) for value in best_gen.ranking_key()]),
+            mean_discrete_progress=(
+                float(discrete_progresses.mean()) if len(discrete_progresses) else 0.0
+            ),
             mean_dense_progress=(
                 float(dense_progresses.mean()) if len(dense_progresses) else 0.0
             ),
+            mean_ranking_progress=(
+                float(ranking_progresses.mean()) if len(ranking_progresses) else 0.0
+            ),
+            std_dense_progress=(
+                float(dense_progresses.std()) if len(dense_progresses) else 0.0
+            ),
+            std_ranking_progress=(
+                float(ranking_progresses.std()) if len(ranking_progresses) else 0.0
+            ),
             best_distance=float(best_gen.distance),
             best_time=float(best_gen.time),
+            best_reward=float(best_gen.reward),
             best_fitness=np.nan if best_gen.fitness is None else float(best_gen.fitness),
+            selection_mode=self.selection_mode,
+            front0_size=(
+                ""
+                if self._last_front0_size is None
+                else int(self._last_front0_size)
+            ),
+            best_selection_rank=(
+                "" if best_gen.selection_rank is None else int(best_gen.selection_rank)
+            ),
+            best_selection_crowding=float(best_gen.selection_crowding),
+            best_selection_objectives=json.dumps(
+                []
+                if best_gen.selection_objectives is None
+                else list(best_gen.selection_objectives)
+            ),
+            selection_objective_names=json.dumps(
+                list(best_gen.selection_objective_names)
+            ),
+            virtual_time_sum=float(times.sum()) if len(times) else 0.0,
+            virtual_distance_sum=float(distances.sum()) if len(distances) else 0.0,
+            evaluation_steps_sum=int(steps.sum()) if len(steps) else 0,
         )
         self.logger.log_generation_summary(summary_row)
 
@@ -1104,7 +1546,7 @@ class GeneticTrainer:
                     mirror_flags=screening_mirror_flags,
                     evaluate_both_mirrors=evaluate_both_mirrors,
                 )
-                self.population.sort(reverse=True)
+                self._order_population_for_selection()
                 screened_best = self.population[0].copy()
                 best_so_far = screened_best
                 self.population = self.population[: self.pop_size]
@@ -1164,9 +1606,10 @@ class GeneticTrainer:
                 mirror_flags=gen_mirror_flags,
                 evaluate_both_mirrors=evaluate_both_mirrors,
             )
+            self._order_population_for_selection()
 
             progresses = np.array(
-                [float(ind.discrete_progress) for ind in self.population],
+                [float(ind.ranking_progress()) for ind in self.population],
                 dtype=np.float32,
             )
             times_plot = np.array(
@@ -1180,17 +1623,17 @@ class GeneticTrainer:
             dist_avg = float(progresses.mean())
             time_avg = float(times_plot.mean())
 
-            best_gen = max(self.population)
-            dist_best_gen = float(best_gen.discrete_progress)
+            best_gen = self.population[0]
+            dist_best_gen = float(best_gen.ranking_progress())
             time_best_gen = float(
                 best_gen.time if int(best_gen.finished) > 0 else dnf_time_for_plot
             )
 
-            best_improved = best_so_far is None or best_gen > best_so_far
+            best_improved = self._is_better_global_best(best_gen, best_so_far)
             if best_improved:
                 best_so_far = best_gen.copy()
 
-            dist_best_global = float(best_so_far.discrete_progress)
+            dist_best_global = float(best_so_far.ranking_progress())
             time_best_global = float(
                 best_so_far.time if int(best_so_far.finished) > 0 else dnf_time_for_plot
             )
@@ -1368,6 +1811,15 @@ class GeneticTrainer:
         finisheds = data["finisheds"] if "finisheds" in data.files else None
         crashes = data["crashes"] if "crashes" in data.files else None
         distances = data["distances"] if "distances" in data.files else None
+        rewards = data["rewards"] if "rewards" in data.files else None
+        evaluation_steps = data["evaluation_steps"] if "evaluation_steps" in data.files else None
+        evaluation_terminated = (
+            data["evaluation_terminated"] if "evaluation_terminated" in data.files else None
+        )
+        evaluation_truncated = (
+            data["evaluation_truncated"] if "evaluation_truncated" in data.files else None
+        )
+        evaluation_valid = data["evaluation_valid"] if "evaluation_valid" in data.files else None
         fitnesses = data["fitnesses"] if "fitnesses" in data.files else None
         checkpoint_current_mutation_prob = (
             float(np.asarray(data["current_mutation_prob"]).reshape(-1)[0])
@@ -1414,10 +1866,22 @@ class GeneticTrainer:
                 ind.crashes = int(crashes[i])
             if distances is not None:
                 ind.distance = float(distances[i])
+            if rewards is not None:
+                ind.reward = float(rewards[i])
+            if evaluation_steps is not None:
+                ind.evaluation_steps = int(evaluation_steps[i])
+            if evaluation_terminated is not None:
+                ind.evaluation_terminated = bool(int(evaluation_terminated[i]))
+            if evaluation_truncated is not None:
+                ind.evaluation_truncated = bool(int(evaluation_truncated[i]))
             if fitnesses is not None:
                 val = float(fitnesses[i])
                 ind.fitness = None if np.isnan(val) else val
-            ind.evaluation_valid = restored_metrics_are_valid
+            ind.evaluation_valid = (
+                bool(int(evaluation_valid[i]))
+                if evaluation_valid is not None
+                else restored_metrics_are_valid
+            )
             restored_population.append(ind)
 
         self.population = restored_population
@@ -1457,13 +1921,29 @@ class GeneticTrainer:
                 best.crashes = int(np.asarray(data["best_crashes"]).reshape(-1)[0])
             if "best_distance" in data.files:
                 best.distance = float(np.asarray(data["best_distance"]).reshape(-1)[0])
+            if "best_reward" in data.files:
+                best.reward = float(np.asarray(data["best_reward"]).reshape(-1)[0])
+            if "best_evaluation_steps" in data.files:
+                best.evaluation_steps = int(np.asarray(data["best_evaluation_steps"]).reshape(-1)[0])
+            if "best_evaluation_terminated" in data.files:
+                best.evaluation_terminated = bool(
+                    int(np.asarray(data["best_evaluation_terminated"]).reshape(-1)[0])
+                )
+            if "best_evaluation_truncated" in data.files:
+                best.evaluation_truncated = bool(
+                    int(np.asarray(data["best_evaluation_truncated"]).reshape(-1)[0])
+                )
             if "best_fitness" in data.files:
                 bf = float(np.asarray(data["best_fitness"]).reshape(-1)[0])
                 best.fitness = None if np.isnan(bf) else bf
             best.evaluation_valid = restored_metrics_are_valid
             self.best_individual = best
         else:
-            self.best_individual = max(self.population).copy() if self.population else None
+            if self.population:
+                self._order_population_for_selection()
+                self.best_individual = self.population[0].copy()
+            else:
+                self.best_individual = None
 
         return self.generation
 
@@ -1494,7 +1974,7 @@ if __name__ == "__main__":
 
     # map dependend constants
     map_name = "AI Training #5"
-    env_max_time = 45
+    env_max_time = 25
     
     # neural network architecture
     hidden_dim = [32, 16]
@@ -1503,10 +1983,11 @@ if __name__ == "__main__":
     vertical_mode = True
 
     # Evolution
-    pop_size = 32
-    elite_fraction = 0.25
+    pop_size = 64
+    # Full-risk MOO run: keep the same elite fraction as the TM2D tests.
+    elite_fraction = 4 / 32
     generations_to_run = 200
-    checkpoint_every = 10
+    checkpoint_every = 4
 
     # Selection metric for the overnight GA experiment.
     #
@@ -1514,18 +1995,27 @@ if __name__ == "__main__":
     # log-friendly scalar, but population sorting uses Individual.ranking_key().
     # This mirrors the best current TM2D candidate:
     # (finished, progress, -time), where progress resolves to dense_progress.
+    #
+    # selection_mode="lexicographic" keeps the original GA behavior.
+    # selection_mode="pareto" switches only the ordering/downselection step to
+    # NSGA-II-style non-dominated sorting while reusing the same evaluation loop.
+    selection_mode = "pareto"  # lexicographic / pareto
     selection_fitness_mode = "ranking"  # scalar / ranking
     ranking_mode = "lexicographic"
-    ranking_key = "(finished, progress, -time)"
+    ranking_key = "(finished, progress, -time, -crashes)"
     ranking_progress_source = "dense_progress"
+    moo_objective_mode = "lexicographic_primitives"
+    moo_objective_subset = "finished,progress,neg_time,neg_crashes,neg_distance"
+    moo_objective_priority = "finished,progress,neg_time,neg_crashes,neg_distance"
+    pareto_tiebreak = "priority"
 
-    mutation_prob = 0.20
+    mutation_prob = 0.18
     mutation_prob_decay = 1.0
-    mutation_prob_min = 0.20
+    mutation_prob_min = 0.18
 
-    mutation_sigma = 0.5
-    mutation_sigma_decay = 0.99
-    mutation_sigma_min = 0.20
+    mutation_sigma = 0.22
+    mutation_sigma_decay = 1.0
+    mutation_sigma_min = 0.22
 
 
     # Fancy updates
@@ -1534,6 +2024,7 @@ if __name__ == "__main__":
     target_steer_deadzone = 0.00
     max_touches = 1
     
+
     
     # Other constants
     act_dim = 3
@@ -1631,10 +2122,18 @@ if __name__ == "__main__":
         )
         logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
     else:
+        selection_tag = (
+            f"{selection_fitness_mode}_{safe_ranking_key_tag(ranking_key)}"
+            if selection_mode == "lexicographic"
+            else (
+                f"pareto_{moo_objective_mode}_"
+                f"{safe_objective_tag(moo_objective_subset)}"
+            )
+        )
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             f"_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
-            f"_{selection_fitness_mode}_{safe_ranking_key_tag(ranking_key)}"
+            f"_{selection_tag}"
         )
         logger = TrainingLogger(run_name=run_name)
 
@@ -1651,6 +2150,11 @@ if __name__ == "__main__":
         target_steer_deadzone=target_steer_deadzone,
         logger=logger,
         observation_layout=env.obs_encoder.feature_names(vertical_mode=env.obs_encoder.vertical_mode),
+        selection_mode=selection_mode,
+        moo_objective_mode=moo_objective_mode,
+        moo_objective_subset=moo_objective_subset,
+        moo_objective_priority=moo_objective_priority,
+        pareto_tiebreak=pareto_tiebreak,
     )
 
     try:
@@ -1714,11 +2218,17 @@ if __name__ == "__main__":
                 max_touches=max_touches,
                 start_idle_max_time=start_idle_max_time,
                 selection_fitness_mode=selection_fitness_mode,
+                selection_mode=selection_mode,
                 compare_by_ranking_key=bool(Individual.COMPARE_BY_RANKING_KEY),
                 ranking_mode=ranking_mode,
                 ranking_key=ranking_key,
                 ranking_key_expression=canonical_ranking_key_expression(ranking_key),
                 ranking_progress_source=ranking_progress_source,
+                moo_objective_mode=moo_objective_mode,
+                moo_objective_subset=moo_objective_subset,
+                moo_objective_priority=moo_objective_priority,
+                pareto_tiebreak=pareto_tiebreak,
+                moo_objective_names=list(trainer.moo_objective_names),
                 mutation_prob_decay=mutation_prob_decay,
                 mutation_prob_min=mutation_prob_min,
                 mutation_sigma_decay=mutation_sigma_decay,

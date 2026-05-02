@@ -30,3 +30,7 @@ Cars Evolution Training Project/
 logs/sb3_runs/**/*.zip
 RL_test/logs/sb3_runs/**/*.zip
 
+# Local simulator run artifacts
+Experiments/runs/
+Experiments/runs_rl/
+

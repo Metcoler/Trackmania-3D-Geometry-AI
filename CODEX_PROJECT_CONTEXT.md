@@ -25,6 +25,242 @@ There are currently three main learning paths in the codebase:
 
 The project also contains Trackmania map extraction assets and an OpenPlanet plugin that streams game state over TCP to Python.
 
+### Current high-level project overview
+
+This section was moved here from a temporary README rewrite. README should stay
+as the human-facing thesis/project landing page; ongoing working context belongs
+in this file.
+
+Trackmania AI is an autonomous Trackmania driving-agent project for the diploma
+thesis. The repository contains the live Trackmania integration, a fast local
+2D simulator, genetic algorithm / neuroevolution tooling, supervised-learning
+utilities, and reinforcement-learning experiments.
+
+The current research direction is intentionally evidence-driven:
+
+- use the local TM2D simulator to test reward functions and algorithms quickly
+- transfer only the best-supported ideas into realtime Trackmania
+- keep GA/neuroevolution as the main approach
+- use RL as an experimental comparison branch
+- investigate Pareto / NSGA-II style multi-objective GA as the next step
+
+Current lexicographic GA status:
+
+- The strongest simple GA ranking found in local TM2D experiments is
+  `(finished, progress, -time)`.
+- `progress` defaults to dense geometric progress in the local simulator.
+- Interpretation: prefer a finished run, otherwise prefer the policy that gets
+  farther, and among comparable progress values prefer lower time.
+- This tuple performed best in the latest four-way lexicographic reward
+  comparison on `AI Training #5`.
+- It is now the baseline to transfer into live Trackmania GA experiments.
+
+Real Trackmania GA metric contract:
+
+- Reálny `RacingGameEnviroment` teraz vystavuje rovnaké raw metriky ako TM2D
+  sandbox cez `raw_metrics_from_info`.
+- `progress` znamená diskrétny path-tile/checkpoint progress v percentách.
+- `dense_progress` znamená plynulý geometrický progress v percentách,
+  premietnutý na aktuálny segment trate a vždy aspoň tak veľký ako
+  `discrete_progress`.
+- `finished` je `1` iba po prejdení cieľa, inak `0`.
+- `crashes` je počet započítaných kontaktov/nárazov počas rollout-u.
+- `timeout` je odvodený stav `finished == 0 and crashes == 0` pri ukončení
+  časom.
+- `time` je herný čas rollout-u, `distance` je prejdená vzdialenosť.
+- `ranking_progress` je progress, ktorý práve používa lexikografický ranking
+  podľa `Individual.RANKING_PROGRESS_SOURCE`; aktuálny default je
+  `dense_progress`.
+- Reálny `GeneticTrainer` loguje tieto raw metriky do
+  `individual_metrics.csv`, vrátane `ranking_key`, `reward`,
+  `evaluation_steps`, `evaluation_terminated`, `evaluation_truncated` a
+  `evaluation_valid`. Checkpointy ukladajú aj raw outcome polia, aby sa dalo
+  pokračovať bez straty hodnotenia elity.
+- `dist_avg`, `dist_best_gen` a `dist_best_global` v staršom
+  `generation_summary.csv` názvosloví teraz reprezentujú aktívny
+  `ranking_progress`, nie nutne iba diskrétny progress. Nové explicitné
+  stĺpce `best_dense_progress`, `best_ranking_progress`,
+  `mean_ranking_progress` a `std_ranking_progress` treba preferovať v nových
+  grafoch.
+
+Useful thesis GA baselines:
+
+```text
+(finished, progress)
+(finished, progress, -time)
+(finished, progress, -time, -crashes)
+(finished, progress, -crashes, -time)
+```
+
+These variants expose the tradeoff between progress-only learning, aggressive
+time pressure, and safer driving.
+
+Current local RL status:
+
+- The local RL branch uses Stable-Baselines3 through `Experiments/train_sac.py`.
+- Despite the historical filename, it supports `PPO`, `SAC`, and `TD3`.
+- The current best RL reward is `delta_finished_progress_time`.
+- `delta_finished_progress_time` is a potential-difference version of the GA
+  tuple `(finished, progress, -time)`, so RL receives incremental signal while
+  preserving the same final objective.
+- `PPO + delta_finished_progress_time + gas_steer` solved `AI Training #5` in
+  TM2D.
+- In the 2-hour PPO/SAC/TD3 comparison, PPO was clearly strongest.
+- PPO deterministic best-policy evaluation reached `30/30` finishes with mean
+  finish time around `18.4s`.
+- TD3 found one finish during training but was not robust.
+- SAC stayed near the start in the same setup, suggesting an
+  algorithm/exploration issue rather than only a reward-sign bug.
+- A follow-up PPO `gas_brake_steer` run was a negative control: the action
+  space became harder and the short run collapsed near the start (`0` finishes,
+  max dense progress about `1.95%`). Keep RL experiments on `gas_steer` unless
+  brake is being tested explicitly.
+
+Current multi-objective GA / NSGA-II status:
+
+- Pareto-front selection is implemented in `Experiments/train_ga_moo.py`.
+- The same Pareto selection utility is now also wired into the live
+  `GeneticTrainer.py` as an optional selection mode. The default remains
+  `selection_mode = "lexicographic"`, so the proven real-Trackmania GA path is
+  unchanged unless explicitly switched to `selection_mode = "pareto"`.
+- The live MOO integration reuses the existing Trackmania evaluation loop,
+  logging, checkpointing, elite copying and mutation logic. It only changes the
+  population ordering/downselection step after all individuals in a generation
+  have been evaluated.
+- Live MOO logs `selection_rank`, `selection_crowding`,
+  `selection_objectives`, `selection_objective_names`, `front0_size` and the
+  best individual's selection diagnostics in addition to the existing GA raw
+  metrics.
+- The fair comparison objective is
+  `lexicographic_primitives = (finished, progress, -time, -crashes, -distance)`.
+- The implementation normalizes these values but keeps the same monotonic
+  ordering, so the Pareto experiment uses the same primitive metrics as the
+  lexicographic runs and changes only the selection mechanism.
+- The older shaped objective vector remains available as `trackmania_racing`:
+  `finish`, `progress`, `speed_for_progress`, `safe_progress`,
+  `path_efficiency`.
+- 2026-05-01 MOO analysis on `AI Training #5`:
+  - `finished,progress,neg_time` did not reach a finish.
+  - `finished,progress,neg_time,neg_crashes` found a fast training finish
+    (`16.623s`) but failed 30-episode validation (`0/30` finishes).
+  - `finished,progress,neg_time,neg_crashes,neg_distance` was the only robust
+    MOO candidate: first finish at generation `101`, best training finish
+    `16.308s`, final population `7/48` finishes, validation `9/30` finishes
+    with best validation time `16.317s`.
+- Interpretation: MOO can discover very fast policies and preserves useful
+  trade-off diversity, but the current selection does not yet concentrate the
+  population around robust finishers as well as the best lexicographic GA.
+- The distance objective is important in MOO; without it, Pareto diversity can
+  keep risky/progress-only policies alive that do not validate.
+- `Experiments/train_ga_moo.py` now logs the same core generation/individual
+  metrics as local lexicographic GA: population size, evaluated count,
+  finish/crash/timeout counts, terminated/truncated counts, virtual time,
+  wall time, mean values and percentile/std summaries for progress, dense
+  progress, ranking progress, time, distance, reward, fitness and steps.
+  MOO-specific columns (`front0_size`, `front_rank`, `crowding`,
+  `priority_score`, `obj_*`) remain as extra diagnostics.
+
+Current GA vs RL vs GA MOO comparison:
+
+- Analysis output:
+  `Experiments/analysis/ga_rl_moo_comparison_20260501/REPORT.md`.
+- Fastest observed training finish: GA MOO with
+  `(finished, progress, -time, -crashes, -distance)` at `16.308s`.
+- Strongest simple lexicographic training tuple remains
+  `(finished, progress, -time)`: first finish at generation `114`, best time
+  `16.323s`.
+- Validation nuance: `(finished, progress, -time)` is fast but less
+  reproducible in the 30-episode validation (`19/30` finishes) than the
+  crash-aware tuples:
+  `(finished, progress, -time, -crashes)` validated at `29/30`,
+  `(finished, progress, -crashes, -time)` at `27/30`.
+- RL comparison: PPO with `delta_finished_progress_time + gas_steer` validated
+  perfectly (`30/30`) but was slower (`18.063s` best deterministic validation)
+  and more sample-expensive than GA/MOO. SAC failed to leave the start; TD3 was
+  not robust.
+
+Important live Trackmania entry points:
+
+- `GeneticTrainer.py`: main live GA / neuroevolution trainer
+- `Individual.py`: individual policy wrapper, metrics and lexicographic ranking
+- `NeuralPolicy.py`: canonical MLP policy implementation
+- `Enviroment.py`: realtime Trackmania environment wrapper
+- `Car.py`: observation construction, lidar, car state and map context
+- `Map.py`: map parsing, block layout, path and geometry
+- `Driver.py`: replay/evaluation of saved policies
+- `Vizualizer.py`: debugging visualizer
+- `Actor.py`: supervised data collection / actor runtime
+- `SupervisedTraining.py`: supervised model training
+
+Important local experiment entry points:
+
+- `Experiments/train_ga.py`: fast lexicographic GA experiments
+- `Experiments/train_ga_moo.py`: Pareto / NSGA-II style multi-objective GA
+  experiments
+- `Experiments/train_sac.py`: local SB3 PPO/SAC/TD3 experiments
+- `Experiments/analyze_ga_runs.py`: GA comparison plots and summaries
+- `Experiments/analyze_rl_runs.py`: RL comparison plots and summaries
+- `Experiments/analyze_moo_runs.py`: GA MOO plots, summaries and best-policy
+  validation
+- `Experiments/analyze_method_comparison.py`: combined GA vs RL vs GA MOO
+  comparison report
+- `Experiments/visualize_tm2d.py`: local 2D simulator visualization
+
+Important live SB3 Trackmania test entry points:
+
+- `RL_test/train_sac_trackmania.py`: experimental live Trackmania SB3 training
+- `RL_test/plot_sb3_training.py`: live SB3 plotting
+
+The live SB3 branch is secondary. The local TM2D evidence currently points to
+PPO as the best RL candidate before returning to realtime Trackmania.
+
+Current data and asset layout:
+
+- `Maps/BlockLayouts/`: canonical map block layout text files
+- `Maps/ExportedBlocks/`: legacy fallback block layouts
+- `Maps/Gbx/`: original Trackmania `.Map.Gbx` files
+- `Maps/GameFiles/`: legacy fallback `.Map.Gbx` location
+- `Maps/TrackMeshes/`: whole-map exported meshes
+- `Maps/Meshes/`: legacy whole-map mesh location
+- `Assets/BlockMeshes/`: canonical block `.obj` meshes
+- `Meshes/`: legacy fallback block mesh location
+- `logs/`: live Trackmania logs, checkpoints and supervised data
+- `Experiments/runs/`: local GA runs
+- `Experiments/runs_rl/`: local RL runs
+- `Experiments/analysis/`: generated experiment summaries and plots
+
+Common commands:
+
+```powershell
+python GeneticTrainer.py
+```
+
+```powershell
+python Experiments/train_ga.py --map-name "AI Training #5" --generations 300 --population-size 48 --elite-count 4 --parent-count 16 --max-time 45 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.18 --mutation-sigma 0.22 --fitness-mode ranking --ranking-key "(finished, progress, -time)" --collision-mode corners --num-workers 4
+```
+
+```powershell
+python Experiments/train_sac.py --algorithm PPO --map-name "AI Training #5" --reward-mode delta_finished_progress_time --action-layout gas_steer --collision-mode corners --max-runtime-minutes 120
+```
+
+```powershell
+python Experiments/train_ga_moo.py --map-name "AI Training #5" --objective-mode lexicographic_primitives --generations 300 --population-size 48 --collision-mode corners --num-workers 4
+```
+
+Project naming and workflow notes:
+
+- The project historically used both `Evolution*` and `Genetic*` names.
+- Current naming prefers `GeneticTrainer.py` for the trainer and
+  `NeuralPolicy.py` for the policy.
+- `Individual.py` intentionally keeps its name because it maps naturally to GA
+  terminology.
+- Dense progress is preferred for local reward experiments because discrete
+  checkpoint/block progress leaves too many early policies tied.
+- Scalar fitness values are mostly for plotting/logging. GA selection should use
+  explicit ranking tuples or Pareto objectives.
+- Live Trackmania is realtime and expensive to evaluate, so local TM2D
+  experiments should be used before long overnight runs.
+
 ### Fast 2D experiment sandbox
 
 `Experiments/` was added because live Trackmania is a poor place to iterate on reward design:
@@ -40,7 +276,7 @@ The sandbox intentionally reuses the main project pieces where possible:
 - `Experiments/train_ga.py` uses `Individual`/`NeuralPolicy` for the same MLP architecture and genome semantics, but evaluates policies through a fast NumPy forward pass instead of calling torch every simulated frame.
 - `Experiments/train_ga.py` also supports `--num-workers N` for process-based parallel evaluation of independent individuals. Each worker creates its own read-only map/environment once and receives flat genomes to evaluate.
 - `Experiments/train_ga.py`, `Experiments/train_sac.py`, and `Experiments/visualize_tm2d.py` support `--fixed-fps FPS`. When set, the local simulator uses deterministic `min_dt = max_dt = 1 / FPS`; when omitted, it keeps the default variable-dt range to mimic variable Trackmania FPS.
-- `Experiments/train_sac.py` wraps the same `TM2DSimEnv` as a Gymnasium environment and runs Stable-Baselines3 SAC locally, so reward modes can be tested quickly before using the realtime Trackmania SAC script.
+- `Experiments/train_sac.py` wraps the same `TM2DSimEnv` as a Gymnasium environment and runs Stable-Baselines3 RL locally. Despite the historical filename, it now supports `--algorithm SAC`, `--algorithm PPO`, and `--algorithm TD3`, so reward modes can be tested quickly before using the realtime Trackmania RL scripts.
 - `Experiments/reward_lab.py` prints reward score tables for one map, including `progress_delta`, `progress_primary_delta`, `pace_delta`, and `terminal_fitness`.
 - `Experiments/visualize_tm2d.py` opens a small tkinter visualizer for the projected map, car, and lidar rays.
 - `Experiments/calibrate_tm2d_physics.py` reads supervised `attempt_*.npz` files and estimates simple 2D physics parameters from recorded `speed`, `game_times`, `distances`, and `gas/brake/steer` actions.
@@ -75,7 +311,30 @@ Metric-parity note:
   finish signals. Reward functions that work locally should therefore be
   re-tested with the strictest local settings before being trusted in live TM.
 
-Default experiment outputs go to ignored `Experiments/runs/`.
+Default GA experiment outputs go to ignored `Experiments/runs/`.
+Default local RL experiment outputs go to ignored `Experiments/runs_rl/`, so GA and RL artifacts stay separated.
+
+Current planning state on 2026-05-01:
+
+- The simple lexicographic GA baseline is considered ready enough to close as
+  the first main thesis result. The best local tuple is
+  `(finished, progress, -time)` with dense progress as the default progress
+  source.
+- The local RL baseline is also close to closed: PPO with
+  `delta_finished_progress_time` and `gas_steer` solves `AI Training #5` in
+  TM2D, while SAC stays near the start and TD3 is not robust. A final PPO
+  `gas_brake_steer` run is being tested to decide whether brake can be used
+  in the default local RL action layout.
+- The next major branch should be multi-objective GA / NSGA-II. The goal is to
+  show that lexicographic ordering is useful but brittle when safety, progress
+  and time conflict, then compare it with Pareto-front selection in
+  `Experiments/train_ga_moo.py`.
+- The first NSGA-II comparison mode should use the same primitive metrics as
+  the lexicographic GA experiments: `(finished, progress, -time, -crashes,
+  -distance)`. This is implemented as `--objective-mode
+  lexicographic_primitives`. Values are normalized internally, but remain
+  monotonic-equivalent to the tuple terms, so the comparison changes selection
+  strategy rather than changing the definition of a good run.
 
 Local 2D GA logging is intentionally research-grade now. `train_ga.py` and
 `train_ga_moo.py` write:
@@ -129,12 +388,15 @@ The sandbox reward modes currently include:
 - `delta_progress_time_safety`: potential-difference version of `terminal_progress_time_safety`; useful to test whether SAC can learn from dense progress when failed episodes are still globally bad
 - `terminal_progress_time_block_penalty`: terminal-only SAC curriculum score; failed episodes subtract one map-derived progress bucket instead of one full track
 - `delta_progress_time_block_penalty`: potential-difference version of `terminal_progress_time_block_penalty`; current best SAC debug candidate because it keeps progress dense while making timeout/crash non-zero failures
+- `terminal_finished_progress_time`: terminal-only scalar version of the selected GA tuple `(finished, progress, -time)`
+- `delta_finished_progress_time`: potential-difference version of `(finished, progress, -time)`; this became the first-choice local RL reward on 2026-05-01 because it mirrors the best GA tuple without extra crash/distance terms
 - `progress_rate`: average progress-rate score, retained as a negative-control mode because it can prefer fast early crashes
 
 The same reward modes are usable from both `Experiments/train_ga.py` and `Experiments/train_sac.py`.
-For SAC, the local wrapper exposes a continuous `gas_brake_steer` action space by default and logs
+For local RL, the wrapper exposes continuous action layouts `gas_steer`, `throttle_steer`, and `gas_brake_steer`.
+The current diagnostic default is `gas_steer` because early random exploration is much cleaner when gas and brake cannot cancel each other out. It logs
 `episode_metrics.csv`, `monitor.csv`, `latest_model.zip`, `best_model.zip`, and periodic checkpoints
-under `Experiments/runs/`.
+under `Experiments/runs_rl/`.
 
 Reward-sweep notes from the local sandbox:
 
@@ -143,7 +405,7 @@ Reward-sweep notes from the local sandbox:
 - a short GA sweep on `AI Training #5` found the best early progress with `delta_lexicographic_terminal` (`14.29%` best progress in the tested 10-generation/24-population run)
 - a short SAC sweep with `gas_brake_steer` mostly stayed near the start because random gas and brake cancel each other too often
 - a short SAC sweep with diagnostic `gas_steer` made reward comparison clearer: `delta_lexicographic` reached `6.80%` dense progress in 30 episodes, while `progress_delta` reached only `2.86%`
-- current recommendation:
+- historical 2026-04-30 recommendation, later superseded by the 2026-05-01 PPO result:
   - GA reward experiments: start with `delta_lexicographic_terminal`, compare against `terminal_lexicographic`
   - SAC reward experiments: start with `delta_lexicographic`; avoid `progress_rate`
   - use `gas_brake_steer` for live SAC so the trained policy learns the real `gas`, `brake`, `steer` layout; keep `gas_steer` only as a diagnostic switch when debugging early-start exploration
@@ -181,8 +443,175 @@ Current interpretation:
 - The second major failure mode is action-space complexity: `gas_brake_steer` makes random exploration weak because gas and brake can cancel, while `throttle_steer` did not explore well enough in the tested setup.
 - The third likely failure mode is sparse/long-horizon credit assignment. Even with a better dense reward, SAC still gets stuck around early checkpoints from scratch.
 - Practical next step is to apply this first in the local `Experiments/train_sac.py` simulator on `AI Training #5`, then only move back to live Trackmania after it shows meaningful progress locally.
-- This setup has now been applied to `Experiments/train_sac.py` for `AI Training #5`:
+- This historical setup was applied to `Experiments/train_sac.py` for `AI Training #5` before the 2026-05-01 PPO test:
   `DEFAULT_MAP_NAME="AI Training #5"`, `DEFAULT_REWARD_MODE="delta_progress_time_block_penalty"`, `DEFAULT_ACTION_LAYOUT="gas_steer"`, `DEFAULT_NET_ARCH=[32, 32]`, default `gamma=0.9995`, default `ent_coef="0.01"`, default `gradient_steps=8`.
+
+### 2026-05-01 local RL restart: PPO solved AI Training #5
+
+After the lexicographic GA reward comparison identified `(finished, progress, -time)` as the strongest simple GA tuple, the local RL code was restarted around the same idea:
+
+```text
+reward_mode = delta_finished_progress_time
+algorithm candidates = SAC, PPO, TD3 support in train_sac.py
+main diagnostic action layout = gas_steer
+map = AI Training #5
+collision_mode = corners
+variable FPS = default 100..30 FPS dt sampling
+net_arch = [32, 32]
+activation = relu
+gamma = 0.9995
+ent_coef = 0.01
+```
+
+Why this reward:
+
+- `finished` keeps completion as the dominant objective.
+- `dense_progress` gives a continuous curriculum signal instead of waiting for sparse checkpoint/tile jumps.
+- `-time` is implemented only as a small progress-gated tie-breaker, so zero-progress early crashes do not become attractive.
+- No extra crash or distance term is added at this stage; crashes simply stop future progress. This keeps the first RL target aligned with the proven GA tuple instead of mixing in more objectives too early.
+
+Implementation changes:
+
+- `Individual.compute_delta_finished_progress_time_score_for()` and `compute_terminal_finished_progress_time_score_for()` implement the new score.
+- `TM2DSimEnv._score_state()` exposes reward modes `delta_finished_progress_time` and `terminal_finished_progress_time`.
+- `Experiments/train_sac.py` now supports `--algorithm SAC`, `--algorithm PPO`, and `--algorithm TD3`, writes RL runs to `Experiments/runs_rl/`, and keeps `SAC` as the default algorithm for backwards compatibility.
+- `Experiments/analyze_rl_runs.py` aggregates `episode_metrics.csv` files and generates RL comparison plots.
+- `Experiments/evaluate_rl_policy.py` evaluates saved SB3 policies deterministically or stochastically in TM2D.
+
+Research/algorithm interpretation:
+
+- SAC is still a reasonable off-policy continuous-control candidate, but the local sweep showed it can remain sensitive to action-space exploration and critic bootstrapping in this racing setup.
+- PPO is less sample-efficient in theory, but it was more stable in this local simulator once the reward became dense and aligned with the GA tuple.
+- `gas_brake_steer` should remain available for final compatibility, but `gas_steer` is the clean diagnostic layout for discovering whether the algorithm/reward can learn at all.
+
+20-minute local comparison:
+
+```text
+root = Experiments/runs_rl/ai_training5_batch_20260501_171723_20min
+analysis = Experiments/analysis/rl_comparison_20260501_173853
+```
+
+Compared runs:
+
+- `SAC + delta_finished_progress_time + gas_steer`
+- `SAC + terminal_finished_progress_time + gas_steer`
+- `SAC + delta_finished_progress_time + gas_brake_steer`
+- `PPO + delta_finished_progress_time + gas_steer`
+
+Headline result:
+
+- PPO was the only tested algorithm/layout that solved the full map in this 20-minute batch.
+- PPO reached `100%` dense progress, found the first finish around episode `851`, and achieved best finish time about `19.86s`.
+- SAC with `gas_steer` improved over old failed SAC runs but stayed around early progress (`max dense` about `8.56%` in this batch).
+- SAC with `gas_brake_steer` collapsed near the start again, confirming that independent random gas/brake exploration is still a major issue.
+
+Continuation from the best PPO model:
+
+```text
+root = Experiments/runs_rl/ppo_ai_training5_continue_20260501_174003_30min
+analysis = Experiments/analysis/rl_comparison_20260501_181107
+```
+
+The 30-minute continuation produced:
+
+- `661` additional episodes
+- `492` finishes
+- last-100 mean dense progress `93.74%`
+- best finish time `17.303s`
+
+Deterministic evaluation of the best continued PPO model:
+
+```text
+output = Experiments/analysis/rl_comparison_20260501_181107/ppo_best_deterministic_eval.csv
+episodes = 20
+finish_count = 12
+mean_dense_progress = 72.60%
+best_finish_time = 16.967s
+mean_finish_time = 17.009s
+```
+
+Interpretation:
+
+- We now have a working local RL baseline, and it is currently PPO rather than SAC.
+- The deterministic evaluation still shows failures (`12/20` finishes), so this is not yet as robust as the best GA result.
+- The next RL work should focus on robustness: multiple seeds, longer PPO runs, optional curriculum, and only then adding `gas_brake_steer` or moving back toward live Trackmania.
+
+### 2026-05-01 2-hour local PPO/SAC/TD3 comparison
+
+A longer local RL comparison was then run for `2h` wall-clock with three parallel SB3 algorithms on the same task:
+
+```text
+map = AI Training #5
+reward_mode = delta_finished_progress_time
+action_layout = gas_steer
+collision_mode = corners
+env_max_time = 45
+net_arch = [32, 32]
+activation = relu
+gamma = 0.9995
+PPO ent_coef = 0.01
+SAC ent_coef = 0.01
+TD3 action_noise_sigma = 0.15
+```
+
+Run root:
+
+```text
+Experiments/runs_rl/ai_training5_ppo_sac_td3_20260501_182013_2h
+```
+
+Analysis output:
+
+```text
+Experiments/analysis/rl_comparison_20260501_202036
+```
+
+Training summary:
+
+- `PPO + delta_finished_progress_time + gas_steer`
+  - episodes: `3244`
+  - max dense progress: `100%`
+  - finish count: `446`
+  - first finish episode: `2168`
+  - best finish time during training: `19.224s`
+  - last-100 mean dense progress: `81.14%`
+- `SAC + delta_finished_progress_time + gas_steer`
+  - episodes: `1913`
+  - max dense progress: `7.96%`
+  - finish count: `0`
+  - last-100 mean dense progress: `3.59%`
+- `TD3 + delta_finished_progress_time + gas_steer`
+  - episodes: `8421`
+  - max dense progress: `100%`
+  - finish count: `1`
+  - first and only finish episode: `469`
+  - best finish time during training: `21.268s`
+  - last-100 mean dense progress: `38.83%`
+
+Deterministic evaluation of each best model over `30` episodes:
+
+- PPO best model:
+  - finish count: `30/30`
+  - crash count: `0`
+  - mean dense progress: `100%`
+  - best finish time: `18.063s`
+  - mean finish time: `18.378s`
+- SAC best model:
+  - finish count: `0/30`
+  - crash count: `30`
+  - mean dense progress: `2.742%`
+- TD3 best model:
+  - finish count: `0/30`
+  - crash count: `30`
+  - mean dense progress: `48.904%`
+  - max dense progress: `77.614%`
+
+Interpretation:
+
+- PPO is now the strongest local RL baseline by a large margin.
+- SAC still fails on this local task even with the cleaned reward, long horizon discount and fixed entropy. The issue is likely not reward sign anymore, but SAC exploration/critic learning under this sparse-ish racing topology.
+- TD3 is promising as an exploration baseline because it reached one finish and later deterministic policies often reached mid/late map progress, but it did not stabilize into a finishing policy in this run.
+- For future RL experiments, start from PPO with `delta_finished_progress_time`, then test multiple seeds and longer runs before adding brakes or moving to live Trackmania.
 
 ### 2026-04-30 reproducible reward-function experiment report
 
@@ -1993,16 +2422,22 @@ Responsibilities:
 
 Current baseline default in `__main__`:
 
-- map: `AI Training #3`
-- hidden dim: `32`
-- population: `64`
-- generations: `100`
+- map: `AI Training #5`
+- hidden dims: `[32, 16]`
+- hidden activations: `relu, tanh`
+- population: `32`
+- generations: `200`
 - action mode: `target`
-- no supervised pretraining
-- no mirroring
+- vertical observation mode enabled
+- selection mode: `ranking`
+- ranking key: `(finished, progress, -time)`
+- ranking progress source: `dense_progress`
+- no supervised pretraining by default
+- no mirroring by default
 - `max_touches = 1`
-- `env_max_time = 60`
-- mutation starts exploratory and anneals down
+- `env_max_time = 45`
+- mutation probability is fixed at `0.20`
+- mutation sigma starts at `0.5` and decays toward `0.20`
 
 ### `Driver.py`
 

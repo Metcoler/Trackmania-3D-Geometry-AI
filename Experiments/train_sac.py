@@ -24,9 +24,10 @@ from Experiments.tm2d_env import TM2DPhysicsConfig, TM2DRewardConfig, TM2DSimEnv
 
 
 DEFAULT_MAP_NAME = "AI Training #5"
-DEFAULT_REWARD_MODE = "delta_progress_time_block_penalty"
+DEFAULT_REWARD_MODE = "delta_finished_progress_time"
 DEFAULT_ACTION_LAYOUT = "gas_steer"
 DEFAULT_NET_ARCH = [32, 32]
+DEFAULT_LOG_DIR = "Experiments/runs_rl"
 
 
 def timestamp() -> str:
@@ -175,7 +176,13 @@ class TM2DSB3Env(gym.Env):
 
 
 class EpisodeMetricsCallback:
-    def __init__(self, run_dir: Path, checkpoint_every_episodes: int, verbose: int = 1) -> None:
+    def __init__(
+        self,
+        run_dir: Path,
+        checkpoint_every_episodes: int,
+        verbose: int = 1,
+        algorithm: str = "SAC",
+    ) -> None:
         from stable_baselines3.common.callbacks import BaseCallback
 
         class _Callback(BaseCallback):
@@ -200,6 +207,7 @@ class EpisodeMetricsCallback:
         self.csv_path = run_dir / "episode_metrics.csv"
         self.checkpoint_every_episodes = max(1, int(checkpoint_every_episodes))
         self.verbose = int(verbose)
+        self.algorithm = str(algorithm).upper()
         self.episode = 0
         self.best_progress = -float("inf")
         self.best_dense_progress = -float("inf")
@@ -266,11 +274,11 @@ class EpisodeMetricsCallback:
                 self.best_reward = episode_reward
                 self.model.save(self.run_dir / "best_model")
             if self.episode % self.checkpoint_every_episodes == 0:
-                self.model.save(self.checkpoints_dir / f"sac_episode_{self.episode:05d}")
+                self.model.save(self.checkpoints_dir / f"{self.algorithm.lower()}_episode_{self.episode:05d}")
 
         if self.verbose:
             print(
-                f"[TM2D SAC] ep={self.episode} dense={dense_progress:.2f}% "
+                f"[TM2D {self.algorithm}] ep={self.episode} dense={dense_progress:.2f}% "
                 f"progress={progress:.2f}% reward={episode_reward:.3f} "
                 f"fin={int(row['finished'])} crashes={int(row['crashes'])} "
                 f"time={row['time']:.2f}s"
@@ -297,7 +305,7 @@ class StopTrainingOnWallClock:
                     return True
                 if self.verbose:
                     print(
-                        "[TM2D SAC] Max runtime reached: "
+                        "[TM2D RL] Max runtime reached: "
                         f"{elapsed / 60.0:.2f}min >= {self.outer.max_runtime_minutes:.2f}min"
                     )
                 return False
@@ -313,15 +321,16 @@ class StopTrainingOnWallClock:
         self.callback = _Callback(self)
 
 
-def build_run_dir(base_dir: str, map_name: str, reward_mode: str, action_layout: str) -> Path:
-    run_name = f"{timestamp()}_tm2d_sac_{map_name}_{reward_mode}_{action_layout}"
+def build_run_dir(base_dir: str, algorithm: str, map_name: str, reward_mode: str, action_layout: str) -> Path:
+    run_name = f"{timestamp()}_tm2d_{algorithm.lower()}_{map_name}_{reward_mode}_{action_layout}"
     run_dir = Path(base_dir) / sanitize_name(run_name)
     run_dir.mkdir(parents=True, exist_ok=False)
     return run_dir
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Stable-Baselines3 SAC over the fast TM2D simulator.")
+    parser = argparse.ArgumentParser(description="Stable-Baselines3 RL over the fast TM2D simulator.")
+    parser.add_argument("--algorithm", default="SAC", choices=["SAC", "PPO", "TD3"])
     parser.add_argument("--map-name", default=DEFAULT_MAP_NAME)
     parser.add_argument(
         "--reward-mode",
@@ -339,6 +348,8 @@ def parse_args() -> argparse.Namespace:
             "delta_lexicographic_terminal",
             "terminal_progress_time_efficiency",
             "delta_progress_time_efficiency",
+            "terminal_finished_progress_time",
+            "delta_finished_progress_time",
             "terminal_progress_time_safety",
             "delta_progress_time_safety",
             "terminal_progress_time_block_penalty",
@@ -374,13 +385,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-freq", type=int, default=1)
     parser.add_argument("--train-freq-unit", choices=["step", "episode"], default="episode")
     parser.add_argument("--ent-coef", default="0.01")
+    parser.add_argument("--n-steps", type=int, default=2048)
+    parser.add_argument("--n-epochs", type=int, default=10)
+    parser.add_argument("--gae-lambda", type=float, default=0.95)
+    parser.add_argument("--clip-range", type=float, default=0.2)
+    parser.add_argument("--action-noise-sigma", type=float, default=0.10)
     parser.add_argument("--net-arch", default=",".join(str(dim) for dim in DEFAULT_NET_ARCH))
     parser.add_argument("--activation-fn", choices=["relu", "tanh", "elu", "leaky_relu"], default="relu")
     parser.add_argument("--terminal-fitness-scale", type=float, default=1_000_000.0)
     parser.add_argument("--pace-target-time", type=float, default=None)
     parser.add_argument("--initial-model-path", default=None)
     parser.add_argument("--device", default="cpu")
-    parser.add_argument("--log-dir", default="Experiments/runs")
+    parser.add_argument("--log-dir", default=DEFAULT_LOG_DIR)
     parser.add_argument("--run-dir", default=None)
     parser.add_argument("--import-check", action="store_true")
     return parser.parse_args()
@@ -388,9 +404,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    from stable_baselines3 import SAC
+    from stable_baselines3 import PPO, SAC, TD3
     from stable_baselines3.common.callbacks import CallbackList, StopTrainingOnMaxEpisodes
     from stable_baselines3.common.monitor import Monitor
+    from stable_baselines3.common.noise import NormalActionNoise
 
     if args.import_check:
         print("Stable-Baselines3 import check OK.")
@@ -399,7 +416,7 @@ def main() -> None:
     run_dir = (
         Path(args.run_dir)
         if args.run_dir
-        else build_run_dir(args.log_dir, args.map_name, args.reward_mode, args.action_layout)
+        else build_run_dir(args.log_dir, args.algorithm, args.map_name, args.reward_mode, args.action_layout)
     )
     raw_env = TM2DSB3Env(
         map_name=args.map_name,
@@ -416,7 +433,7 @@ def main() -> None:
     net_arch = parse_int_list(args.net_arch)
     train_freq = (int(args.train_freq), str(args.train_freq_unit))
     config = {
-        "algorithm": "SAC",
+        "algorithm": args.algorithm,
         "map_name": args.map_name,
         "reward_mode": args.reward_mode,
         "action_layout": args.action_layout,
@@ -436,6 +453,11 @@ def main() -> None:
         "gradient_steps": int(args.gradient_steps),
         "train_freq": list(train_freq),
         "ent_coef": args.ent_coef,
+        "n_steps": int(args.n_steps),
+        "n_epochs": int(args.n_epochs),
+        "gae_lambda": float(args.gae_lambda),
+        "clip_range": float(args.clip_range),
+        "action_noise_sigma": float(args.action_noise_sigma),
         "net_arch": list(net_arch),
         "activation_fn": args.activation_fn,
         "terminal_fitness_scale": float(args.terminal_fitness_scale),
@@ -448,43 +470,43 @@ def main() -> None:
     }
     (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
-    print("\n[TM2D SAC] Prepared local SAC experiment")
-    print(f"[TM2D SAC] run_dir={run_dir}")
-    print(f"[TM2D SAC] map_name={args.map_name}")
-    print(f"[TM2D SAC] reward_mode={args.reward_mode} action_layout={args.action_layout}")
-    print(f"[TM2D SAC] train_freq={train_freq} gradient_steps={args.gradient_steps}")
-    print(f"[TM2D SAC] net_arch={net_arch} activation={args.activation_fn}")
-    print(f"[TM2D SAC] observation_space={env.observation_space}")
-    print(f"[TM2D SAC] action_space={env.action_space}")
+    algorithm = str(args.algorithm).upper()
+    print(f"\n[TM2D {algorithm}] Prepared local RL experiment")
+    print(f"[TM2D {algorithm}] run_dir={run_dir}")
+    print(f"[TM2D {algorithm}] map_name={args.map_name}")
+    print(f"[TM2D {algorithm}] reward_mode={args.reward_mode} action_layout={args.action_layout}")
+    print(f"[TM2D {algorithm}] train_freq={train_freq} gradient_steps={args.gradient_steps}")
+    print(f"[TM2D {algorithm}] net_arch={net_arch} activation={args.activation_fn}")
+    print(f"[TM2D {algorithm}] observation_space={env.observation_space}")
+    print(f"[TM2D {algorithm}] action_space={env.action_space}")
 
     policy_kwargs = {
         "net_arch": net_arch,
         "activation_fn": activation_fn_from_name(args.activation_fn),
     }
+    algo_classes = {
+        "SAC": SAC,
+        "PPO": PPO,
+        "TD3": TD3,
+    }
+    algo_class = algo_classes[algorithm]
     if args.initial_model_path:
         initial_model_path = Path(args.initial_model_path)
         if not initial_model_path.is_absolute():
             initial_model_path = ROOT / initial_model_path
         if not initial_model_path.exists():
             raise FileNotFoundError(initial_model_path)
-        print(f"[TM2D SAC] Loading initial model: {initial_model_path}")
-        model = SAC.load(
+        print(f"[TM2D {algorithm}] Loading initial model: {initial_model_path}")
+        model = algo_class.load(
             initial_model_path,
             env=env,
             learning_rate=args.learning_rate,
-            buffer_size=args.buffer_size,
-            learning_starts=args.learning_starts,
-            batch_size=args.batch_size,
-            tau=args.tau,
             gamma=args.gamma,
-            train_freq=train_freq,
-            gradient_steps=args.gradient_steps,
-            ent_coef=args.ent_coef,
             verbose=1,
             tensorboard_log=str(run_dir / "tensorboard"),
             device=args.device,
         )
-    else:
+    elif algorithm == "SAC":
         model = SAC(
             "MlpPolicy",
             env,
@@ -502,11 +524,53 @@ def main() -> None:
             tensorboard_log=str(run_dir / "tensorboard"),
             device=args.device,
         )
+    elif algorithm == "PPO":
+        model = PPO(
+            "MlpPolicy",
+            env,
+            learning_rate=args.learning_rate,
+            n_steps=args.n_steps,
+            batch_size=args.batch_size,
+            n_epochs=args.n_epochs,
+            gamma=args.gamma,
+            gae_lambda=args.gae_lambda,
+            clip_range=args.clip_range,
+            ent_coef=float(args.ent_coef),
+            policy_kwargs=policy_kwargs,
+            verbose=1,
+            tensorboard_log=str(run_dir / "tensorboard"),
+            device=args.device,
+        )
+    elif algorithm == "TD3":
+        action_noise = NormalActionNoise(
+            mean=np.zeros(env.action_space.shape[-1], dtype=np.float32),
+            sigma=float(args.action_noise_sigma) * np.ones(env.action_space.shape[-1], dtype=np.float32),
+        )
+        model = TD3(
+            "MlpPolicy",
+            env,
+            learning_rate=args.learning_rate,
+            buffer_size=args.buffer_size,
+            learning_starts=args.learning_starts,
+            batch_size=args.batch_size,
+            tau=args.tau,
+            gamma=args.gamma,
+            train_freq=train_freq,
+            gradient_steps=args.gradient_steps,
+            action_noise=action_noise,
+            policy_kwargs=policy_kwargs,
+            verbose=1,
+            tensorboard_log=str(run_dir / "tensorboard"),
+            device=args.device,
+        )
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
 
     episode_callback = EpisodeMetricsCallback(
         run_dir=run_dir,
         checkpoint_every_episodes=args.checkpoint_every_episodes,
         verbose=1,
+        algorithm=algorithm,
     )
     callbacks = CallbackList(
         [
@@ -525,7 +589,7 @@ def main() -> None:
         )
         model.save(run_dir / "final_model")
         model.save(run_dir / "latest_model")
-        print(f"[TM2D SAC] Finished. Artifacts saved in: {run_dir}")
+        print(f"[TM2D {algorithm}] Finished. Artifacts saved in: {run_dir}")
     finally:
         env.close()
 

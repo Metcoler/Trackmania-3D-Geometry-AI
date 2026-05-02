@@ -206,7 +206,7 @@ class RacingGameEnviroment(gym.Env):
         ]
 
         line = " | ".join(parts)
-        print(line.ljust(self._live_status_width), end="\r")
+        print(line.ljust(self._live_status_width), end="\r", flush=True)
 
     def _neutralize_controller(self) -> None:
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
@@ -225,6 +225,59 @@ class RacingGameEnviroment(gym.Env):
         info["crashes"] = int(self.crashes)
         info["timeout"] = int(bool(timed_out) and self.finished <= 0 and self.crashes <= 0)
         info["max_crashes"] = int(self.max_touches)
+
+    def raw_metrics_from_info(
+        self,
+        info: dict,
+        *,
+        timed_out: bool = False,
+        step_count: int | None = None,
+        terminated: bool | None = None,
+        truncated: bool | None = None,
+    ) -> dict:
+        """Return the canonical raw rollout metrics used by trainers and logs.
+
+        This mirrors the local TM2D simulator contract:
+        `progress` is the discrete/path-tile progress, while `dense_progress`
+        is the continuous projected progress. Ranking code can decide which
+        one should become the active `progress` term.
+        """
+
+        discrete_progress = float(info.get("discrete_progress", 0.0))
+        dense_progress = float(info.get("dense_progress", discrete_progress))
+        dense_progress = max(discrete_progress, dense_progress)
+        time_value = float(info.get("time", 0.0))
+        distance = float(info.get("distance", 0.0))
+
+        finished = int(info.get("finished", int(self.finished)))
+        crashes = int(info.get("crashes", int(self.crashes)))
+        if float(info.get("done", 0.0)) == 1.0 and finished <= 0:
+            finished = 1
+        if finished > 0:
+            crashes = max(0, crashes)
+        else:
+            crashes = max(0, crashes)
+
+        is_timeout = bool(info.get("timeout", 0)) or bool(timed_out) or (
+            bool(truncated)
+            and finished <= 0
+            and crashes <= 0
+        )
+
+        return {
+            "progress": discrete_progress,
+            "discrete_progress": discrete_progress,
+            "dense_progress": dense_progress,
+            "time": time_value,
+            "distance": distance,
+            "finished": 1 if finished > 0 else 0,
+            "crashes": crashes,
+            "timeout": int(is_timeout),
+            "max_crashes": int(self.max_touches),
+            "steps": int(self.current_step if step_count is None else step_count),
+            "terminated": bool(terminated) if terminated is not None else bool(finished > 0 or crashes > 0),
+            "truncated": bool(truncated) if truncated is not None else bool(is_timeout),
+        }
 
     def _press_restart_button(self) -> None:
         self._neutralize_controller()

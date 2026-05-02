@@ -80,7 +80,7 @@ def load_run(run_dir: Path) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
 def summarize_run(run_dir: Path, config: dict, generation: pd.DataFrame, individual: pd.DataFrame) -> dict:
     ranking_key = str(config.get("ranking_key", ""))
     variant = VARIANT_LABELS.get(ranking_key, ranking_key)
-    seed = int(config.get("seed", -1))
+    seed = int(config.get("seed", infer_seed_from_run_dir(run_dir)))
     expected_generations = int(config.get("generations", 0))
     final_generation = int(generation["generation"].max()) if not generation.empty else 0
     final_row = generation.sort_values("generation").iloc[-1] if not generation.empty else pd.Series(dtype=object)
@@ -174,9 +174,19 @@ def add_run_columns(df: pd.DataFrame, config: dict, run_dir: Path) -> pd.DataFra
     ranking_key = str(config.get("ranking_key", ""))
     result["variant"] = VARIANT_LABELS.get(ranking_key, ranking_key)
     result["ranking_key_config"] = ranking_key
-    result["seed"] = int(config.get("seed", -1))
+    result["seed"] = int(config.get("seed", infer_seed_from_run_dir(run_dir)))
     result["run_dir"] = str(run_dir)
     return result
+
+
+def infer_seed_from_run_dir(run_dir: Path) -> int:
+    for part in run_dir.parts:
+        if part.startswith("lex_sweep_seed_"):
+            try:
+                return int(part.replace("lex_sweep_seed_", ""))
+            except ValueError:
+                return -1
+    return -1
 
 
 def sort_summary(summary: pd.DataFrame) -> pd.DataFrame:

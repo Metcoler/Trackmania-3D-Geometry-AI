@@ -147,3 +147,6 @@ Druhý graf ukazuje čas jazdy v sekundách (nedokončené jazdy sú penalizovan
 
 - S použitím miltikriteriálneho trénovania natrénovať čo najlepšieho jedinca.
 - Napísanie diplomovej práce
+
+
+

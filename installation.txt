@@ -36,3 +36,5 @@ Oficiálne odkazy:
 - PyTorch install selector: https://pytorch.org/get-started/locally/
 - vgamepad: https://pypi.org/project/vgamepad/
 - ViGEmBus driver: https://github.com/ViGEm/ViGEmBus/releases/
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_ablation_pc2_time.ps1

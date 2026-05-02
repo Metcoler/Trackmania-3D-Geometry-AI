@@ -496,6 +496,7 @@ def main() -> None:
         "ranking_key_expression": ranking_key_expression,
         "ranking_progress_source": ranking_progress_source,
         "reward_mode": args.reward_mode,
+        "seed": int(args.seed),
         "collision_mode": args.collision_mode,
         "collision_distance_threshold": float(args.collision_distance_threshold),
         "vertical_mode": bool(args.vertical_mode),

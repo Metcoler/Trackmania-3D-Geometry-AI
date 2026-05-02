@@ -1,2 +1,0 @@
-run_label,run_short,episodes,max_dense_progress,max_progress,last100_mean_dense,last100_mean_reward,finish_count,crash_count,timeout_count,first_finish_episode,best_finish_time,best_dense_episode,best_dense_time,source_csv
-PPO | delta_finished_progress_time | gas_brake_steer,.,1301,1.9505691528320312,0.0,1.6316761561802458,0.016731040000000003,0,1301,0,-1,,764,5.006868884575114,Experiments\runs_rl\ppo_gas_brake_steer_delta_aitraining5_20260501_204641_2h\episode_metrics.csv

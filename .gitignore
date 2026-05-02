@@ -34,3 +34,4 @@ RL_test/logs/sb3_runs/**/*.zip
 Experiments/runs/
 Experiments/runs_rl/
 
+*/material_0.png

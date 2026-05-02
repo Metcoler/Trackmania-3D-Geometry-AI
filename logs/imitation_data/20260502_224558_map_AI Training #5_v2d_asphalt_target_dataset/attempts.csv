@@ -1,0 +1,22 @@
+attempt_index,saved,num_frames,finish_time,discrete_progress,dense_progress,finished,crashes,timeout,distance,path
+1,1,2058,172.25,100.0,100.0,1,0,0,1159.714599609375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0001.npz
+2,1,1911,21.899999618530273,100.0,100.0,1,0,0,1152.804931640625,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0002.npz
+3,1,2000,23.170000076293945,100.0,100.0,1,0,0,1212.725341796875,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0003.npz
+4,1,1977,22.510000228881836,100.0,100.0,1,0,0,1170.4766845703125,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0004.npz
+5,1,1865,22.079999923706055,100.0,100.0,1,0,0,1167.7398681640625,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0005.npz
+6,1,1910,21.780000686645508,100.0,100.0,1,0,0,1140.0009765625,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0006.npz
+7,1,1883,21.56999969482422,100.0,100.0,1,0,0,1148.616943359375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0007.npz
+8,1,1998,22.610000610351562,100.0,100.0,1,0,0,1167.472412109375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0008.npz
+9,1,1907,21.75,100.0,100.0,1,0,0,1136.207763671875,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0009.npz
+10,1,1896,21.5,100.0,100.0,1,0,0,1129.6204833984375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0010.npz
+11,1,1944,22.079999923706055,100.0,100.0,1,0,0,1133.8013916015625,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0011.npz
+12,1,1966,22.3799991607666,100.0,100.0,1,0,0,1151.296630859375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0012.npz
+13,1,2008,22.969999313354492,100.0,100.0,1,0,0,1142.65234375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0013.npz
+14,0,965,11.59000015258789,48.57142857142857,48.9689561055779,0,0,0,498.87432861328125,
+15,1,2029,23.229999542236328,100.0,100.0,1,0,0,1164.772705078125,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0015.npz
+16,1,2130,23.969999313354492,100.0,100.0,1,0,0,1133.0216064453125,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0016.npz
+17,1,2059,23.1200008392334,100.0,100.0,1,0,0,1191.9671630859375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0017.npz
+18,1,2216,24.979999542236328,100.0,100.0,1,0,0,1141.6409912109375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0018.npz
+19,1,2162,24.729999542236328,100.0,100.0,1,0,0,1181.4212646484375,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0019.npz
+20,1,2092,24.100000381469727,100.0,100.0,1,0,0,1173.70263671875,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0020.npz
+21,1,2045,23.049999237060547,100.0,100.0,1,0,0,1155.7919921875,logs/imitation_data\20260502_224558_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0021.npz

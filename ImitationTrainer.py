@@ -56,6 +56,29 @@ def find_attempt_files_in_roots(roots: Sequence[str]) -> List[str]:
     return sorted(set(files))
 
 
+def count_attempt_frames(attempt_files: Sequence[str]) -> int:
+    total = 0
+    for path in attempt_files:
+        try:
+            with np.load(path) as data:
+                total += int(data["observations"].shape[0])
+        except Exception:
+            # Frame count is only used for user feedback; training will surface
+            # any real dataset issue through the normal loading path.
+            continue
+    return total
+
+
+def make_grad_scaler(device: torch.device):
+    amp_enabled = device.type == "cuda"
+    if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+        try:
+            return torch.amp.GradScaler("cuda", enabled=amp_enabled)
+        except TypeError:
+            return torch.amp.GradScaler(enabled=amp_enabled)
+    return torch.cuda.amp.GradScaler(enabled=amp_enabled)
+
+
 def canonicalize_action(action: np.ndarray, binarize_gas_brake: bool) -> np.ndarray:
     clean = np.asarray(action, dtype=np.float32).reshape(3).copy()
     clean[0] = float(np.clip(clean[0], 0.0, 1.0))
@@ -70,9 +93,9 @@ def canonicalize_action(action: np.ndarray, binarize_gas_brake: bool) -> np.ndar
 @dataclass
 class ImitationMixConfig:
     mode: str = "switch"
-    num_attempts: int = 50
+    num_attempts: int = 20
     initial_agent_probability: float = 0.0
-    max_agent_probability: float = 0.30
+    max_agent_probability: float = 1.00
     agent_hold_seconds: float = 0.10
     random_seed: int = 20260502
     binarize_executed_gas_brake: bool = False
@@ -128,6 +151,10 @@ class HumanAgentMixer:
             return canonicalize_action(agent, self.config.binarize_executed_gas_brake), "agent"
 
         if mode == "blend":
+            if probability <= 1e-6:
+                return canonicalize_action(human, self.config.binarize_executed_gas_brake), "human"
+            if probability >= 1.0 - 1e-6:
+                return canonicalize_action(agent, self.config.binarize_executed_gas_brake), "agent"
             mixed = (1.0 - probability) * human + probability * agent
             return canonicalize_action(mixed, self.config.binarize_executed_gas_brake), "blend"
 
@@ -225,7 +252,7 @@ def fine_tune_policy(
     criterion = nn.SmoothL1Loss(reduction="none")
     loss_weights = torch.tensor([1.0, 1.0, 3.0], dtype=torch.float32, device=device)
     amp_enabled = device.type == "cuda"
-    scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
+    scaler = make_grad_scaler(device)
     last_loss = float("nan")
 
     policy.train()
@@ -276,6 +303,7 @@ def write_event_row(path: str, row: Dict[str, object]) -> None:
         "train_loss",
         "train_frames",
         "train_attempt_files",
+        "train_seconds",
         "model_path",
     ]
     exists = os.path.exists(path)
@@ -298,21 +326,31 @@ def main() -> None:
     parser.add_argument("--data-root", default="logs/imitation_data")
     parser.add_argument("--output-root", default="logs/imitation_runs")
     parser.add_argument("--base-training-data-root", default="logs/supervised_data")
+    parser.add_argument(
+        "--update-data-scope",
+        default="attempt",
+        choices=["attempt", "session", "all"],
+        help=(
+            "Data used after A confirmation. 'attempt' fine-tunes only on the "
+            "newly accepted attempt; 'session' uses all accepted attempts from "
+            "this imitation run; 'all' also includes base supervised data."
+        ),
+    )
     parser.add_argument("--initial-model-path", default="latest", help="Path, latest, random, or none.")
     parser.add_argument("--hidden-dim", default="32,16")
     parser.add_argument("--hidden-activation", default="relu,tanh")
-    parser.add_argument("--mix-mode", default="switch", choices=["human", "agent", "switch", "blend"])
+    parser.add_argument("--mix-mode", default="blend", choices=["human", "agent", "switch", "blend"])
     parser.add_argument(
         "--num-attempts",
         type=int,
-        default=50,
+        default=20,
         help=(
             "Number of accepted attempts in the imitation curriculum. "
             "Agent control probability is interpolated linearly over these attempts."
         ),
     )
     parser.add_argument("--initial-agent-probability", type=float, default=0.0)
-    parser.add_argument("--max-agent-probability", type=float, default=0.30)
+    parser.add_argument("--max-agent-probability", type=float, default=1.00)
     parser.add_argument("--agent-hold-seconds", type=float, default=0.10)
     parser.add_argument("--binarize-executed-gas-brake", action="store_true")
     parser.add_argument("--update-epochs", type=int, default=8)
@@ -396,6 +434,7 @@ def main() -> None:
         "observation_layout": ObservationEncoder.feature_names(vertical_mode, multi_surface_mode),
         "mix_config": mix_config.as_dict(),
         "base_training_data_root": args.base_training_data_root,
+        "update_data_scope": args.update_data_scope,
         "update_epochs": int(args.update_epochs),
         "learning_rate": float(args.learning_rate),
         "weight_decay": float(args.weight_decay),
@@ -409,6 +448,7 @@ def main() -> None:
     print(f"Imitation run: {run_dir}")
     print(f"Dataset attempts are saved into: {writer.run_dir}")
     print(f"Loaded model: {loaded_model}")
+    print(f"Update data scope: {args.update_data_scope}")
     print("Workflow:")
     print("- Trackmania should listen to the virtual gamepad, not the physical controller.")
     print("- Drive normally; the script sometimes lets the agent act or blends it in.")
@@ -435,6 +475,7 @@ def main() -> None:
     last_buttons = {"a": 0, "b": 0}
     finish_info: Dict[str, float] = {}
     current_agent_probability = mix_config.probability_for_saved_attempts(saved_attempts)
+    waiting_reset_notice_printed = False
 
     try:
         while True:
@@ -546,6 +587,7 @@ def main() -> None:
                     attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_reset"
+                    waiting_reset_notice_printed = False
                 elif finished:
                     finish_info = dict(
                         time=game_time,
@@ -585,8 +627,23 @@ def main() -> None:
                     output_path = writer.save_attempt(attempt_index, attempt_samples, finish_info)
                     print(f"Attempt {attempt_index:04d} saved: {output_path}")
                     saved_attempts += 1
-                    training_roots = [args.base_training_data_root, writer.run_dir]
-                    attempt_files = find_attempt_files_in_roots(training_roots)
+                    if args.update_data_scope == "attempt":
+                        attempt_files = [output_path]
+                    elif args.update_data_scope == "all":
+                        training_roots = [args.base_training_data_root, writer.run_dir]
+                        attempt_files = find_attempt_files_in_roots(training_roots)
+                    else:
+                        training_roots = [writer.run_dir]
+                        attempt_files = find_attempt_files_in_roots(training_roots)
+                    train_frame_estimate = count_attempt_frames(attempt_files)
+                    train_started_at = time.perf_counter()
+                    print(
+                        "Fitting model... "
+                        f"attempts={len(attempt_files)} | "
+                        f"frames={train_frame_estimate} | "
+                        f"epochs={int(args.update_epochs)} | "
+                        f"scope={args.update_data_scope}"
+                    )
                     train_stats = fine_tune_policy(
                         policy=policy,
                         attempt_files=attempt_files,
@@ -611,12 +668,15 @@ def main() -> None:
                             "observation_layout": ObservationEncoder.feature_names(vertical_mode, multi_surface_mode),
                         },
                     )
+                    train_seconds = time.perf_counter() - train_started_at
                     print(
                         f"Model updated | saved_attempts={saved_attempts} | "
                         f"loss={float(train_stats['loss']):.6f} | "
                         f"frames={int(train_stats['frames'])} | "
+                        f"update_s={train_seconds:.2f} | "
                         f"next_p_agent={mix_config.probability_for_saved_attempts(saved_attempts):.3f}"
                     )
+                    print("Press B/reset in Trackmania to start next attempt.")
                     write_event_row(
                         events_path,
                         {
@@ -633,6 +693,7 @@ def main() -> None:
                             "train_loss": float(train_stats["loss"]),
                             "train_frames": int(train_stats["frames"]),
                             "train_attempt_files": int(train_stats["attempt_files"]),
+                            "train_seconds": float(train_seconds),
                             "model_path": latest_model_path,
                         },
                     )
@@ -645,16 +706,22 @@ def main() -> None:
                     attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_reset"
+                    waiting_reset_notice_printed = False
                 elif b_pressed:
                     print(f"Attempt {attempt_index:04d} discarded after finish.")
                     writer.log_discard(attempt_index, attempt_samples, finish_info)
                     attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_reset"
+                    waiting_reset_notice_printed = False
 
             elif state == "waiting_for_reset":
+                if not waiting_reset_notice_printed:
+                    print("Waiting for Trackmania reset... press B/reset if the next attempt has not started.")
+                    waiting_reset_notice_printed = True
                 if game_time <= 0.0:
                     state = "waiting_for_start"
+                    waiting_reset_notice_printed = False
 
     except KeyboardInterrupt:
         print("\nStopped imitation training.")

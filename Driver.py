@@ -46,6 +46,25 @@ def find_latest_supervised_model(
     return max(files, key=os.path.getmtime)
 
 
+def find_latest_policy_model() -> str:
+    """Find newest deployable NeuralPolicy model, preferring imitation runs."""
+    patterns = [
+        "logs/imitation_runs/**/latest_model.pt",
+        "logs/supervised_runs/**/best_model.pt",
+    ]
+    files: List[str] = []
+    for pattern in patterns:
+        files.extend(glob.glob(pattern, recursive=True))
+
+    if not files:
+        raise FileNotFoundError(
+            "No policy model found. Check logs/imitation_runs for latest_model.pt "
+            "or logs/supervised_runs for best_model.pt."
+        )
+
+    return max(files, key=os.path.getmtime)
+
+
 def infer_hidden_dim(genome_size: int, obs_dim: int, act_dim: int) -> int:
     """
     Infer hidden_dim from flattened MLP genome:
@@ -504,8 +523,8 @@ def drive_model(
 
 
 if __name__ == "__main__":
-    MAP_NAME = "AI Training #5"
-    MODEL_FILE = find_latest_supervised_model()
+    MAP_NAME = "AI Training #3"
+    MODEL_FILE = find_latest_policy_model()
     POPULATION_FILE = None
     # POPULATION_FILE = None  # Auto-pick latest supported population checkpoint.
     # Example TM checkpoint:

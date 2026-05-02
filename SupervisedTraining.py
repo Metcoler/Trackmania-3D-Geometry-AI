@@ -1,3 +1,4 @@
+import argparse
 import glob
 import json
 import os
@@ -15,8 +16,19 @@ from NeuralPolicy import NeuralPolicy
 from ObservationEncoder import ObservationEncoder
 
 
-DEFAULT_VERTICAL_MODE = True
-DEFAULT_MULTI_SURFACE_MODE = True
+DEFAULT_VERTICAL_MODE = False
+DEFAULT_MULTI_SURFACE_MODE = False
+
+
+def parse_bool(value: str | bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Expected boolean value, got {value!r}.")
 
 
 def choose_device() -> torch.device:
@@ -56,161 +68,119 @@ def find_attempt_files(base_dir: str = "logs/supervised_data") -> List[str]:
     return sorted(files)
 
 
-def load_attempt(path: str) -> Dict[str, np.ndarray]:
-    encoder = ObservationEncoder(
-        vertical_mode=DEFAULT_VERTICAL_MODE,
-        multi_surface_mode=DEFAULT_MULTI_SURFACE_MODE,
+def _neutral_feature_value(name: str) -> float:
+    if name.startswith("laser_"):
+        return 1.0
+    if name.startswith("surface_instruction_"):
+        return 1.0
+    if name == "support_normal_y":
+        return 1.0
+    if name == "dt_ratio":
+        return 1.0
+    return 0.0
+
+
+def _infer_source_feature_names(obs_dim: int) -> List[str] | None:
+    modes = ObservationEncoder.infer_modes_from_dim(obs_dim)
+    if modes is None:
+        return None
+    vertical_mode, multi_surface_mode = modes
+    return ObservationEncoder.feature_names(
+        vertical_mode=vertical_mode,
+        multi_surface_mode=multi_surface_mode,
     )
-    expected_obs_dim = encoder.obs_dim
-    base_obs_dim = encoder.base_obs_dim()
-    slip_obs_dim = encoder.slip_obs_dim()
-    surface_obs_dim = encoder.surface_obs_dim()
-    height_obs_dim = encoder.height_obs_dim()
-    non_vertical_obs_dim = ObservationEncoder.total_obs_dim(
-        vertical_mode=False,
-        multi_surface_mode=DEFAULT_MULTI_SURFACE_MODE,
+
+
+def convert_observations_to_layout(
+    observations: np.ndarray,
+    target_vertical_mode: bool,
+    target_multi_surface_mode: bool,
+) -> np.ndarray:
+    """Map observations by feature name instead of slicing by position.
+
+    This is important after the observation layout became configurable. A 53-dim
+    v3d+surface dataset stores temporal features after surface+height features,
+    while the 34-dim v2d+asphalt model expects those temporal features directly
+    after `slip_mean`.
+    """
+
+    obs = np.asarray(observations, dtype=np.float32)
+    if obs.ndim != 2:
+        raise ValueError(f"Expected 2D observations, got shape {obs.shape}.")
+
+    source_names = _infer_source_feature_names(obs.shape[1])
+    target_names = ObservationEncoder.feature_names(
+        vertical_mode=bool(target_vertical_mode),
+        multi_surface_mode=bool(target_multi_surface_mode),
     )
-    old_slip_temporal_obs_dim = slip_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
-    old_surface_temporal_obs_dim = surface_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
+
+    if source_names is None:
+        # Historical fallback: keep only canonical feature names that still fit.
+        # This intentionally does not preserve any old appended action-leakage
+        # columns such as previous gas/brake/steer.
+        source_names = ObservationEncoder.feature_names(
+            vertical_mode=False,
+            multi_surface_mode=False,
+        )[: obs.shape[1]]
+
+    source_index = {name: idx for idx, name in enumerate(source_names) if idx < obs.shape[1]}
+    converted = np.empty((obs.shape[0], len(target_names)), dtype=np.float32)
+    for target_idx, name in enumerate(target_names):
+        source_idx = source_index.get(name)
+        if source_idx is None:
+            converted[:, target_idx] = _neutral_feature_value(name)
+        else:
+            converted[:, target_idx] = obs[:, source_idx]
+    return converted
+
+
+def mask_action_leakage_features(
+    observations: np.ndarray,
+    feature_names: Sequence[str],
+    mask_feature_names: Sequence[str],
+) -> Tuple[np.ndarray, List[str]]:
+    """Zero out any direct action/input features if a legacy dataset contains them."""
+
+    if not mask_feature_names:
+        return observations, []
+    masked = np.asarray(observations, dtype=np.float32).copy()
+    name_to_index = {name: idx for idx, name in enumerate(feature_names)}
+    applied: List[str] = []
+    for name in mask_feature_names:
+        idx = name_to_index.get(name)
+        if idx is None:
+            continue
+        masked[:, idx] = 0.0
+        applied.append(name)
+    return masked, applied
+
+
+def load_attempt(
+    path: str,
+    target_vertical_mode: bool = DEFAULT_VERTICAL_MODE,
+    target_multi_surface_mode: bool = DEFAULT_MULTI_SURFACE_MODE,
+    mask_feature_names: Sequence[str] = (),
+) -> Dict[str, np.ndarray]:
     with np.load(path) as data:
-        observations = np.asarray(data["observations"], dtype=np.float32)
-        if observations.ndim != 2:
-            raise ValueError(f"Expected 2D observations in {path}, got shape {observations.shape}.")
-        if observations.shape[1] == expected_obs_dim:
-            pass
-        elif observations.shape[1] == old_surface_temporal_obs_dim:
-            # Historical surface-aware observations had temporal features immediately
-            # after surface instructions. Insert flat height defaults before temporal.
-            observations = np.concatenate(
-                [
-                    observations[:, :surface_obs_dim],
-                    np.zeros((observations.shape[0], height_obs_dim - surface_obs_dim), dtype=np.float32),
-                    observations[:, surface_obs_dim:old_surface_temporal_obs_dim],
-                ],
-                axis=1,
-            )
-        elif observations.shape[1] == old_slip_temporal_obs_dim:
-            # Historical full observations had temporal features immediately after
-            # wheel slip. Insert asphalt-like surface and flat height defaults before
-            # temporal data.
-            observations = np.concatenate(
-                [
-                    observations[:, :slip_obs_dim],
-                    np.ones((observations.shape[0], surface_obs_dim - slip_obs_dim), dtype=np.float32),
-                    np.zeros((observations.shape[0], height_obs_dim - surface_obs_dim), dtype=np.float32),
-                    observations[:, slip_obs_dim:old_slip_temporal_obs_dim],
-                ],
-                axis=1,
-            )
-        elif observations.shape[1] >= height_obs_dim and observations.shape[1] < expected_obs_dim:
-            observations = observations[:, : min(observations.shape[1], non_vertical_obs_dim)]
-            if observations.shape[1] < non_vertical_obs_dim:
-                observations = np.pad(
-                    observations,
-                    ((0, 0), (0, non_vertical_obs_dim - observations.shape[1])),
-                    mode="constant",
-                    constant_values=0.0,
-                )
-        elif observations.shape[1] >= surface_obs_dim and observations.shape[1] < height_obs_dim:
-            observations = observations[:, :surface_obs_dim]
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, height_obs_dim - surface_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, non_vertical_obs_dim - height_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
-        elif observations.shape[1] >= slip_obs_dim and observations.shape[1] < surface_obs_dim:
-            # Current 33-dim datasets already contain slip features but not the newer
-            # surface/temporal blocks. Preserve the canonical slip prefix, pad
-            # surface traction with asphalt defaults, and pad temporal features
-            # with zeros.
-            observations = observations[:, :slip_obs_dim]
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, surface_obs_dim - slip_obs_dim)),
-                mode="constant",
-                constant_values=1.0,
-            )
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, height_obs_dim - surface_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, non_vertical_obs_dim - height_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
-        elif observations.shape[1] >= base_obs_dim and observations.shape[1] < slip_obs_dim:
-            # Historical datasets used the canonical 29-dim prefix and, in some runs,
-            # appended previous-action leakage after that prefix. Keep only the safe
-            # canonical prefix, then pad all newer features.
-            observations = observations[:, :base_obs_dim]
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, slip_obs_dim - base_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, surface_obs_dim - slip_obs_dim)),
-                mode="constant",
-                constant_values=1.0,
-            )
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, height_obs_dim - surface_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, non_vertical_obs_dim - height_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
-        elif observations.shape[1] < base_obs_dim:
-            raise ValueError(
-                f"Observation dim {observations.shape[1]} in {path} is smaller than "
-                f"the canonical base observation {base_obs_dim}."
-            )
-        if observations.shape[1] < expected_obs_dim:
-            # New canonical supervised models use the 3D-compatible observation.
-            # Older flat datasets are still usable by appending neutral vertical
-            # terrain features: no vertical speed, flat forward/cross slope, and
-            # upright support normal.
-            missing = expected_obs_dim - observations.shape[1]
-            vertical_feature_count = len(ObservationEncoder.VERTICAL_FEATURE_NAMES)
-            if missing == vertical_feature_count:
-                neutral_vertical = np.zeros(
-                    (observations.shape[0], vertical_feature_count),
-                    dtype=np.float32,
-                )
-                support_normal_y_idx = 2
-                neutral_vertical[:, support_normal_y_idx] = 1.0
-                observations = np.concatenate([observations, neutral_vertical], axis=1)
-            else:
-                observations = np.pad(
-                    observations,
-                    ((0, 0), (0, missing)),
-                    mode="constant",
-                    constant_values=0.0,
-                )
-        if observations.shape[1] > expected_obs_dim:
-            observations = observations[:, :expected_obs_dim]
+        observations = convert_observations_to_layout(
+            np.asarray(data["observations"], dtype=np.float32),
+            target_vertical_mode=target_vertical_mode,
+            target_multi_surface_mode=target_multi_surface_mode,
+        )
+        feature_names = ObservationEncoder.feature_names(
+            vertical_mode=bool(target_vertical_mode),
+            multi_surface_mode=bool(target_multi_surface_mode),
+        )
+        observations, masked_features = mask_action_leakage_features(
+            observations,
+            feature_names=feature_names,
+            mask_feature_names=mask_feature_names,
+        )
         return dict(
             path=path,
             observations=observations,
             actions=np.asarray(data["actions"], dtype=np.float32),
+            masked_features=list(masked_features),
         )
 
 
@@ -284,6 +254,8 @@ def preprocess_attempt(
     apply_boring_filter: bool,
     apply_frame_cap: bool,
     augment_mirror: bool,
+    target_vertical_mode: bool,
+    target_multi_surface_mode: bool,
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, int]]:
     raw_count = int(observations.shape[0])
     obs, act = canonicalize_target_actions(observations, actions)
@@ -310,7 +282,15 @@ def preprocess_attempt(
 
     if augment_mirror:
         mirrored_obs = np.stack(
-            [ObservationEncoder.mirror_observation(sample) for sample in obs], axis=0
+            [
+                ObservationEncoder.mirror_observation(
+                    sample,
+                    vertical_mode=target_vertical_mode,
+                    multi_surface_mode=target_multi_surface_mode,
+                )
+                for sample in obs
+            ],
+            axis=0,
         ).astype(np.float32)
         mirrored_act = act.copy()
         mirrored_act[:, 2] *= -1.0
@@ -334,13 +314,21 @@ def build_dataset_from_attempts(
     apply_boring_filter: bool,
     apply_frame_cap: bool,
     augment_mirror: bool,
+    target_vertical_mode: bool,
+    target_multi_surface_mode: bool,
+    mask_feature_names: Sequence[str],
 ) -> Tuple[np.ndarray, np.ndarray, Dict]:
     observations: List[np.ndarray] = []
     actions: List[np.ndarray] = []
     per_attempt_stats: List[Dict] = []
 
     for path in attempt_files:
-        attempt = load_attempt(path)
+        attempt = load_attempt(
+            path,
+            target_vertical_mode=target_vertical_mode,
+            target_multi_surface_mode=target_multi_surface_mode,
+            mask_feature_names=mask_feature_names,
+        )
         obs, act, stats = preprocess_attempt(
             observations=attempt["observations"],
             actions=attempt["actions"],
@@ -350,12 +338,15 @@ def build_dataset_from_attempts(
             apply_boring_filter=apply_boring_filter,
             apply_frame_cap=apply_frame_cap,
             augment_mirror=augment_mirror,
+            target_vertical_mode=target_vertical_mode,
+            target_multi_surface_mode=target_multi_surface_mode,
         )
         observations.append(obs)
         actions.append(act)
         per_attempt_stats.append(
             dict(
                 path=path,
+                masked_features=list(attempt.get("masked_features", [])),
                 **stats,
             )
         )
@@ -385,25 +376,66 @@ def build_dataset_from_attempts(
         apply_boring_filter=bool(apply_boring_filter),
         apply_frame_cap=bool(apply_frame_cap),
         augment_mirror=bool(augment_mirror),
+        target_vertical_mode=bool(target_vertical_mode),
+        target_multi_surface_mode=bool(target_multi_surface_mode),
+        target_observation_dim=int(observations_arr.shape[1]),
+        mask_feature_names=list(mask_feature_names),
         per_attempt=per_attempt_stats,
     )
     return observations_arr, actions_arr, stats
 
 
-if __name__ == "__main__":
-    data_root = "logs/supervised_data"
-    output_root = "logs/supervised_runs"
+def parse_csv_values(value: str) -> List[str]:
+    return [item.strip() for item in str(value).split(",") if item.strip()]
 
-    # Simple baseline: all frames in one shuffled pool, no validation split.
-    hidden_dims = [16]
-    hidden_activations = ["relu"]
-    batch_size_override = None
-    epochs = 150
-    learning_rate = 1e-3
-    weight_decay = 1e-5
-    train_boring_keep_probability = 0.9
-    train_max_frames_after_filter = None
-    random_seed = 51951
+
+def parse_int_list(value: str) -> List[int]:
+    return [int(item) for item in parse_csv_values(value)]
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train a supervised target policy from recorded attempts.")
+    parser.add_argument("--data-root", default="logs/supervised_data")
+    parser.add_argument("--output-root", default="logs/supervised_runs")
+    parser.add_argument("--vertical-mode", type=parse_bool, default=DEFAULT_VERTICAL_MODE)
+    parser.add_argument("--multi-surface-mode", type=parse_bool, default=DEFAULT_MULTI_SURFACE_MODE)
+    parser.add_argument("--hidden-dim", default="32,16")
+    parser.add_argument("--hidden-activation", default="relu,tanh")
+    parser.add_argument("--epochs", type=int, default=150)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--boring-keep-probability", type=float, default=0.9)
+    parser.add_argument("--max-frames-after-filter", type=int, default=None)
+    parser.add_argument("--disable-boring-filter", action="store_true")
+    parser.add_argument("--disable-mirror", action="store_true")
+    parser.add_argument(
+        "--mask-feature-names",
+        default="steer,gas,brake,input_steer,input_gas,input_brake,previous_steer,previous_gas,previous_brake",
+        help=(
+            "Comma-separated observation feature names to zero before training. "
+            "Current canonical observations do not include direct actions, but this "
+            "guards against old action-leakage datasets."
+        ),
+    )
+    parser.add_argument("--random-seed", type=int, default=51951)
+    args = parser.parse_args()
+
+    data_root = args.data_root
+    output_root = args.output_root
+    target_vertical_mode = bool(args.vertical_mode)
+    target_multi_surface_mode = bool(args.multi_surface_mode)
+
+    hidden_dims = parse_int_list(args.hidden_dim)
+    hidden_activations = parse_csv_values(args.hidden_activation)
+    batch_size_override = args.batch_size
+    epochs = int(args.epochs)
+    learning_rate = float(args.learning_rate)
+    weight_decay = float(args.weight_decay)
+    train_boring_keep_probability = float(args.boring_keep_probability)
+    train_max_frames_after_filter = args.max_frames_after_filter
+    random_seed = int(args.random_seed)
+    mask_feature_names = parse_csv_values(args.mask_feature_names)
 
     rng_train = np.random.default_rng(random_seed + 1)
 
@@ -413,9 +445,12 @@ if __name__ == "__main__":
         rng=rng_train,
         boring_keep_probability=train_boring_keep_probability,
         max_frames_after_filter=train_max_frames_after_filter,
-        apply_boring_filter=True,
+        apply_boring_filter=not bool(args.disable_boring_filter),
         apply_frame_cap=False,
-        augment_mirror=True,
+        augment_mirror=not bool(args.disable_mirror),
+        target_vertical_mode=target_vertical_mode,
+        target_multi_surface_mode=target_multi_surface_mode,
+        mask_feature_names=mask_feature_names,
     )
 
     obs_dim = int(train_obs.shape[1])
@@ -467,7 +502,10 @@ if __name__ == "__main__":
         persistent_workers=persistent_workers,
     )
 
-    lidar_tag = "v3d" if DEFAULT_VERTICAL_MODE else "v2d"
+    lidar_tag = (
+        f"{'v3d' if target_vertical_mode else 'v2d'}_"
+        f"{'surface' if target_multi_surface_mode else 'asphalt'}"
+    )
     run_name = datetime.now().strftime("%Y%m%d_%H%M%S") + f"_{lidar_tag}_target_supervised"
     run_dir = os.path.join(output_root, run_name)
     os.makedirs(run_dir, exist_ok=False)
@@ -522,6 +560,12 @@ if __name__ == "__main__":
                     "train_loss": train_loss,
                     "dataset_stats": dataset_stats,
                     "attempt_files": attempt_files,
+                    "vertical_mode": bool(target_vertical_mode),
+                    "multi_surface_mode": bool(target_multi_surface_mode),
+                    "observation_layout": ObservationEncoder.feature_names(
+                        vertical_mode=target_vertical_mode,
+                        multi_surface_mode=target_multi_surface_mode,
+                    ),
                 },
             )
 
@@ -542,11 +586,11 @@ if __name__ == "__main__":
         "dataset_stats": dataset_stats,
         "obs_dim": obs_dim,
         "observation_layout": ObservationEncoder.feature_names(
-            vertical_mode=DEFAULT_VERTICAL_MODE,
-            multi_surface_mode=DEFAULT_MULTI_SURFACE_MODE,
+            vertical_mode=target_vertical_mode,
+            multi_surface_mode=target_multi_surface_mode,
         ),
-        "vertical_mode": bool(DEFAULT_VERTICAL_MODE),
-        "multi_surface_mode": bool(DEFAULT_MULTI_SURFACE_MODE),
+        "vertical_mode": bool(target_vertical_mode),
+        "multi_surface_mode": bool(target_multi_surface_mode),
         "act_dim": act_dim,
         "hidden_dims": list(hidden_dims),
         "hidden_activation": hidden_activations[0] if len(hidden_activations) == 1 else list(hidden_activations),

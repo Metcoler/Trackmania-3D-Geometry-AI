@@ -504,7 +504,7 @@ def drive_model(
 
 
 if __name__ == "__main__":
-    MAP_NAME = "AI Training #2"
+    MAP_NAME = "AI Training #5"
     MODEL_FILE = find_latest_supervised_model()
     POPULATION_FILE = None
     # POPULATION_FILE = None  # Auto-pick latest supported population checkpoint.
@@ -520,8 +520,8 @@ if __name__ == "__main__":
     MAX_TOUCHES = 3
     NEVER_QUIT = True
     ACTION_MODE = "target"
-    VERTICAL_MODE = True
-    MULTI_SURFACE_MODE = True
+    VERTICAL_MODE = False
+    MULTI_SURFACE_MODE = False
     TARGET_STEER_DEADZONE = 0.05
     PAUSE_BETWEEN = False
 

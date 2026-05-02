@@ -1,82 +1,90 @@
 {
-  "attempt_files": 11,
-  "usable_samples": 45981,
+  "attempt_files": 21,
+  "usable_samples": 47089,
   "speed_stats_from_observation": {
-    "p1": 8.715340867638588,
-    "p5": 32.20529854297638,
-    "p25": 56.928206235170364,
-    "p50": 66.00119918584824,
-    "p75": 76.6340047121048,
-    "p90": 85.635706782341,
-    "p95": 90.89600294828415,
-    "p99": 104.1608288884161
+    "p1": 3.581908092498779,
+    "p5": 18.81480140686035,
+    "p25": 44.17860412597656,
+    "p50": 52.455501556396484,
+    "p75": 58.20280456542969,
+    "p90": 62.191042327880865,
+    "p95": 64.2374053955078,
+    "p99": 66.7500991821289
   },
   "speed_stats_from_distance_derivative": {
-    "p1": 8.55103354552607,
-    "p5": 28.81739503612045,
-    "p25": 49.6936868205226,
-    "p50": 61.8149914171276,
-    "p75": 77.40301354186535,
-    "p90": 93.7299771167048,
-    "p95": 108.39182178822094,
-    "p99": 136.79273950847616
+    "p1": 3.1604512371037656,
+    "p5": 16.680704691869753,
+    "p25": 36.971199694831206,
+    "p50": 44.29219912263971,
+    "p75": 49.809650963189014,
+    "p90": 54.89986648865153,
+    "p95": 59.25731503125877,
+    "p99": 90.0883881663127
   },
   "side_speed_stats": {
-    "p1": -18.44746135175228,
-    "p5": -8.584199473261833,
-    "p25": -0.348400033544749,
-    "p50": -0.03980000474257395,
-    "p75": 0.26000000070780516,
-    "p90": 0.5190000520087779,
-    "p95": 1.1906001018360257,
-    "p99": 15.482600219547745
+    "p1": -11.400768432617188,
+    "p5": -0.6717000365257263,
+    "p25": -0.22640001773834229,
+    "p50": 0.0038999971002340317,
+    "p75": 0.24170000851154327,
+    "p90": 0.4907200336456303,
+    "p95": 0.9523800492286678,
+    "p99": 2.2600959777832053
   },
   "dt_stats": {
-    "p1": 0.0099945068359375,
-    "p5": 0.0099945068359375,
+    "p1": 0.009998321533203125,
+    "p5": 0.009998321533203125,
     "p25": 0.009999990463256836,
     "p50": 0.010000228881835938,
-    "p75": 0.019998550415039062,
-    "p90": 0.0200042724609375,
-    "p95": 0.029998779296875,
-    "p99": 0.040008544921875
+    "p75": 0.010000228881835938,
+    "p90": 0.01000213623046875,
+    "p95": 0.019999980926513672,
+    "p99": 0.020000457763671875
   },
   "abs_steer_stats": {
     "p1": 0.0,
     "p5": 0.0,
-    "p25": 0.328000009059906,
-    "p50": 1.0,
+    "p25": 0.5081527829170227,
+    "p50": 0.9409274458885193,
     "p75": 1.0,
     "p90": 1.0,
     "p95": 1.0,
     "p99": 1.0
   },
   "longitudinal_fit": {
-    "intercept": -15.985050255664415,
-    "gas_accel": 28.187465969913635,
-    "brake_accel": 16.647547864402284,
-    "drag": 0.0966074653718394,
-    "rolling_drag": 15.985050255664415,
-    "rmse": 7.310670520318601,
-    "gas_equilibrium_speed": 126.3092419129564
+    "intercept": -5.5493401083945315,
+    "gas_accel": 19.56307768462489,
+    "brake_accel": 17.46345240462145,
+    "drag": 0.14388644486433222,
+    "rolling_drag": 5.5493401083945315,
+    "rmse": 5.792939087771329,
+    "gas_equilibrium_speed": 97.3944250929519
+  },
+  "steering_fit": {
+    "sample_count": 41896,
+    "signed_max_yaw_rate": 1.0109115868584444,
+    "max_yaw_rate": 1.0109115868584444,
+    "rmse": 0.46027093263749186,
+    "note": "Fit model matches TM2D: yaw_rate ~= steer * (0.25 + 0.75 * clip(speed/70, 0, 1)) * max_yaw_rate."
   },
   "suggested_tm2d_physics_config": {
     "min_dt": 0.008333333333333333,
     "max_dt": 0.04,
-    "max_speed": 143.63237648389998,
+    "max_speed": 120.0,
     "reverse_speed": 10.0,
-    "gas_accel": 28.187,
-    "brake_accel": 16.648,
-    "drag": 0.0966,
-    "rolling_drag": 15.985,
+    "gas_accel": 19.563,
+    "brake_accel": 17.463,
+    "drag": 0.1439,
+    "rolling_drag": 5.549,
     "lateral_grip": 5.5,
-    "max_yaw_rate": 2.35,
+    "max_yaw_rate": 1.011,
     "car_length": 4.8,
     "car_width": 2.6
   },
   "notes": [
     "Fit model: accel ~= intercept + gas*gas_coef + brake*brake_coef + speed*speed_coef.",
     "TM2DPhysicsConfig implements this as gas_accel, brake_accel, rolling_drag and drag.",
-    "Steering/yaw is not directly present in older supervised attempts, so max_yaw_rate remains a hand-tuned curve feasibility parameter."
+    "New supervised datasets save raw speeds/side_speeds/directions directly. Older datasets fall back to observation layout indices where possible.",
+    "Steering fit is a simplified 2D approximation; it should be validated by rollout behavior, not treated as exact Trackmania physics."
   ]
 }

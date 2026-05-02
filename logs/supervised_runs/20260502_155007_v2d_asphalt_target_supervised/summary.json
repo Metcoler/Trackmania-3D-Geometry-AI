@@ -1,0 +1,311 @@
+{
+  "created_utc": "2026-05-02T13:57:29Z",
+  "data_root": "logs\\supervised_data",
+  "all_attempt_files": [
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0008.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0009.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0012.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0014.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0018.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0019.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0020.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0021.npz",
+    "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0023.npz",
+    "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+    "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+    "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0003.npz",
+    "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0004.npz",
+    "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0005.npz",
+    "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+    "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+    "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0008.npz",
+    "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0012.npz",
+    "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0014.npz",
+    "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0015.npz",
+    "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0020.npz"
+  ],
+  "dataset_stats": {
+    "attempt_files": 21,
+    "total_frames_before_filter": 54788,
+    "boring_frames_before_filter": 6095,
+    "frames_after_filter_before_cap": 54204,
+    "frames_after_cap_before_mirror": 54204,
+    "frames_final": 108408,
+    "apply_boring_filter": true,
+    "apply_frame_cap": false,
+    "augment_mirror": true,
+    "target_vertical_mode": false,
+    "target_multi_surface_mode": false,
+    "target_observation_dim": 34,
+    "mask_feature_names": [
+      "steer",
+      "gas",
+      "brake",
+      "input_steer",
+      "input_gas",
+      "input_brake",
+      "previous_steer",
+      "previous_gas",
+      "previous_brake"
+    ],
+    "per_attempt": [
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0008.npz",
+        "masked_features": [],
+        "raw_frames": 2426,
+        "boring_frames": 274,
+        "frames_after_filter": 2396,
+        "frames_after_cap": 2396,
+        "final_frames": 4792
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0009.npz",
+        "masked_features": [],
+        "raw_frames": 2362,
+        "boring_frames": 226,
+        "frames_after_filter": 2346,
+        "frames_after_cap": 2346,
+        "final_frames": 4692
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0012.npz",
+        "masked_features": [],
+        "raw_frames": 2357,
+        "boring_frames": 252,
+        "frames_after_filter": 2325,
+        "frames_after_cap": 2325,
+        "final_frames": 4650
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0014.npz",
+        "masked_features": [],
+        "raw_frames": 2361,
+        "boring_frames": 353,
+        "frames_after_filter": 2335,
+        "frames_after_cap": 2335,
+        "final_frames": 4670
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0018.npz",
+        "masked_features": [],
+        "raw_frames": 2460,
+        "boring_frames": 393,
+        "frames_after_filter": 2426,
+        "frames_after_cap": 2426,
+        "final_frames": 4852
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0019.npz",
+        "masked_features": [],
+        "raw_frames": 2404,
+        "boring_frames": 261,
+        "frames_after_filter": 2385,
+        "frames_after_cap": 2385,
+        "final_frames": 4770
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0020.npz",
+        "masked_features": [],
+        "raw_frames": 2448,
+        "boring_frames": 395,
+        "frames_after_filter": 2410,
+        "frames_after_cap": 2410,
+        "final_frames": 4820
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0021.npz",
+        "masked_features": [],
+        "raw_frames": 2540,
+        "boring_frames": 443,
+        "frames_after_filter": 2493,
+        "frames_after_cap": 2493,
+        "final_frames": 4986
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_145115_map_AI Training #5_v3d_surface_target_dataset\\attempts\\attempt_0023.npz",
+        "masked_features": [],
+        "raw_frames": 2306,
+        "boring_frames": 249,
+        "frames_after_filter": 2279,
+        "frames_after_cap": 2279,
+        "final_frames": 4558
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+        "masked_features": [],
+        "raw_frames": 2874,
+        "boring_frames": 123,
+        "frames_after_filter": 2866,
+        "frames_after_cap": 2866,
+        "final_frames": 5732
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+        "masked_features": [],
+        "raw_frames": 2940,
+        "boring_frames": 117,
+        "frames_after_filter": 2926,
+        "frames_after_cap": 2926,
+        "final_frames": 5852
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0003.npz",
+        "masked_features": [],
+        "raw_frames": 2715,
+        "boring_frames": 96,
+        "frames_after_filter": 2698,
+        "frames_after_cap": 2698,
+        "final_frames": 5396
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0004.npz",
+        "masked_features": [],
+        "raw_frames": 2835,
+        "boring_frames": 108,
+        "frames_after_filter": 2820,
+        "frames_after_cap": 2820,
+        "final_frames": 5640
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0005.npz",
+        "masked_features": [],
+        "raw_frames": 2844,
+        "boring_frames": 129,
+        "frames_after_filter": 2832,
+        "frames_after_cap": 2832,
+        "final_frames": 5664
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+        "masked_features": [],
+        "raw_frames": 2766,
+        "boring_frames": 409,
+        "frames_after_filter": 2719,
+        "frames_after_cap": 2719,
+        "final_frames": 5438
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+        "masked_features": [],
+        "raw_frames": 2842,
+        "boring_frames": 363,
+        "frames_after_filter": 2815,
+        "frames_after_cap": 2815,
+        "final_frames": 5630
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0008.npz",
+        "masked_features": [],
+        "raw_frames": 2576,
+        "boring_frames": 216,
+        "frames_after_filter": 2559,
+        "frames_after_cap": 2559,
+        "final_frames": 5118
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0012.npz",
+        "masked_features": [],
+        "raw_frames": 2700,
+        "boring_frames": 385,
+        "frames_after_filter": 2665,
+        "frames_after_cap": 2665,
+        "final_frames": 5330
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0014.npz",
+        "masked_features": [],
+        "raw_frames": 2620,
+        "boring_frames": 401,
+        "frames_after_filter": 2568,
+        "frames_after_cap": 2568,
+        "final_frames": 5136
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0015.npz",
+        "masked_features": [],
+        "raw_frames": 2720,
+        "boring_frames": 485,
+        "frames_after_filter": 2682,
+        "frames_after_cap": 2682,
+        "final_frames": 5364
+      },
+      {
+        "path": "logs\\supervised_data\\20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0020.npz",
+        "masked_features": [],
+        "raw_frames": 2692,
+        "boring_frames": 417,
+        "frames_after_filter": 2659,
+        "frames_after_cap": 2659,
+        "final_frames": 5318
+      }
+    ]
+  },
+  "obs_dim": 34,
+  "observation_layout": [
+    "laser_0",
+    "laser_1",
+    "laser_2",
+    "laser_3",
+    "laser_4",
+    "laser_5",
+    "laser_6",
+    "laser_7",
+    "laser_8",
+    "laser_9",
+    "laser_10",
+    "laser_11",
+    "laser_12",
+    "laser_13",
+    "laser_14",
+    "path_instruction_0",
+    "path_instruction_1",
+    "path_instruction_2",
+    "path_instruction_3",
+    "path_instruction_4",
+    "speed",
+    "side_speed",
+    "segment_heading_error",
+    "next_segment_heading_error",
+    "dt_ratio",
+    "slip_mean",
+    "longitudinal_accel",
+    "lateral_accel",
+    "yaw_rate",
+    "clearance_rate_sector_0",
+    "clearance_rate_sector_1",
+    "clearance_rate_sector_2",
+    "clearance_rate_sector_3",
+    "clearance_rate_sector_4"
+  ],
+  "vertical_mode": false,
+  "multi_surface_mode": false,
+  "act_dim": 3,
+  "hidden_dims": [
+    32,
+    16
+  ],
+  "hidden_activation": [
+    "relu",
+    "tanh"
+  ],
+  "hidden_activations": [
+    "relu",
+    "tanh"
+  ],
+  "batch_size": 1024,
+  "batch_size_override": null,
+  "num_workers": 0,
+  "pin_memory": false,
+  "amp_enabled": false,
+  "epochs": 150,
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "train_boring_keep_probability": 0.9,
+  "train_max_frames_after_filter": null,
+  "best_epoch": 150,
+  "best_train_loss": 0.044902994041985736,
+  "best_model_path": "logs/supervised_runs\\20260502_155007_v2d_asphalt_target_supervised\\best_model.pt",
+  "curve_path": "logs/supervised_runs\\20260502_155007_v2d_asphalt_target_supervised\\loss_curve.png",
+  "device": "cpu",
+  "random_seed": 51951
+}

@@ -380,17 +380,30 @@ Performance notes for the sandbox:
 - policy inference is not the bottleneck during GA experiments because rollouts use the NumPy policy view
 - multiprocessing helps most on larger populations/generations; tiny smoke tests can be slower due to Windows process startup and per-worker map loading
 
-The current 2D physics defaults are calibrated from the available supervised data where possible:
+The current 2D physics defaults are calibrated from supervised data where possible.
+The latest calibration pass on 2026-05-02 used all available AI Training #5
+supervised datasets under `logs/supervised_data`:
 
-- observed speed median is about `66` TM units/s
-- observed speed p95 is about `91` from the packet speed feature and about `108` from distance derivative
-- observed speed p99 is about `104` from packet speed and about `137` from distance derivative
-- median dt is about `0.010s`, while p95/p99 are about `0.030s`/`0.040s`
-- fitted longitudinal model is approximately `accel = -15.985 + 28.187*gas - 16.648*brake - 0.0966*speed`
+- usable transition samples: `47_089`
+- observed speed median is about `52.46` TM units/s
+- observed speed p95 is about `64.24` from the packet speed feature and about `59.26` from distance derivative
+- observed speed p99 is about `66.75` from packet speed and about `90.09` from distance derivative
+- median dt is about `0.010s`, while p95/p99 are about `0.020s`/`0.020s`
+- fitted longitudinal model is approximately `accel = -5.549 + 19.563*gas - 17.463*brake - 0.1439*speed`
+- fitted simplified steering model gives `max_yaw_rate ~= 1.011`
 
 This calibrates acceleration/drag/braking better than the original toy physics.
-Older supervised attempts do not contain enough direct heading/yaw data to fit steering exactly,
-so `max_yaw_rate` and lateral grip are still pragmatic curve-feasibility parameters.
+The steering fit now uses recorded `directions`, but it is still a simplified 2D
+approximation of Trackmania handling. `lateral_grip` remains a pragmatic
+curve-feasibility parameter and should be validated by rollout behavior.
+
+Known physics limitation: Trackmania has a drift/slip regime when braking or
+turning at sufficient speed. In the current supervised data, about `3.5%` of
+frames have `brake > 0.5`, `speed > 45`, and `slip_mean > 0.5`; these frames
+also show much larger side speed. TM2D does not explicitly model a separate
+drift state. It only has a single lateral velocity damping term, so TM2D is a
+useful reward/selection sandbox but not a high-fidelity Trackmania vehicle
+simulator.
 
 The sandbox reward modes currently include:
 
@@ -1921,10 +1934,54 @@ slow, non-headless, real-time evaluation:
    - Trackmania state through `Car.py`
    - real Xbox controller state through `XboxController.py`
 2. While the human player is driving, it records attempts into `logs/supervised_data/...`.
-3. `SupervisedTraining.py` loads all saved attempts, preprocesses them, applies mirror augmentation, and trains a torch MLP policy in target-action mode.
+3. `SupervisedTraining.py` loads all saved attempts, remaps observations by
+   feature name into the selected target layout, preprocesses them, applies
+   mirror augmentation, and trains a torch MLP policy in target-action mode.
 4. Trained models are stored under `logs/supervised_runs/.../best_model.pt`.
 5. `Driver.py` can load the latest supervised model and replay it in Trackmania.
 6. `GeneticTrainer.py` can also seed a GA population from a `.pt` supervised model.
+
+Current supervised baseline as of 2026-05-02:
+
+- data source: `logs/supervised_data/20260502_145115_map_AI Training #5_v3d_surface_target_dataset`
+- source layout: `53` inputs (`vertical_mode=True`, `multi_surface_mode=True`)
+- training layout: `34` inputs (`vertical_mode=False`, `multi_surface_mode=False`)
+- reason: match the current 2D asphalt parity experiment before reintroducing height/surface features
+- architecture: `[32, 16]` with `relu, tanh`
+- mirror augmentation: enabled; mirrored observations flip left/right lasers,
+  signed direction features, lateral/yaw temporal features, and steering target
+- direct action leakage guard: any legacy observation columns named
+  `steer/gas/brake/input_*/previous_*` are zeroed before training; current
+  canonical observations do not contain such columns
+- trained run: `logs/supervised_runs/20260502_151314_v2d_asphalt_target_supervised`
+- offline sanity sample: `gas_acc ~= 0.967`, `brake_acc ~= 0.984`,
+  `steer_mae ~= 0.158`, best train loss `0.0400`
+
+Supervised robustness idea added on 2026-05-02:
+
+- `Actor.py` can optionally perturb human controller actions during data collection.
+- Perturbation is meant to create recovery/correction data instead of only clean
+  expert-line imitation.
+- Steering uses a persistent Gaussian bias rather than independent frame noise,
+  so the human has to correct a recoverable disturbance instead of fighting
+  pure jitter.
+- Gas/brake can be flipped for short random holds at low per-second rates.
+- The supervised target label `actions` is the human correction action read from
+  the physical controller for the current observation.
+- `executed_actions` stores the perturbed action that was actually applied to
+  Trackmania through the virtual gamepad.
+- This DAgger-like split is intentional: the perturbation creates off-line
+  states, while the human label teaches the policy how to recover correctly.
+- Safety rule: if perturbation is enabled, `Actor.py` refuses to record unless
+  the same perturbed action is also applied to Trackmania through the virtual
+  gamepad. This avoids ambiguous datasets where no recorded action explains
+  the observed transition.
+- Physics calibration must use `executed_actions`, not supervised `actions`,
+  whenever a perturbation dataset is used. `Experiments/calibrate_tm2d_physics.py`
+  now automatically prefers `executed_actions` when present.
+- For this mode, Trackmania should listen to the virtual gamepad output, not
+  directly to the physical controller, otherwise physical and virtual inputs
+  may conflict.
 
 Naming convention:
 
@@ -3033,6 +3090,30 @@ Run:
 ```powershell
 python SupervisedTraining.py
 ```
+
+### Interactive imitation training
+
+Run:
+
+```powershell
+python ImitationTrainer.py
+```
+
+This is a custom DAgger-style loop built from our own components, not a black-box imitation-learning library:
+
+- `Actor.py` provides human controller labels and dataset writing.
+- `Driver.py`-style policy inference provides the current agent action.
+- `SupervisedTraining.py` preprocessing/training utilities update the same `NeuralPolicy`.
+- `vgamepad` sends the selected action to Trackmania.
+
+Important semantics:
+
+- `actions` / `human_actions` are the human correction labels used for supervised learning.
+- `executed_actions` are the actions actually applied to Trackmania.
+- `num_attempts` defines the curriculum horizon.
+- Agent control probability increases linearly from `initial_agent_probability` to `max_agent_probability` across accepted attempts.
+- After each accepted attempt (`A` after finish), the policy is fine-tuned and saved to `latest_model.pt`.
+- This mode is intended to collect recovery states without teaching the network that injected mistakes were the correct action.
 
 
 ## Current Logs/Artifacts Layout

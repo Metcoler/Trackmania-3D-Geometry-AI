@@ -1,11 +1,16 @@
 import csv
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List
 
 import numpy as np
+try:
+    import vgamepad
+except ImportError:  # pragma: no cover - only needed for live perturbation collection.
+    vgamepad = None
 
 from Car import Car
 from Map import Map
@@ -17,6 +22,7 @@ from XboxController import XboxControllerReader, XboxControllerState
 class AttemptSample:
     observation: np.ndarray
     action: np.ndarray
+    executed_action: np.ndarray
     game_time: float
     discrete_progress: float
     dense_progress: float
@@ -36,6 +42,122 @@ class AttemptSample:
     timeout: int
 
 
+@dataclass
+class ActionPerturbationConfig:
+    enabled: bool = False
+    random_seed: int = 20260502
+    steer_sigma: float = 0.18
+    steer_bias_decay: float = 0.96
+    gas_flip_rate_per_second: float = 0.20
+    brake_flip_rate_per_second: float = 0.10
+    min_flip_hold_seconds: float = 0.08
+    max_flip_hold_seconds: float = 0.20
+
+    def as_dict(self) -> Dict[str, float | int | bool]:
+        return {
+            "enabled": bool(self.enabled),
+            "random_seed": int(self.random_seed),
+            "steer_sigma": float(self.steer_sigma),
+            "steer_bias_decay": float(self.steer_bias_decay),
+            "gas_flip_rate_per_second": float(self.gas_flip_rate_per_second),
+            "brake_flip_rate_per_second": float(self.brake_flip_rate_per_second),
+            "min_flip_hold_seconds": float(self.min_flip_hold_seconds),
+            "max_flip_hold_seconds": float(self.max_flip_hold_seconds),
+        }
+
+
+class ActionPerturber:
+    """Inject persistent recoverable mistakes into human driving actions."""
+
+    def __init__(self, config: ActionPerturbationConfig) -> None:
+        self.config = config
+        self.rng = np.random.default_rng(int(config.random_seed))
+        self.steer_bias = 0.0
+        self.gas_flip_until = 0.0
+        self.brake_flip_until = 0.0
+        self.last_time = time.perf_counter()
+
+    @staticmethod
+    def _event_probability(rate_per_second: float, dt: float) -> float:
+        rate = max(0.0, float(rate_per_second))
+        return float(1.0 - np.exp(-rate * max(0.0, float(dt))))
+
+    def _maybe_start_flip(self, now: float, current_until: float, rate: float, dt: float) -> float:
+        if now < current_until:
+            return current_until
+        if self.rng.random() >= self._event_probability(rate, dt):
+            return current_until
+        hold = float(
+            self.rng.uniform(
+                max(0.0, self.config.min_flip_hold_seconds),
+                max(self.config.min_flip_hold_seconds, self.config.max_flip_hold_seconds),
+            )
+        )
+        return now + hold
+
+    def apply(self, action: np.ndarray) -> np.ndarray:
+        clean = np.asarray(action, dtype=np.float32).reshape(3)
+        if not self.config.enabled:
+            return clean.copy()
+
+        now = time.perf_counter()
+        dt = max(1e-3, now - self.last_time)
+        self.last_time = now
+
+        decay = float(np.clip(self.config.steer_bias_decay, 0.0, 0.9999))
+        innovation_scale = np.sqrt(max(0.0, 1.0 - decay * decay))
+        self.steer_bias = (
+            decay * self.steer_bias
+            + innovation_scale * float(self.rng.normal(0.0, self.config.steer_sigma))
+        )
+
+        self.gas_flip_until = self._maybe_start_flip(
+            now=now,
+            current_until=self.gas_flip_until,
+            rate=self.config.gas_flip_rate_per_second,
+            dt=dt,
+        )
+        self.brake_flip_until = self._maybe_start_flip(
+            now=now,
+            current_until=self.brake_flip_until,
+            rate=self.config.brake_flip_rate_per_second,
+            dt=dt,
+        )
+
+        perturbed = clean.copy()
+        perturbed[2] = float(np.clip(perturbed[2] + self.steer_bias, -1.0, 1.0))
+        if now < self.gas_flip_until:
+            perturbed[0] = 1.0 - float(perturbed[0])
+        if now < self.brake_flip_until:
+            perturbed[1] = 1.0 - float(perturbed[1])
+        return perturbed.astype(np.float32, copy=False)
+
+
+class VirtualGamepadActionOutput:
+    def __init__(self) -> None:
+        if vgamepad is None:
+            raise RuntimeError("vgamepad is not installed; cannot apply perturbed actions.")
+        self.gamepad = vgamepad.VX360Gamepad()
+        self.gamepad.reset()
+        self.gamepad.update()
+
+    def apply(self, action: np.ndarray, state: XboxControllerState) -> None:
+        action = np.asarray(action, dtype=np.float32).reshape(3)
+        self.gamepad.reset()
+        self.gamepad.right_trigger_float(float(np.clip(action[0], 0.0, 1.0)))
+        self.gamepad.left_trigger_float(float(np.clip(action[1], 0.0, 1.0)))
+        self.gamepad.left_joystick_float(float(np.clip(action[2], -1.0, 1.0)), 0.0)
+        if int(state.button_a):
+            self.gamepad.press_button(vgamepad.XUSB_BUTTON.XUSB_GAMEPAD_A)
+        if int(state.button_b):
+            self.gamepad.press_button(vgamepad.XUSB_BUTTON.XUSB_GAMEPAD_B)
+        self.gamepad.update()
+
+    def close(self) -> None:
+        self.gamepad.reset()
+        self.gamepad.update()
+
+
 class AttemptWriter:
     SUMMARY_HEADERS = [
         "attempt_index",
@@ -51,7 +173,14 @@ class AttemptWriter:
         "path",
     ]
 
-    def __init__(self, base_dir: str, map_name: str, encoder: ObservationEncoder) -> None:
+    def __init__(
+        self,
+        base_dir: str,
+        map_name: str,
+        encoder: ObservationEncoder,
+        perturbation_config: ActionPerturbationConfig,
+        apply_to_virtual_gamepad: bool,
+    ) -> None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         lidar_tag = (
             f"{'v3d' if encoder.vertical_mode else 'v2d'}_"
@@ -80,6 +209,10 @@ class AttemptWriter:
             "dt_ratio_clip": encoder.dt_ratio_clip,
             "action_mode": "target",
             "action_layout": ["gas", "brake", "steer"],
+            "recorded_action": "human_correction_action",
+            "executed_action": "executed_action_after_perturbation",
+            "action_perturbation": perturbation_config.as_dict(),
+            "action_perturbation_applied_to_virtual_gamepad": bool(apply_to_virtual_gamepad),
         }
         with open(os.path.join(self.run_dir, "config.json"), "w", encoding="utf-8") as handle:
             json.dump(config, handle, indent=2, ensure_ascii=True)
@@ -95,6 +228,7 @@ class AttemptWriter:
 
         observations = np.stack([sample.observation for sample in samples]).astype(np.float32)
         actions = np.stack([sample.action for sample in samples]).astype(np.float32)
+        executed_actions = np.stack([sample.executed_action for sample in samples]).astype(np.float32)
         game_times = np.array([sample.game_time for sample in samples], dtype=np.float32)
         discrete_progress = np.array([sample.discrete_progress for sample in samples], dtype=np.float32)
         dense_progress = np.array([sample.dense_progress for sample in samples], dtype=np.float32)
@@ -113,7 +247,11 @@ class AttemptWriter:
         np.savez(
             output_path,
             observations=observations,
+            # `actions` is intentionally the human correction target for behavior cloning.
+            # `executed_actions` is the actual perturbed action applied to Trackmania.
             actions=actions,
+            human_actions=actions,
+            executed_actions=executed_actions,
             game_times=game_times,
             discrete_progress=discrete_progress,
             dense_progress=dense_progress,
@@ -189,16 +327,33 @@ if __name__ == "__main__":
     map_name = "AI Training #5"
     #map_name = "small_map"
     #map_name = "AI Training #4"
-    vertical_mode = True
-    multi_surface_mode = True
+    vertical_mode = False
+    multi_surface_mode = False
     base_dir = "logs/supervised_data"
+    perturbation_config = ActionPerturbationConfig(
+        enabled=True,
+        random_seed=20260502,
+        steer_sigma=0.18,
+        steer_bias_decay=0.96,
+        gas_flip_rate_per_second=0.20,
+        brake_flip_rate_per_second=0.10,
+        min_flip_hold_seconds=0.08,
+        max_flip_hold_seconds=0.20,
+    )
+    apply_perturbed_action_to_virtual_gamepad = True
     encoder = ObservationEncoder(
         dt_ref=1.0 / 100.0,
         dt_ratio_clip=3.0,
         vertical_mode=vertical_mode,
         multi_surface_mode=multi_surface_mode,
     )
-    writer = AttemptWriter(base_dir=base_dir, map_name=map_name, encoder=encoder)
+    writer = AttemptWriter(
+        base_dir=base_dir,
+        map_name=map_name,
+        encoder=encoder,
+        perturbation_config=perturbation_config,
+        apply_to_virtual_gamepad=apply_perturbed_action_to_virtual_gamepad,
+    )
 
     print(f"Saving supervised attempts into: {writer.run_dir}")
     print("Workflow:")
@@ -206,10 +361,27 @@ if __name__ == "__main__":
     print("- press B during an attempt to discard it")
     print("- after finish, press A to save or B to discard")
     print("- stop script with Ctrl+C")
+    if perturbation_config.enabled:
+        print("Action perturbation is ENABLED.")
+        print(
+            "Important: for physically consistent data, Trackmania should listen "
+            "to the virtual gamepad output, not directly to the physical controller."
+        )
+        if not apply_perturbed_action_to_virtual_gamepad:
+            raise RuntimeError(
+                "Refusing to record perturbed labels without applying them to the game. "
+                "Set apply_perturbed_action_to_virtual_gamepad=True or disable perturbation."
+            )
 
     game_map = Map(map_name)
     car = Car(game_map, vertical_mode=vertical_mode)
     controller = XboxControllerReader()
+    perturber = ActionPerturber(perturbation_config)
+    action_output = (
+        VirtualGamepadActionOutput()
+        if perturbation_config.enabled and apply_perturbed_action_to_virtual_gamepad
+        else None
+    )
 
     attempt_index = 1
     state = "waiting_for_start"
@@ -221,7 +393,10 @@ if __name__ == "__main__":
         while True:
             distances, instructions, info = car.get_data()
             snapshot = controller.snapshot()
-            action = controller_to_action(snapshot)
+            human_action = controller_to_action(snapshot)
+            action = perturber.apply(human_action)
+            if action_output is not None:
+                action_output.apply(action, snapshot)
             a_pressed = rising_edge(snapshot.button_a, last_buttons["a"])
             b_pressed = rising_edge(snapshot.button_b, last_buttons["b"])
             last_buttons["a"] = snapshot.button_a
@@ -252,7 +427,8 @@ if __name__ == "__main__":
                 attempt_samples.append(
                     AttemptSample(
                         observation=observation,
-                        action=action.copy(),
+                        action=human_action.copy(),
+                        executed_action=action.copy(),
                         game_time=game_time,
                         discrete_progress=discrete_progress,
                         dense_progress=float(info.get("dense_progress", dense_progress)),
@@ -338,4 +514,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nStopped data collection.")
     finally:
+        if action_output is not None:
+            action_output.close()
         controller.close()

@@ -86,3 +86,5 @@ python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --p
 
 
 python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time)" --ranking-progress-source dense_progress --reward-mode progress_primary_delta --collision-mode lidar --fixed-fps 60 --seed 2026050304 --num-workers 8 --log-dir Experiments\runs_ga_diagnostic\aabb_lidar_fixed_fps60_binary_p48_e4_m02_time30
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_lexicographic_sweep_aabb_lidar_fixed100.ps1

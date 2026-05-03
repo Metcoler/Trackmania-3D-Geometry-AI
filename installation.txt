@@ -90,3 +90,6 @@ python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --p
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_lexicographic_sweep_aabb_lidar_fixed100.ps1
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_lexicographic_sweep_aabb_lidar_fixed100_2.ps1
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selection_grid_pc2.ps1

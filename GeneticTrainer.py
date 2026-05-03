@@ -1146,6 +1146,7 @@ class GeneticTrainer:
         elite_fraction: float = 0.2,
         mutation_prob: float = 0.1,
         mutation_sigma: float = 0.1,
+        cache_elite_evaluations: bool = True,
     ) -> None:
         self._order_population_for_selection()
 
@@ -1156,6 +1157,9 @@ class GeneticTrainer:
         new_population: List[Individual] = [
             ind.copy() for ind in self.population[:elite_count]
         ]
+        if not cache_elite_evaluations:
+            for elite in new_population:
+                elite.evaluation_valid = False
 
         while len(new_population) < self.pop_size:
             shuffled_indices = np.random.permutation(parent_pool_size)
@@ -1444,6 +1448,7 @@ class GeneticTrainer:
         mutation_sigma_min: float = 0.0,
         mirror_episode_prob: float = 0.0,
         evaluate_both_mirrors: bool = True,
+        cache_elite_evaluations: bool = True,
         verbose: bool = True,
         dnf_time_for_plot: float = 30.0,
         checkpoint_every: int = 10,
@@ -1487,6 +1492,7 @@ class GeneticTrainer:
                 mutation_sigma_min=mutation_sigma_min,
                 mirror_episode_prob=mirror_episode_prob,
                 evaluate_both_mirrors=bool(evaluate_both_mirrors),
+                cache_elite_evaluations=bool(cache_elite_evaluations),
                 checkpoint_every=checkpoint_every,
                 dnf_time_for_plot=dnf_time_for_plot,
             )
@@ -1530,6 +1536,7 @@ class GeneticTrainer:
                 elite_fraction=elite_fraction,
                 mutation_prob=current_mutation_prob,
                 mutation_sigma=current_mutation_sigma,
+                cache_elite_evaluations=cache_elite_evaluations,
             )
             self._loaded_checkpoint_evaluated = False
             self._checkpoint_current_mutation_prob = None
@@ -1725,6 +1732,7 @@ class GeneticTrainer:
                     elite_fraction=elite_fraction,
                     mutation_prob=current_mutation_prob,
                     mutation_sigma=current_mutation_sigma,
+                    cache_elite_evaluations=cache_elite_evaluations,
                 )
                 current_mutation_prob = max(
                     mutation_prob_min,
@@ -1999,19 +2007,18 @@ if __name__ == "__main__":
 
     # map dependend constants
     map_name = "AI Training #5"
-    env_max_time = 25
+    env_max_time = 45
     
     # neural network architecture
     hidden_dim = [32, 16]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
-    vertical_mode = True
-    multi_surface_mode = True
+    vertical_mode = False
+    multi_surface_mode = False
 
-    # Evolution
-    pop_size = 64
-    # Full-risk MOO run: keep the same elite fraction as the TM2D tests.
-    elite_fraction = 4 / 32
+    # Safe real-TM lexicographic GA baseline.
+    pop_size = 48
+    elite_fraction = 4 / 48
     generations_to_run = 200
     checkpoint_every = 4
 
@@ -2019,34 +2026,36 @@ if __name__ == "__main__":
     #
     # With selection_fitness_mode="ranking", Individual.fitness remains a
     # log-friendly scalar, but population sorting uses Individual.ranking_key().
-    # This mirrors the best current TM2D candidate:
-    # (finished, progress, -time), where progress resolves to dense_progress.
+    # Safe baseline:
+    # (finished, progress, -crashes, -time), where progress resolves to dense_progress.
+    # This prefers stable non-crashing progress before optimizing elapsed time.
     #
     # selection_mode="lexicographic" keeps the original GA behavior.
     # selection_mode="pareto" switches only the ordering/downselection step to
     # NSGA-II-style non-dominated sorting while reusing the same evaluation loop.
-    selection_mode = "pareto"  # lexicographic / pareto
+    selection_mode = "lexicographic"  # lexicographic / pareto
     selection_fitness_mode = "ranking"  # scalar / ranking
     ranking_mode = "lexicographic"
-    ranking_key = "(finished, progress, -time, -crashes)"
+    ranking_key = "(finished, progress, -crashes, -time)"
     ranking_progress_source = "dense_progress"
     moo_objective_mode = "lexicographic_primitives"
     moo_objective_subset = "finished,progress,neg_time,neg_crashes,neg_distance"
     moo_objective_priority = "finished,progress,neg_time,neg_crashes,neg_distance"
     pareto_tiebreak = "priority"
 
-    mutation_prob = 0.18
+    mutation_prob = 0.25
     mutation_prob_decay = 1.0
-    mutation_prob_min = 0.18
+    mutation_prob_min = 0.25
 
-    mutation_sigma = 0.22
+    mutation_sigma = 0.35
     mutation_sigma_decay = 1.0
-    mutation_sigma_min = 0.22
+    mutation_sigma_min = 0.35
 
 
     # Fancy updates
     mirror_episode_prob = 0.0
     evaluate_both_mirrors = False
+    cache_elite_evaluations = False
     target_steer_deadzone = 0.00
     max_touches = 1
     
@@ -2222,6 +2231,7 @@ if __name__ == "__main__":
             mutation_sigma_min=mutation_sigma_min,
             mirror_episode_prob=mirror_episode_prob,
             evaluate_both_mirrors=evaluate_both_mirrors,
+            cache_elite_evaluations=cache_elite_evaluations,
             verbose=True,
             dnf_time_for_plot=env_max_time,
             checkpoint_every=checkpoint_every,
@@ -2241,6 +2251,7 @@ if __name__ == "__main__":
                 hidden_activations=list(trainer.hidden_activations),
                 target_steer_deadzone=target_steer_deadzone,
                 evaluate_both_mirrors=bool(evaluate_both_mirrors),
+                cache_elite_evaluations=bool(cache_elite_evaluations),
                 finetune_from_checkpoint=resume_checkpoint,
                 initial_population_source=initial_population_source,
                 initial_population_source_kind=initial_population_source_kind,

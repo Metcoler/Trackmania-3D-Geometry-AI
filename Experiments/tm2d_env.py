@@ -22,14 +22,14 @@ from Experiments.tm2d_geometry import TM2DGeometry, _normalize_2d
 class TM2DPhysicsConfig:
     min_dt: float = 1.0 / 100.0
     max_dt: float = 1.0 / 30.0
-    max_speed: float = 120.0
+    max_speed: float = 130.0
     reverse_speed: float = 10.0
-    gas_accel: float = 19.563
+    gas_accel: float = 22.0
     brake_accel: float = 17.463
     drag: float = 0.1439
     rolling_drag: float = 5.549
     lateral_grip: float = 5.5
-    max_yaw_rate: float = 1.011
+    max_yaw_rate: float = 1.5
     car_length: float = 4.8
     car_width: float = 2.6
 

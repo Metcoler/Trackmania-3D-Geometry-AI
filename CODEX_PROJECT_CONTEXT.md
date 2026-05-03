@@ -397,6 +397,28 @@ The steering fit now uses recorded `directions`, but it is still a simplified 2D
 approximation of Trackmania handling. `lateral_grip` remains a pragmatic
 curve-feasibility parameter and should be validated by rollout behavior.
 
+2026-05-03 physics regression diagnostic:
+
+- After the fair lexicographic GA sweep failed to reproduce older fast TM2D
+  results, a local probe temporarily replaced the calibrated defaults with a
+  deliberately easier physics profile: `max_speed=140`, `gas_accel=25`, and
+  `max_yaw_rate=2.0`.
+- With the same learning-friendly GA setup
+  `(finished, progress, -time)`, `center` collision, continuous gas/brake,
+  `48/4/16`, `max_time=45`, `mutation_prob=0.18`, `mutation_sigma=0.2`, and
+  elite caching enabled, the probe reached the first finish at generation
+  `119`, finished `82` of `200` generations, reached final best time
+  `16.70s`, and ended with `15/48` finishers.
+- This strongly suggests that the post-calibration TM2D physics, especially the
+  lower `max_yaw_rate ~= 1.011` and weaker acceleration, is a major reason why
+  newer GA runs no longer reproduce the older easy-sandbox finishes. The reward
+  tuple was not the primary cause.
+- The easy profile was only a diagnostic patch and was reverted. Current TM2D
+  defaults remain calibrated to supervised data. If both fast reward research
+  and live-like validation are needed, add an explicit `physics_profile`
+  mechanism such as `easy` vs `calibrated` instead of silently changing the
+  defaults.
+
 Known physics limitation: Trackmania has a drift/slip regime when braking or
 turning at sufficient speed. In the current supervised data, about `3.5%` of
 frames have `brake > 0.5`, `speed > 45`, and `slip_mean > 0.5`; these frames

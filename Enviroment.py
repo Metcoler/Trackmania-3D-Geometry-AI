@@ -141,8 +141,7 @@ class RacingGameEnviroment(gym.Env):
         self._post_finish_reset_pending = False
         self.current_dt_ratio = 1.0
         self.live_status = bool(live_status)
-        self._live_status_last_wall_time = None
-        self._live_status_last_step = 0
+        self._live_status_last_game_time = None
         self._live_status_fps = 0.0
         self._live_status_width = 132
 
@@ -169,35 +168,42 @@ class RacingGameEnviroment(gym.Env):
         self.car.reset()
 
     def _reset_live_status(self) -> None:
-        self._live_status_last_wall_time = None
-        self._live_status_last_step = int(self.current_step)
+        self._live_status_last_game_time = None
         self._live_status_fps = 0.0
 
-    def _update_live_status_fps(self) -> float:
-        now = time.monotonic()
-        if self._live_status_last_wall_time is None:
-            self._live_status_last_wall_time = now
-            self._live_status_last_step = int(self.current_step)
+    def _update_live_status_fps(self, game_time: float) -> float:
+        game_time = float(game_time)
+        if not np.isfinite(game_time) or game_time < 0.0:
+            self._live_status_last_game_time = None
             return 0.0
 
-        elapsed = max(1e-6, now - float(self._live_status_last_wall_time))
-        step_delta = max(0, int(self.current_step) - int(self._live_status_last_step))
-        instantaneous_fps = float(step_delta) / elapsed
+        previous_game_time = self._live_status_last_game_time
+        self._live_status_last_game_time = game_time
+        if previous_game_time is None:
+            return float(self._live_status_fps)
+
+        game_dt = game_time - float(previous_game_time)
+        if game_dt <= 1e-6:
+            return float(self._live_status_fps)
+        if game_dt > 0.25:
+            # Reset/finish confirmation pauses are not gameplay FPS samples.
+            return float(self._live_status_fps)
+
+        instantaneous_fps = 1.0 / game_dt
+        instantaneous_fps = float(np.clip(instantaneous_fps, 0.0, 240.0))
         if self._live_status_fps <= 0.0:
             self._live_status_fps = instantaneous_fps
         else:
             self._live_status_fps = (0.85 * self._live_status_fps) + (0.15 * instantaneous_fps)
-        self._live_status_last_wall_time = now
-        self._live_status_last_step = int(self.current_step)
         return float(self._live_status_fps)
 
     def _print_live_status(self, info: dict, distances=None) -> None:
         if not self.live_status:
             return
 
-        fps = self._update_live_status_fps()
         progress = float(info.get("dense_progress", info.get("discrete_progress", 0.0)))
         game_time = float(info.get("time", 0.0))
+        fps = self._update_live_status_fps(game_time)
         speed = float(info.get("speed", 0.0))
         parts = [
             f"step={self.current_step:<6d}",

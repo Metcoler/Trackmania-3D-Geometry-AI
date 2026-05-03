@@ -1,0 +1,6 @@
+generation,rank,original_index,finished,crashes,time,dense_progress,path_file
+1,1,1,0,0,5.009999999999938,3.051845005580357,trajectories/gen_0001_rank_001_idx_001_finish_0.npz
+2,1,0,0,0,5.009999999999938,3.051845005580357,trajectories/gen_0002_rank_001_idx_000_finish_0.npz
+2,2,1,0,0,5.009999999999938,3.0029078892299106,trajectories/gen_0002_rank_002_idx_001_finish_0.npz
+2,3,2,0,0,5.009999999999938,0.0,trajectories/gen_0002_rank_003_idx_002_finish_0.npz
+2,4,3,0,0,5.009999999999938,0.0,trajectories/gen_0002_rank_004_idx_003_finish_0.npz

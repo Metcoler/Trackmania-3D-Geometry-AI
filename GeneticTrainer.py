@@ -17,6 +17,7 @@ from Experiments.multiobjective import (
     pareto_order,
 )
 from RankingKey import canonical_ranking_key_expression
+from TrajectoryLogger import TrajectoryLogger, should_log_trajectory
 
 
 HiddenDims = Union[int, Sequence[int]]
@@ -728,15 +729,21 @@ class GeneticTrainer:
         verbose: bool = False,
         mirrored: bool = False,
         evaluate_both_mirrors: bool = False,
+        collect_trajectory: bool = False,
+        trajectory_log_actions: bool = False,
     ) -> float:
         if evaluate_both_mirrors:
             normal_metrics = self._evaluate_single_rollout(
                 individual=individual,
                 mirrored=False,
+                collect_trajectory=collect_trajectory,
+                trajectory_log_actions=trajectory_log_actions,
             )
             mirrored_metrics = self._evaluate_single_rollout(
                 individual=individual,
                 mirrored=True,
+                collect_trajectory=False,
+                trajectory_log_actions=False,
             )
             rollout_metrics = [normal_metrics, mirrored_metrics]
             mean_discrete_progress = float(
@@ -777,6 +784,7 @@ class GeneticTrainer:
             individual.evaluation_steps = mean_steps
             individual.evaluation_terminated = representative_terminated
             individual.evaluation_truncated = representative_truncated
+            individual.evaluation_trajectory = normal_metrics.get("trajectory") if collect_trajectory else None
 
             if verbose and index is not None and total is not None:
                 normal_status = self._outcome_status_text(
@@ -798,6 +806,8 @@ class GeneticTrainer:
         rollout_metrics = self._evaluate_single_rollout(
             individual=individual,
             mirrored=mirrored,
+            collect_trajectory=collect_trajectory,
+            trajectory_log_actions=trajectory_log_actions,
         )
         individual.discrete_progress = float(rollout_metrics["discrete_progress"])
         individual.dense_progress = float(rollout_metrics["dense_progress"])
@@ -811,6 +821,7 @@ class GeneticTrainer:
         individual.evaluation_steps = int(rollout_metrics["steps"])
         individual.evaluation_terminated = bool(rollout_metrics["terminated"])
         individual.evaluation_truncated = bool(rollout_metrics["truncated"])
+        individual.evaluation_trajectory = rollout_metrics.get("trajectory") if collect_trajectory else None
 
         if verbose and index is not None and total is not None:
             status = self._outcome_status_text(individual.finished, individual.crashes)
@@ -828,6 +839,8 @@ class GeneticTrainer:
         self,
         individual: Individual,
         mirrored: bool = False,
+        collect_trajectory: bool = False,
+        trajectory_log_actions: bool = False,
     ) -> Dict[str, float]:
         obs, info = self.env.reset()
         while info["done"] != 0:
@@ -840,6 +853,7 @@ class GeneticTrainer:
         step_count = 0
         terminated = False
         truncated = False
+        trajectory = []
         while True:
             if self.max_steps is not None and step_count >= self.max_steps:
                 truncated = True
@@ -852,6 +866,19 @@ class GeneticTrainer:
             obs, reward, done, truncated, info = self.env.step(action)
             last_info = info
             step_count += 1
+            if collect_trajectory:
+                record = {
+                    "step": float(step_count),
+                    "time": float(info.get("time", 0.0)),
+                    "x": float(info.get("x", 0.0)),
+                    "y": float(info.get("y", 0.0)),
+                    "z": float(info.get("z", 0.0)),
+                    "speed": float(info.get("speed", 0.0)),
+                    "dense_progress": float(info.get("dense_progress", info.get("discrete_progress", 0.0))),
+                }
+                if trajectory_log_actions:
+                    record["action"] = np.asarray(action, dtype=np.float32).copy()
+                trajectory.append(record)
 
             race_finished = int(getattr(self.env, "finished", 0))
             race_term = int(getattr(self.env, "race_terminated", 0))
@@ -905,7 +932,7 @@ class GeneticTrainer:
             time_value=t,
             distance=distance,
         )
-        return dict(
+        result = dict(
             discrete_progress=discrete_progress,
             dense_progress=dense_progress,
             time=t,
@@ -919,6 +946,9 @@ class GeneticTrainer:
             terminated=bool(raw_metrics.get("terminated", terminated)),
             truncated=bool(raw_metrics.get("truncated", truncated)),
         )
+        if collect_trajectory:
+            result["trajectory"] = trajectory
+        return result
 
     def _mirror_observation(self, obs: np.ndarray) -> np.ndarray:
         return ObservationEncoder.mirror_observation(
@@ -953,6 +983,8 @@ class GeneticTrainer:
         mirror_flags: Optional[np.ndarray] = None,
         evaluate_both_mirrors: bool = False,
         reuse_valid_evaluations: bool = True,
+        collect_trajectories: bool = False,
+        trajectory_log_actions: bool = False,
     ) -> np.ndarray:
         n = len(self.population)
         fitnesses = np.zeros(n, dtype=np.float32)
@@ -966,6 +998,7 @@ class GeneticTrainer:
                 f"mirror_flags length {len(mirror_flags)} does not match population size {n}."
             )
         for i, ind in enumerate(self.population):
+            ind.evaluation_original_index = int(i)
             can_reuse = (
                 reuse_valid_evaluations
                 and bool(getattr(ind, "evaluation_valid", False))
@@ -974,6 +1007,8 @@ class GeneticTrainer:
             )
             if can_reuse:
                 cached_count += 1
+                if not collect_trajectories:
+                    ind.evaluation_trajectory = None
                 if ind.fitness is not None and np.isfinite(float(ind.fitness)):
                     fitnesses[i] = float(ind.fitness)
                 else:
@@ -994,6 +1029,8 @@ class GeneticTrainer:
                 verbose=verbose,
                 mirrored=bool(mirror_flags[i]),
                 evaluate_both_mirrors=evaluate_both_mirrors,
+                collect_trajectory=collect_trajectories,
+                trajectory_log_actions=trajectory_log_actions,
             )
         self.last_cached_evaluations = cached_count
         return fitnesses
@@ -1452,6 +1489,9 @@ class GeneticTrainer:
         verbose: bool = True,
         dnf_time_for_plot: float = 30.0,
         checkpoint_every: int = 10,
+        trajectory_log_mode: str = "off",
+        trajectory_top_k: int = 1,
+        trajectory_log_actions: bool = False,
         training_config: Optional[dict] = None,
     ) -> Dict[str, List[float]]:
         history = {
@@ -1495,10 +1535,17 @@ class GeneticTrainer:
                 cache_elite_evaluations=bool(cache_elite_evaluations),
                 checkpoint_every=checkpoint_every,
                 dnf_time_for_plot=dnf_time_for_plot,
+                trajectory_log_mode=str(trajectory_log_mode),
+                trajectory_top_k=int(trajectory_top_k),
+                trajectory_log_actions=bool(trajectory_log_actions),
             )
             if training_config is not None:
                 cfg.update(training_config)
             self.logger.write_config(cfg, merge=True)
+
+        trajectory_logger = None
+        if self.logger is not None and str(trajectory_log_mode).strip().lower() != "off":
+            trajectory_logger = TrajectoryLogger(self.logger.run_dir)
 
         current_mutation_prob = float(mutation_prob)
         current_mutation_sigma = float(mutation_sigma)
@@ -1633,6 +1680,8 @@ class GeneticTrainer:
                 verbose=verbose,
                 mirror_flags=gen_mirror_flags,
                 evaluate_both_mirrors=evaluate_both_mirrors,
+                collect_trajectories=trajectory_logger is not None,
+                trajectory_log_actions=bool(trajectory_log_actions),
             )
             self._order_population_for_selection()
 
@@ -1690,6 +1739,33 @@ class GeneticTrainer:
                 dnf_time_for_plot=dnf_time_for_plot,
                 history=history,
             )
+
+            if trajectory_logger is not None:
+                final_generation = self.generation + max(0, generations - local_gen - 1)
+                for rank, individual in enumerate(self.population, start=1):
+                    if not should_log_trajectory(
+                        mode=str(trajectory_log_mode),
+                        generation=current_generation,
+                        rank=rank,
+                        finished=int(individual.finished),
+                        final_generation=final_generation,
+                        top_k=int(trajectory_top_k),
+                    ):
+                        continue
+                    trajectory = getattr(individual, "evaluation_trajectory", None)
+                    if not trajectory:
+                        continue
+                    trajectory_logger.save(
+                        generation=current_generation,
+                        rank=rank,
+                        original_index=int(getattr(individual, "evaluation_original_index", rank - 1)),
+                        finished=int(individual.finished),
+                        crashes=int(individual.crashes),
+                        time_value=float(individual.time),
+                        dense_progress=float(individual.dense_progress),
+                        trajectory=trajectory,
+                        log_actions=bool(trajectory_log_actions),
+                    )
 
             if self.logger is not None and best_improved and best_so_far is not None:
                 global_best_path = self.logger.save_best_individual(
@@ -2056,6 +2132,9 @@ if __name__ == "__main__":
     mirror_episode_prob = 0.0
     evaluate_both_mirrors = False
     cache_elite_evaluations = False
+    trajectory_log_mode = "off"  # off / top / top-finishers-final / all
+    trajectory_top_k = 1
+    trajectory_log_actions = False
     target_steer_deadzone = 0.00
     max_touches = 1
     
@@ -2235,6 +2314,9 @@ if __name__ == "__main__":
             verbose=True,
             dnf_time_for_plot=env_max_time,
             checkpoint_every=checkpoint_every,
+            trajectory_log_mode=trajectory_log_mode,
+            trajectory_top_k=trajectory_top_k,
+            trajectory_log_actions=trajectory_log_actions,
             training_config=dict(
                 map_name=map_name,
                 max_steps=max_steps,
@@ -2252,6 +2334,9 @@ if __name__ == "__main__":
                 target_steer_deadzone=target_steer_deadzone,
                 evaluate_both_mirrors=bool(evaluate_both_mirrors),
                 cache_elite_evaluations=bool(cache_elite_evaluations),
+                trajectory_log_mode=trajectory_log_mode,
+                trajectory_top_k=trajectory_top_k,
+                trajectory_log_actions=bool(trajectory_log_actions),
                 finetune_from_checkpoint=resume_checkpoint,
                 initial_population_source=initial_population_source,
                 initial_population_source_kind=initial_population_source_kind,

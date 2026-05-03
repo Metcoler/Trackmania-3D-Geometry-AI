@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 from NeuralPolicy import normalize_hidden_activations, normalize_hidden_dims
 from Individual import Individual
 from RankingKey import canonical_ranking_key_expression
+from TrajectoryLogger import TrajectoryLogger, should_log_trajectory
 
 from Experiments.tm2d_env import TM2DPhysicsConfig, TM2DRewardConfig, TM2DSimEnv
 
@@ -133,6 +134,21 @@ def cached_metrics_from_individual(individual: Individual) -> dict:
         "terminated": bool(getattr(individual, "evaluation_terminated", False)),
         "truncated": bool(getattr(individual, "evaluation_truncated", False)),
     }
+
+
+def make_tm2d_env_from_args(args, reward_config, physics_config, seed: int) -> TM2DSimEnv:
+    return TM2DSimEnv(
+        map_name=args.map_name,
+        max_time=args.max_time,
+        reward_config=reward_config,
+        physics_config=physics_config,
+        seed=int(seed),
+        collision_mode=args.collision_mode,
+        collision_distance_threshold=args.collision_distance_threshold,
+        vertical_mode=args.vertical_mode,
+        multi_surface_mode=args.multi_surface_mode,
+        binary_gas_brake=not args.continuous_gas_brake,
+    )
 
 
 def metric_stats(prefix: str, values) -> dict[str, float]:
@@ -465,6 +481,23 @@ def main() -> None:
             "Disabled by default because it saves little time and can amplify lucky runs."
         ),
     )
+    parser.add_argument(
+        "--trajectory-log-mode",
+        choices=["off", "top", "top-finishers-final", "all"],
+        default="off",
+        help="Optional compact NPZ trajectory logging. Default off to keep sweeps cheap.",
+    )
+    parser.add_argument(
+        "--trajectory-top-k",
+        type=int,
+        default=1,
+        help="Number of top-ranked individuals to log per generation when trajectory logging is enabled.",
+    )
+    parser.add_argument(
+        "--trajectory-log-actions",
+        action="store_true",
+        help="Also store gas/brake/steer arrays in trajectory NPZ files.",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -493,18 +526,7 @@ def main() -> None:
         fps_min=args.fps_min,
         fps_max=args.fps_max,
     )
-    env = TM2DSimEnv(
-        map_name=args.map_name,
-        max_time=args.max_time,
-        reward_config=reward_config,
-        physics_config=physics_config,
-        seed=args.seed,
-        collision_mode=args.collision_mode,
-        collision_distance_threshold=args.collision_distance_threshold,
-        vertical_mode=args.vertical_mode,
-        multi_surface_mode=args.multi_surface_mode,
-        binary_gas_brake=not args.continuous_gas_brake,
-    )
+    env = make_tm2d_env_from_args(args, reward_config, physics_config, seed=args.seed)
     action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
     population = [
         Individual(
@@ -555,8 +577,26 @@ def main() -> None:
         "progress_bucket": env.progress_bucket,
         "physics": asdict(env.physics),
         "num_workers": int(args.num_workers),
+        "trajectory_log_mode": str(args.trajectory_log_mode),
+        "trajectory_top_k": int(args.trajectory_top_k),
+        "trajectory_log_actions": bool(args.trajectory_log_actions),
+        "trajectory_logging_note": (
+            "TM2D trajectories are replayed after selection to avoid worker IPC. "
+            "With stochastic FPS they are diagnostic replays of the same genome, "
+            "not necessarily the exact original evaluation."
+        ),
     }
     (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+    trajectory_logger = (
+        TrajectoryLogger(run_dir)
+        if str(args.trajectory_log_mode).strip().lower() != "off"
+        else None
+    )
+    trajectory_env = (
+        make_tm2d_env_from_args(args, reward_config, physics_config, seed=args.seed + 999_000)
+        if trajectory_logger is not None
+        else None
+    )
 
     csv_path = run_dir / "generation_metrics.csv"
     individual_csv_path = run_dir / "individual_metrics.csv"
@@ -766,6 +806,37 @@ def main() -> None:
                         }
                     )
                 individual_handle.flush()
+
+                if trajectory_logger is not None and trajectory_env is not None:
+                    for rank, individual in enumerate(population, start=1):
+                        original_index = int(original_index_by_id.get(id(individual), -1))
+                        if not should_log_trajectory(
+                            mode=args.trajectory_log_mode,
+                            generation=generation,
+                            rank=rank,
+                            finished=int(individual.finished),
+                            final_generation=int(args.generations),
+                            top_k=int(args.trajectory_top_k),
+                        ):
+                            continue
+                        replay_seed = int(args.seed) + 1_000_000 + generation * 10_000 + max(0, original_index)
+                        replay_metrics = trajectory_env.rollout_policy(
+                            NumpyPolicyView(individual.policy),
+                            collect_trajectory=True,
+                            trajectory_log_actions=bool(args.trajectory_log_actions),
+                            reset_seed=replay_seed,
+                        )
+                        trajectory_logger.save(
+                            generation=generation,
+                            rank=rank,
+                            original_index=original_index,
+                            finished=int(individual.finished),
+                            crashes=int(individual.crashes),
+                            time_value=float(individual.time),
+                            dense_progress=float(individual.dense_progress),
+                            trajectory=replay_metrics.get("trajectory", []),
+                            log_actions=bool(args.trajectory_log_actions),
+                        )
                 print(
                     f"gen={generation:04d} best_fit={row['best_fitness']:.2f} "
                     f"best_prog={row['best_progress']:.2f}% "

@@ -98,3 +98,15 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selecti
 python Experiments\train_supervised_architecture_sweep.py
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_mutation_grid_pc2_prob25_30.ps1
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "python Experiments\\train_ga.py --map-name \"AI Training #5\" --generations 180 --population-size 96 --elite-count 8 --parent-count 32 --max-time 45 --hidden-dim 64,32 --hidden-activation relu,tanh --mutation-prob 0.18 --mutation-sigma 0.22 --fitness-mode reward --reward-mode delta_progress_time_efficiency --collision-mode center --num-workers 8 --log-dir Experiments\\runs\\reward_pte_20260430\\ga_delta_pte_ai5_parallel_escalated"
+
+
+$Root = "Experiments\runs_ga_architecture_ablation\fixed100_lidar_finished_progress_time_crashes_seed_2026050314"
+
+python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time, -crashes)" --ranking-progress-source dense_progress --reward-mode terminal_fitness --collision-mode lidar --fixed-fps 100 --seed 2026050314 --num-workers 8 --disable-elite-cache --log-dir "$Root\arch_32x16_relu_tanh"
+
+python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "32,16" --hidden-activation "relu,relu" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time, -crashes)" --ranking-progress-source dense_progress --reward-mode terminal_fitness --collision-mode lidar --fixed-fps 100 --seed 2026050314 --num-workers 8 --disable-elite-cache --log-dir "$Root\arch_32x16_relu_relu"
+
+python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "48,24" --hidden-activation "relu,tanh" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time, -crashes)" --ranking-progress-source dense_progress --reward-mode terminal_fitness --collision-mode lidar --fixed-fps 100 --seed 2026050314 --num-workers 8 --disable-elite-cache --log-dir "$Root\arch_48x24_relu_tanh"
+
+python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "48,24" --hidden-activation "relu,relu" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time, -crashes)" --ranking-progress-source dense_progress --reward-mode terminal_fitness --collision-mode lidar --fixed-fps 100 --seed 2026050314 --num-workers 8 --disable-elite-cache --log-dir "$Root\arch_48x24_relu_relu"

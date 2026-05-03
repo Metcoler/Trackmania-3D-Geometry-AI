@@ -773,8 +773,10 @@ class TM2DSimEnv:
         policy,
         max_steps: int = 5000,
         collect_trajectory: bool = False,
+        trajectory_log_actions: bool = False,
+        reset_seed: int | None = None,
     ) -> dict:
-        obs, info = self.reset()
+        obs, info = self.reset(seed=reset_seed)
         total_reward = 0.0
         trajectory = []
         terminated = False
@@ -784,15 +786,18 @@ class TM2DSimEnv:
             obs, reward, terminated, truncated, info = self.step(action)
             total_reward += float(reward)
             if collect_trajectory:
-                trajectory.append(
-                    {
-                        "position": self.position.copy(),
-                        "heading": float(self.heading),
-                        "lasers": np.asarray(info.get("laser_endpoints_2d"), dtype=np.float32).copy(),
-                        "progress": float(info.get("discrete_progress", 0.0)),
-                        "dense_progress": float(info.get("dense_progress", 0.0)),
-                    }
-                )
+                record = {
+                    "step": float(step + 1),
+                    "time": float(info.get("time", self.time)),
+                    "x": float(info.get("x", self.position[0])),
+                    "y": float(info.get("y", 0.0)),
+                    "z": float(info.get("z", self.position[1])),
+                    "speed": float(info.get("speed", self.speed)),
+                    "dense_progress": float(info.get("dense_progress", 0.0)),
+                }
+                if trajectory_log_actions:
+                    record["action"] = np.asarray(action, dtype=np.float32).copy()
+                trajectory.append(record)
             if terminated or truncated:
                 break
         finished = int(info.get("finished", int(getattr(self, "finished", 0))))

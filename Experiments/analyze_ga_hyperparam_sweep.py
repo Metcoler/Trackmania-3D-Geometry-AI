@@ -266,6 +266,72 @@ def sort_candidates(summary: pd.DataFrame) -> pd.DataFrame:
     ).drop(columns=["_first_finish_sort", "_best_time_sort"])
 
 
+def add_compromise_columns(summary: pd.DataFrame) -> pd.DataFrame:
+    result = summary.copy()
+    result["compromise_score"] = (
+        result["last50_finish_rate"].fillna(0.0)
+        + result["last50_mean_dense_progress"].fillna(0.0) / 100.0
+        - result["last50_crash_rate"].fillna(1.0)
+        - 0.25 * result["last50_timeout_rate"].fillna(1.0)
+    )
+    return result
+
+
+def sort_compromise_candidates(summary: pd.DataFrame) -> pd.DataFrame:
+    result = summary.copy()
+    result["_first_finish_sort"] = result["first_finish_generation"].fillna(result["expected_generations"] + 1)
+    result["_best_time_sort"] = result["best_finish_time"].fillna(result.get("max_time", pd.Series(30.0, index=result.index)))
+    return result.sort_values(
+        [
+            "compromise_score",
+            "last50_finish_rate",
+            "last50_mean_dense_progress",
+            "_first_finish_sort",
+            "_best_time_sort",
+        ],
+        ascending=[False, False, False, True, True],
+    ).drop(columns=["_first_finish_sort", "_best_time_sort"])
+
+
+def edge_warning_lines(summary: pd.DataFrame) -> list[str]:
+    lines: list[str] = []
+    if summary.empty:
+        return lines
+    for grid, group in summary.groupby("grid"):
+        if grid == "unknown" or group.empty:
+            continue
+        x_values = group["grid_x"].dropna().unique()
+        y_values = group["grid_y"].dropna().unique()
+        if len(x_values) == 0 or len(y_values) == 0:
+            continue
+        x_min, x_max = float(np.min(x_values)), float(np.max(x_values))
+        y_min, y_max = float(np.min(y_values)), float(np.max(y_values))
+        leaders = [
+            ("stability ranking", sort_candidates(group).iloc[0]),
+            ("compromise score", sort_compromise_candidates(group).iloc[0]),
+        ]
+        for label, row in leaders:
+            x = float(row["grid_x"])
+            y = float(row["grid_y"])
+            edge_parts: list[str] = []
+            if np.isclose(x, x_min):
+                edge_parts.append("minimum x")
+            if np.isclose(x, x_max):
+                edge_parts.append("maximum x")
+            if np.isclose(y, y_min):
+                edge_parts.append("minimum y")
+            if np.isclose(y, y_max):
+                edge_parts.append("maximum y")
+            if edge_parts:
+                lines.append(
+                    f"- `{grid}` best by {label} is on grid edge ({', '.join(edge_parts)}): "
+                    f"`{row['run_tag']}`."
+                )
+            else:
+                lines.append(f"- `{grid}` best by {label} is inside the tested grid: `{row['run_tag']}`.")
+    return lines
+
+
 def pivot_for_heatmap(summary: pd.DataFrame, grid: str, metric: str) -> pd.DataFrame:
     data = summary[summary["grid"] == grid].copy()
     if data.empty:
@@ -338,6 +404,7 @@ def compact_table(df: pd.DataFrame, limit: int = 8) -> pd.DataFrame:
         "grid",
         "grid_x",
         "grid_y",
+        "compromise_score",
         "mutation_prob",
         "mutation_sigma",
         "parent_count",
@@ -360,10 +427,15 @@ def compact_table(df: pd.DataFrame, limit: int = 8) -> pd.DataFrame:
 
 def write_report(output_dir: Path, summary: pd.DataFrame, roots: list[Path]) -> None:
     ranked = sort_candidates(summary)
+    compromise_ranked = sort_compromise_candidates(summary)
     mutation_ranked = sort_candidates(summary[summary["grid"] == "mutation"])
     selection_ranked = sort_candidates(summary[summary["grid"] == "selection"])
+    mutation_compromise = sort_compromise_candidates(summary[summary["grid"] == "mutation"])
+    selection_compromise = sort_compromise_candidates(summary[summary["grid"] == "selection"])
     incomplete = summary[summary["completed"] <= 0]
     cached = summary[summary["max_cached_evaluations"] > 0]
+    edge_lines = edge_warning_lines(summary)
+    plot_lines = [f"- `{path.name}`" for path in sorted(output_dir.glob("*.png"))]
 
     report = f"""# GA Hyperparameter Sweep Analysis
 
@@ -386,31 +458,36 @@ This is a screening experiment. The tables below identify promising regions; the
 
 {frame_to_markdown(compact_table(ranked, limit=10))}
 
+## Best Compromise Candidates
+
+Compromise score is `last50_finish_rate + last50_mean_dense_progress / 100 - last50_crash_rate - 0.25 * last50_timeout_rate`.
+It is a screening helper, not a final fitness value.
+
+{frame_to_markdown(compact_table(compromise_ranked, limit=10))}
+
 ## Mutation Grid Candidates
 
 {frame_to_markdown(compact_table(mutation_ranked, limit=8))}
+
+## Mutation Grid Compromise Candidates
+
+{frame_to_markdown(compact_table(mutation_compromise, limit=8))}
 
 ## Selection Pressure Grid Candidates
 
 {frame_to_markdown(compact_table(selection_ranked, limit=8))}
 
+## Selection Pressure Compromise Candidates
+
+{frame_to_markdown(compact_table(selection_compromise, limit=8))}
+
+## Edge Check
+
+{chr(10).join(edge_lines) if edge_lines else "_No edge warnings._"}
+
 ## Generated Plots
 
-- `candidate_stability_vs_speed.png`
-- `heatmap_mutation_first_finish_generation.png`
-- `heatmap_mutation_best_finish_time.png`
-- `heatmap_mutation_last50_finish_rate.png`
-- `heatmap_mutation_last50_mean_dense_progress.png`
-- `heatmap_mutation_last50_crash_rate.png`
-- `heatmap_mutation_last50_timeout_rate.png`
-- `heatmap_mutation_last50_penalized_mean_time.png`
-- `heatmap_selection_first_finish_generation.png`
-- `heatmap_selection_best_finish_time.png`
-- `heatmap_selection_last50_finish_rate.png`
-- `heatmap_selection_last50_mean_dense_progress.png`
-- `heatmap_selection_last50_crash_rate.png`
-- `heatmap_selection_last50_timeout_rate.png`
-- `heatmap_selection_last50_penalized_mean_time.png`
+{chr(10).join(plot_lines) if plot_lines else "_No plots generated._"}
 
 ## Reading Guide
 
@@ -457,7 +534,7 @@ def main() -> None:
         if not individual.empty:
             individual_parts.append(add_run_columns(individual, config, run_dir))
 
-    summary = pd.DataFrame(summaries).sort_values(["grid", "grid_x", "grid_y", "run_tag"])
+    summary = add_compromise_columns(pd.DataFrame(summaries)).sort_values(["grid", "grid_x", "grid_y", "run_tag"])
     generation = pd.concat(generation_parts, ignore_index=True) if generation_parts else pd.DataFrame()
     individual = pd.concat(individual_parts, ignore_index=True) if individual_parts else pd.DataFrame()
 

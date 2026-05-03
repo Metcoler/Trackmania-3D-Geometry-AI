@@ -54,3 +54,24 @@ python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --p
 
 python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 45 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.18 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time)" --ranking-progress-source dense_progress --reward-mode progress_primary_delta --collision-mode center --continuous-gas-brake --fps-min 50 --fps-max 60 --seed 2026050301 --num-workers 8 --log-dir Experiments\runs_ga_diagnostic\mid_physics_metric_ablation_seed_2026050301\fps_50_60
 python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 45 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.18 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time)" --ranking-progress-source dense_progress --reward-mode progress_primary_delta --collision-mode lidar --collision-distance-threshold 2.0 --lidar-observation-origin hitbox --continuous-gas-brake --seed 2026050301 --num-workers 8 --log-dir Experiments\runs_ga_diagnostic\mid_physics_metric_ablation_seed_2026050301\collision_lidar_hitbox
+
+
+
+Riešime odhad AABB boxu auta z Trackmanie. Po novom Openplanet exporte som pozrel `OpenplanetNext\Extract\GameData\Vehicles`. Export už obsahuje `CarSport.Item.Gbx`, `PhyModelSport.VehiclePhyModel.Gbx`, `VisModelSport.VehicleVisModel.Gbx`, tunings, materiály atď., ale pre Stadium/CarSport som stále nenašiel samostatný `CarSport.Shape.Gbx`. `PhyModelSport` tam je, ale náš parser zatiaľ nevie dekódovať chunk `0x090EA003`, takže oficiálny fyzikálny hitbox stále nemáme.
+
+Spravil som preto dva približné AABB odhady:
+
+1. Z reálne exportovaného vizuálneho meshu `MainBody.Mesh.gbx`, exportnutého do OBJ:
+   - `carExport\CarSport_Stadium_Standard\MainBody_*_lod1.obj`
+   - AABB size približne: `[2.1432, 3.7842, 0.8822]`
+   - center približne: `[0.0004, -0.2737, 0.4292]`
+
+2. Z pridaného ManiaPark skinu `car_primitives\MainBodyHigh.Solid.Gbx`.
+   Tam som ručne vyčítal starý `CPlugSolid` formát, 5 visual sekcií + transformácie kolies.
+   - OBJ axes min: `[-1.0663, -1.9345, -1.1691]`
+   - OBJ axes max: `[1.0663, 2.1447, 0.0101]`
+   - AABB size približne: `[2.1326, 4.0792, 1.1792]`
+   - center približne: `[0.0000, 0.1051, -0.5795]`
+   - half-extents približne: `[1.066, 2.040, 0.590]`
+
+Dôležité: oba výsledky sú len odhady, nie potvrdený oficiálny physics hitbox. Druhý odhad z `car_primitives` vyzerá použiteľnejšie ako konzervatívny AABB auta, lebo má väčšiu dĺžku aj výšku a zahŕňa primitívnejší/kolíznejšie vyzerajúci model. Na ďalšie použitie by som teda zatiaľ bral približne `size = [2.13, 4.08, 1.18]`, kým sa nepodarí dekódovať priamo `PhyModelSport.VehiclePhyModel.Gbx`.

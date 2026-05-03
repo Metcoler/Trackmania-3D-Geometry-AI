@@ -331,7 +331,7 @@ if __name__ == "__main__":
     multi_surface_mode = False
     base_dir = "logs/supervised_data"
     perturbation_config = ActionPerturbationConfig(
-        enabled=True,
+        enabled=False,
         random_seed=20260502,
         steer_sigma=0.18,
         steer_bias_decay=0.96,

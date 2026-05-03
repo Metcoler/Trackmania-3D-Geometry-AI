@@ -110,3 +110,13 @@ python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --p
 python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "48,24" --hidden-activation "relu,tanh" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time, -crashes)" --ranking-progress-source dense_progress --reward-mode terminal_fitness --collision-mode lidar --fixed-fps 100 --seed 2026050314 --num-workers 8 --disable-elite-cache --log-dir "$Root\arch_48x24_relu_tanh"
 
 python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "48,24" --hidden-activation "relu,relu" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time, -crashes)" --ranking-progress-source dense_progress --reward-mode terminal_fitness --collision-mode lidar --fixed-fps 100 --seed 2026050314 --num-workers 8 --disable-elite-cache --log-dir "$Root\arch_48x24_relu_relu"
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selection_refinement_pc1.ps1
+
+
+
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selection_refinement_pc1.ps1
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_mutation_refinement_pc2.ps1

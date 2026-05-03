@@ -61,7 +61,8 @@ def discover_runs(roots: list[Path]) -> list[Path]:
             continue
         for config_path in sorted(root.rglob("config.json")):
             run_dir = config_path.parent
-            if (run_dir / "generation_metrics.csv").exists():
+            generation_path = run_dir / "generation_metrics.csv"
+            if generation_path.exists() and generation_path.stat().st_size > 0:
                 run_dirs.append(run_dir)
     return run_dirs
 

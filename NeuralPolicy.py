@@ -23,10 +23,12 @@ def canonicalize_activation_name(name: str) -> str:
     activation = str(name).strip().lower()
     if activation == "tann":
         activation = "tanh"
-    if activation not in {"tanh", "relu", "sigmoid"}:
+    if activation in {"leaky-relu", "leakyrelu"}:
+        activation = "leaky_relu"
+    if activation not in {"tanh", "relu", "leaky_relu", "sigmoid"}:
         raise ValueError(
             f"Unsupported hidden activation '{name}'. "
-            "Use 'tanh', 'relu', or 'sigmoid'."
+            "Use 'tanh', 'relu', 'leaky_relu', or 'sigmoid'."
         )
     return activation
 
@@ -115,13 +117,15 @@ class NeuralPolicy(nn.Module):
     def _make_activation(self, activation_name: str) -> nn.Module:
         if activation_name == "relu":
             return nn.ReLU()
+        if activation_name == "leaky_relu":
+            return nn.LeakyReLU(negative_slope=0.01)
         if activation_name == "sigmoid":
             return nn.Sigmoid()
         if activation_name == "tanh":
             return nn.Tanh()
         raise ValueError(
             f"Unsupported hidden activation '{activation_name}'. "
-            "Use 'tanh', 'relu', or 'sigmoid'."
+            "Use 'tanh', 'relu', 'leaky_relu', or 'sigmoid'."
         )
 
     def _build_model(self) -> nn.Sequential:

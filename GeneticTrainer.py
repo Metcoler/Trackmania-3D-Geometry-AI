@@ -1180,15 +1180,30 @@ class GeneticTrainer:
 
     def next_generation(
         self,
-        elite_fraction: float = 0.2,
+        elite_count: int = 1,
+        parent_count: Optional[int] = None,
         mutation_prob: float = 0.1,
         mutation_sigma: float = 0.1,
         cache_elite_evaluations: bool = True,
     ) -> None:
         self._order_population_for_selection()
 
-        elite_count = max(1, int(self.pop_size * elite_fraction))
-        parent_pool_size = max(2, self.pop_size // 2)
+        elite_count = int(elite_count)
+        if elite_count < 0:
+            raise ValueError("elite_count must be non-negative.")
+        if elite_count >= self.pop_size:
+            raise ValueError("elite_count must be smaller than pop_size.")
+        parent_pool_size = (
+            max(2, self.pop_size // 2)
+            if parent_count is None
+            else int(parent_count)
+        )
+        if parent_pool_size < 2:
+            raise ValueError("parent_count must be at least 2.")
+        if parent_pool_size > self.pop_size:
+            raise ValueError("parent_count must not exceed pop_size.")
+        if elite_count > parent_pool_size:
+            raise ValueError("elite_count must not exceed parent_count.")
         parents = self.population[:parent_pool_size]
 
         new_population: List[Individual] = [
@@ -1476,7 +1491,8 @@ class GeneticTrainer:
     def run(
         self,
         generations: int,
-        elite_fraction: float = 0.2,
+        elite_count: int = 1,
+        parent_count: Optional[int] = None,
         mutation_prob: float = 0.1,
         mutation_sigma: float = 0.1,
         mutation_prob_decay: float = 1.0,
@@ -1506,6 +1522,24 @@ class GeneticTrainer:
         best_so_far: Optional[Individual] = (
             None if self.best_individual is None else self.best_individual.copy()
         )
+        elite_count = int(elite_count)
+        if elite_count < 0:
+            raise ValueError("elite_count must be non-negative.")
+        if elite_count >= self.pop_size:
+            raise ValueError("elite_count must be smaller than pop_size.")
+        parent_pool_size = (
+            max(2, self.pop_size // 2)
+            if parent_count is None
+            else int(parent_count)
+        )
+        if parent_pool_size < 2:
+            raise ValueError("parent_count must be at least 2.")
+        if parent_pool_size > self.pop_size:
+            raise ValueError("parent_count must not exceed pop_size.")
+        if elite_count > parent_pool_size:
+            raise ValueError("elite_count must not exceed parent_count.")
+        elite_population_ratio = elite_count / max(1, self.pop_size)
+        parent_population_ratio = parent_pool_size / max(1, self.pop_size)
 
         if self.logger is not None:
             cfg = dict(
@@ -1523,7 +1557,10 @@ class GeneticTrainer:
                 run_started_utc=TrainingLogger._timestamp_utc(),
                 start_generation=self.generation,
                 generations_requested=generations,
-                elite_fraction=elite_fraction,
+                elite_count=elite_count,
+                elite_population_ratio=elite_population_ratio,
+                parent_count=parent_pool_size,
+                parent_population_ratio=parent_population_ratio,
                 mutation_prob=mutation_prob,
                 mutation_sigma=mutation_sigma,
                 mutation_prob_decay=mutation_prob_decay,
@@ -1580,7 +1617,8 @@ class GeneticTrainer:
                     "Creating next generation before continuing..."
                 )
             self.next_generation(
-                elite_fraction=elite_fraction,
+                elite_count=elite_count,
+                parent_count=parent_pool_size,
                 mutation_prob=current_mutation_prob,
                 mutation_sigma=current_mutation_sigma,
                 cache_elite_evaluations=cache_elite_evaluations,
@@ -1805,7 +1843,8 @@ class GeneticTrainer:
 
             if local_gen < generations - 1:
                 self.next_generation(
-                    elite_fraction=elite_fraction,
+                    elite_count=elite_count,
+                    parent_count=parent_pool_size,
                     mutation_prob=current_mutation_prob,
                     mutation_sigma=current_mutation_sigma,
                     cache_elite_evaluations=cache_elite_evaluations,
@@ -2086,7 +2125,7 @@ if __name__ == "__main__":
     env_max_time = 45
     
     # neural network architecture
-    hidden_dim = [32, 16]
+    hidden_dim = [48, 24]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
     vertical_mode = False
@@ -2094,17 +2133,19 @@ if __name__ == "__main__":
 
     # Safe real-TM lexicographic GA baseline.
     pop_size = 48
-    elite_fraction = 4 / 48
+    elite_count = 2
+    parent_count = 14
     generations_to_run = 200
-    checkpoint_every = 4
+    checkpoint_every = 10
 
     # Selection metric for the overnight GA experiment.
     #
     # With selection_fitness_mode="ranking", Individual.fitness remains a
     # log-friendly scalar, but population sorting uses Individual.ranking_key().
-    # Safe baseline:
-    # (finished, progress, -crashes, -time), where progress resolves to dense_progress.
-    # This prefers stable non-crashing progress before optimizing elapsed time.
+    # Proven TM2D baseline:
+    # (finished, progress, -time, -crashes), where progress resolves to dense_progress.
+    # This prioritizes finishing and dense progress, then improves pace while still
+    # penalizing crashes as a final tie-breaker.
     #
     # selection_mode="lexicographic" keeps the original GA behavior.
     # selection_mode="pareto" switches only the ordering/downselection step to
@@ -2112,20 +2153,20 @@ if __name__ == "__main__":
     selection_mode = "lexicographic"  # lexicographic / pareto
     selection_fitness_mode = "ranking"  # scalar / ranking
     ranking_mode = "lexicographic"
-    ranking_key = "(finished, progress, -crashes, -time)"
+    ranking_key = "(finished, progress, -time, -crashes)"
     ranking_progress_source = "dense_progress"
     moo_objective_mode = "lexicographic_primitives"
     moo_objective_subset = "finished,progress,neg_time,neg_crashes,neg_distance"
     moo_objective_priority = "finished,progress,neg_time,neg_crashes,neg_distance"
     pareto_tiebreak = "priority"
 
-    mutation_prob = 0.25
+    mutation_prob = 0.10
     mutation_prob_decay = 1.0
-    mutation_prob_min = 0.25
+    mutation_prob_min = 0.10
 
-    mutation_sigma = 0.35
+    mutation_sigma = 0.25
     mutation_sigma_decay = 1.0
-    mutation_sigma_min = 0.35
+    mutation_sigma_min = 0.25
 
 
     # Fancy updates
@@ -2300,7 +2341,8 @@ if __name__ == "__main__":
 
         history = trainer.run(
             generations=generations_to_run,
-            elite_fraction=elite_fraction,
+            elite_count=elite_count,
+            parent_count=parent_count,
             # Exploratory start + annealing toward fine-tuning.
             mutation_prob=mutation_prob,
             mutation_sigma=mutation_sigma,
@@ -2359,6 +2401,10 @@ if __name__ == "__main__":
                 moo_objective_priority=moo_objective_priority,
                 pareto_tiebreak=pareto_tiebreak,
                 moo_objective_names=list(trainer.moo_objective_names),
+                elite_count=elite_count,
+                elite_population_ratio=elite_count / max(1, pop_size),
+                parent_count=parent_count,
+                parent_population_ratio=parent_count / max(1, pop_size),
                 mutation_prob_decay=mutation_prob_decay,
                 mutation_prob_min=mutation_prob_min,
                 mutation_sigma_decay=mutation_sigma_decay,

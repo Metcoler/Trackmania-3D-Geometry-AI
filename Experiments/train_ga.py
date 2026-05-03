@@ -49,6 +49,8 @@ class NumpyPolicyView:
     def _activate(values: np.ndarray, activation: str) -> np.ndarray:
         if activation == "relu":
             return np.maximum(values, 0.0)
+        if activation == "leaky_relu":
+            return np.where(values >= 0.0, values, 0.01 * values)
         if activation == "sigmoid":
             return 1.0 / (1.0 + np.exp(-values))
         if activation == "tanh":
@@ -322,6 +324,8 @@ class NumpyGenomePolicyView:
     def _activate(values: np.ndarray, activation: str) -> np.ndarray:
         if activation == "relu":
             return np.maximum(values, 0.0)
+        if activation == "leaky_relu":
+            return np.where(values >= 0.0, values, 0.01 * values)
         if activation == "sigmoid":
             return 1.0 / (1.0 + np.exp(-values))
         if activation == "tanh":

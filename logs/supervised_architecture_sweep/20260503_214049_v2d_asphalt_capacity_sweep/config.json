@@ -1,0 +1,364 @@
+{
+  "created_utc": "2026-05-03T19:40:51Z",
+  "data_roots": [
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset"
+  ],
+  "all_attempt_files": [
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0003.npz",
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0004.npz",
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0005.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0008.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0012.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0014.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0015.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0020.npz"
+  ],
+  "train_attempt_files": [
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0005.npz",
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0004.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0012.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0015.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0008.npz"
+  ],
+  "val_attempt_files": [
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0003.npz",
+    "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0014.npz",
+    "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0020.npz"
+  ],
+  "train_dataset_stats": {
+    "attempt_files": 8,
+    "total_frames_before_filter": 22157,
+    "boring_frames_before_filter": 2218,
+    "frames_after_filter_before_cap": 21949,
+    "frames_after_cap_before_mirror": 21949,
+    "frames_final": 43898,
+    "apply_boring_filter": true,
+    "apply_frame_cap": false,
+    "augment_mirror": true,
+    "target_vertical_mode": false,
+    "target_multi_surface_mode": false,
+    "target_observation_dim": 34,
+    "mask_feature_names": [
+      "steer",
+      "gas",
+      "brake",
+      "input_steer",
+      "input_gas",
+      "input_brake",
+      "previous_steer",
+      "previous_gas",
+      "previous_brake"
+    ],
+    "per_attempt": [
+      {
+        "path": "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+        "masked_features": [],
+        "raw_frames": 2874,
+        "boring_frames": 123,
+        "frames_after_filter": 2869,
+        "frames_after_cap": 2869,
+        "final_frames": 5738
+      },
+      {
+        "path": "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0005.npz",
+        "masked_features": [],
+        "raw_frames": 2844,
+        "boring_frames": 129,
+        "frames_after_filter": 2831,
+        "frames_after_cap": 2831,
+        "final_frames": 5662
+      },
+      {
+        "path": "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0004.npz",
+        "masked_features": [],
+        "raw_frames": 2835,
+        "boring_frames": 108,
+        "frames_after_filter": 2825,
+        "frames_after_cap": 2825,
+        "final_frames": 5650
+      },
+      {
+        "path": "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0012.npz",
+        "masked_features": [],
+        "raw_frames": 2700,
+        "boring_frames": 385,
+        "frames_after_filter": 2669,
+        "frames_after_cap": 2669,
+        "final_frames": 5338
+      },
+      {
+        "path": "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0015.npz",
+        "masked_features": [],
+        "raw_frames": 2720,
+        "boring_frames": 485,
+        "frames_after_filter": 2683,
+        "frames_after_cap": 2683,
+        "final_frames": 5366
+      },
+      {
+        "path": "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0001.npz",
+        "masked_features": [],
+        "raw_frames": 2766,
+        "boring_frames": 409,
+        "frames_after_filter": 2724,
+        "frames_after_cap": 2724,
+        "final_frames": 5448
+      },
+      {
+        "path": "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+        "masked_features": [],
+        "raw_frames": 2842,
+        "boring_frames": 363,
+        "frames_after_filter": 2801,
+        "frames_after_cap": 2801,
+        "final_frames": 5602
+      },
+      {
+        "path": "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0008.npz",
+        "masked_features": [],
+        "raw_frames": 2576,
+        "boring_frames": 216,
+        "frames_after_filter": 2547,
+        "frames_after_cap": 2547,
+        "final_frames": 5094
+      }
+    ]
+  },
+  "val_dataset_stats": {
+    "attempt_files": 4,
+    "total_frames_before_filter": 10967,
+    "boring_frames_before_filter": 1031,
+    "frames_after_filter_before_cap": 10858,
+    "frames_after_cap_before_mirror": 10858,
+    "frames_final": 10858,
+    "apply_boring_filter": true,
+    "apply_frame_cap": false,
+    "augment_mirror": false,
+    "target_vertical_mode": false,
+    "target_multi_surface_mode": false,
+    "target_observation_dim": 34,
+    "mask_feature_names": [
+      "steer",
+      "gas",
+      "brake",
+      "input_steer",
+      "input_gas",
+      "input_brake",
+      "previous_steer",
+      "previous_gas",
+      "previous_brake"
+    ],
+    "per_attempt": [
+      {
+        "path": "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0003.npz",
+        "masked_features": [],
+        "raw_frames": 2715,
+        "boring_frames": 96,
+        "frames_after_filter": 2707,
+        "frames_after_cap": 2707,
+        "final_frames": 2707
+      },
+      {
+        "path": "logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0002.npz",
+        "masked_features": [],
+        "raw_frames": 2940,
+        "boring_frames": 117,
+        "frames_after_filter": 2926,
+        "frames_after_cap": 2926,
+        "final_frames": 2926
+      },
+      {
+        "path": "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0014.npz",
+        "masked_features": [],
+        "raw_frames": 2620,
+        "boring_frames": 401,
+        "frames_after_filter": 2579,
+        "frames_after_cap": 2579,
+        "final_frames": 2579
+      },
+      {
+        "path": "logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset\\attempts\\attempt_0020.npz",
+        "masked_features": [],
+        "raw_frames": 2692,
+        "boring_frames": 417,
+        "frames_after_filter": 2646,
+        "frames_after_cap": 2646,
+        "final_frames": 2646
+      }
+    ]
+  },
+  "vertical_mode": false,
+  "multi_surface_mode": false,
+  "obs_dim": 34,
+  "act_dim": 3,
+  "observation_layout": [
+    "laser_0",
+    "laser_1",
+    "laser_2",
+    "laser_3",
+    "laser_4",
+    "laser_5",
+    "laser_6",
+    "laser_7",
+    "laser_8",
+    "laser_9",
+    "laser_10",
+    "laser_11",
+    "laser_12",
+    "laser_13",
+    "laser_14",
+    "path_instruction_0",
+    "path_instruction_1",
+    "path_instruction_2",
+    "path_instruction_3",
+    "path_instruction_4",
+    "speed",
+    "side_speed",
+    "segment_heading_error",
+    "next_segment_heading_error",
+    "dt_ratio",
+    "slip_mean",
+    "longitudinal_accel",
+    "lateral_accel",
+    "yaw_rate",
+    "clearance_rate_sector_0",
+    "clearance_rate_sector_1",
+    "clearance_rate_sector_2",
+    "clearance_rate_sector_3",
+    "clearance_rate_sector_4"
+  ],
+  "architectures": [
+    [
+      8
+    ],
+    [
+      16
+    ],
+    [
+      24
+    ],
+    [
+      32
+    ],
+    [
+      16,
+      8
+    ],
+    [
+      24,
+      12
+    ],
+    [
+      32,
+      16
+    ],
+    [
+      48,
+      24
+    ],
+    [
+      64,
+      32
+    ],
+    [
+      32,
+      16,
+      8
+    ],
+    [
+      128,
+      64
+    ]
+  ],
+  "hidden_activation_mode": "auto",
+  "hidden_activation_candidates_by_depth": {
+    "1": [
+      [
+        "relu"
+      ],
+      [
+        "tanh"
+      ],
+      [
+        "sigmoid"
+      ]
+    ],
+    "2": [
+      [
+        "relu",
+        "relu"
+      ],
+      [
+        "relu",
+        "tanh"
+      ],
+      [
+        "tanh",
+        "tanh"
+      ],
+      [
+        "sigmoid",
+        "sigmoid"
+      ]
+    ],
+    "3": [
+      [
+        "relu",
+        "relu",
+        "relu"
+      ],
+      [
+        "tanh",
+        "tanh",
+        "tanh"
+      ],
+      [
+        "relu",
+        "relu",
+        "tanh"
+      ],
+      [
+        "sigmoid",
+        "sigmoid",
+        "sigmoid"
+      ]
+    ]
+  },
+  "default_activations_by_depth": {
+    "1": "relu;tanh;sigmoid",
+    "2": "relu,relu;relu,tanh;tanh,tanh;sigmoid,sigmoid",
+    "3": "relu,relu,relu;tanh,tanh,tanh;relu,relu,tanh;sigmoid,sigmoid,sigmoid"
+  },
+  "epochs": 120,
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "batch_size": 4096,
+  "validation_fraction": 0.25,
+  "boring_keep_probability": 0.9,
+  "disable_boring_filter": false,
+  "train_augment_mirror": true,
+  "val_augment_mirror": false,
+  "mask_feature_names": [
+    "steer",
+    "gas",
+    "brake",
+    "input_steer",
+    "input_gas",
+    "input_brake",
+    "previous_steer",
+    "previous_gas",
+    "previous_brake"
+  ],
+  "device": "cuda",
+  "amp_enabled": true,
+  "random_seed": 51951
+}

@@ -72,6 +72,17 @@ def parse_list(value: str, cast):
     return [cast(part.strip()) for part in str(value).split(",") if part.strip()]
 
 
+def make_physics_config(
+    fixed_fps: float | None,
+    fps_min: float | None,
+    fps_max: float | None,
+) -> TM2DPhysicsConfig:
+    base = TM2DPhysicsConfig()
+    if fixed_fps is not None and float(fixed_fps) > 0.0:
+        return base.with_fixed_fps(fixed_fps)
+    return base.with_fps_range(fps_min, fps_max)
+
+
 def evaluate_individual(env: TM2DSimEnv, individual: Individual, fitness_mode: str) -> dict:
     metrics = env.rollout_policy(NumpyPolicyView(individual.policy))
     apply_metrics_to_individual(individual, metrics, fitness_mode)
@@ -227,13 +238,18 @@ def _init_worker(config: dict) -> None:
         map_name=str(config["map_name"]),
         max_time=float(config["max_time"]),
         reward_config=reward_config,
-        physics_config=TM2DPhysicsConfig().with_fixed_fps(config.get("fixed_fps")),
+        physics_config=make_physics_config(
+            fixed_fps=config.get("fixed_fps"),
+            fps_min=config.get("fps_min"),
+            fps_max=config.get("fps_max"),
+        ),
         seed=int(config["seed"]),
         collision_mode=str(config["collision_mode"]),
         collision_distance_threshold=float(config.get("collision_distance_threshold", 2.0)),
         vertical_mode=bool(config.get("vertical_mode", False)),
         multi_surface_mode=bool(config.get("multi_surface_mode", False)),
         binary_gas_brake=bool(config.get("binary_gas_brake", True)),
+        lidar_observation_origin=str(config.get("lidar_observation_origin", "center")),
     )
 
 
@@ -345,6 +361,18 @@ def main() -> None:
         default=None,
         help="Use deterministic fixed simulation FPS by setting min_dt=max_dt=1/fps.",
     )
+    parser.add_argument(
+        "--fps-min",
+        type=float,
+        default=None,
+        help="Minimum random simulation FPS. Ignored when --fixed-fps is provided.",
+    )
+    parser.add_argument(
+        "--fps-max",
+        type=float,
+        default=None,
+        help="Maximum random simulation FPS. Ignored when --fixed-fps is provided.",
+    )
     parser.add_argument("--fitness-mode", choices=["scalar", "reward", "ranking"], default="scalar")
     parser.add_argument(
         "--ranking-mode",
@@ -372,6 +400,15 @@ def main() -> None:
         type=float,
         default=2.0,
         help="Laser/lidar collision threshold used when --collision-mode laser is selected.",
+    )
+    parser.add_argument(
+        "--lidar-observation-origin",
+        choices=["center", "hitbox"],
+        default="center",
+        help=(
+            "Laser observation normalization origin. 'center' uses raw distances; "
+            "'hitbox' subtracts collision-distance-threshold before normalization."
+        ),
     )
     parser.add_argument(
         "--vertical-mode",
@@ -423,8 +460,16 @@ def main() -> None:
         "--disable-elite-cache",
         action="store_true",
         help=(
-            "Force copied elites to be re-evaluated in the next generation. "
-            "Use this for fair stochastic/seed comparison sweeps."
+            "Deprecated compatibility flag. Elite cache is disabled by default; "
+            "use --enable-elite-cache to opt in."
+        ),
+    )
+    parser.add_argument(
+        "--enable-elite-cache",
+        action="store_true",
+        help=(
+            "Reuse copied elite evaluations in the next generation. "
+            "Disabled by default because it saves little time and can amplify lucky runs."
         ),
     )
     args = parser.parse_args()
@@ -442,6 +487,7 @@ def main() -> None:
         ranking_progress_source = "dense_progress"
     Individual.RANKING_KEY = ranking_key
     Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
+    elite_cache_enabled = bool(args.enable_elite_cache and not args.disable_elite_cache)
 
     hidden_dim = tuple(parse_list(args.hidden_dim, int))
     hidden_activation = tuple(parse_list(args.hidden_activation, str))
@@ -449,7 +495,11 @@ def main() -> None:
     hidden_activation = normalize_hidden_activations(hidden_activation, len(hidden_dim))
 
     reward_config = TM2DRewardConfig(mode=args.reward_mode)
-    physics_config = TM2DPhysicsConfig().with_fixed_fps(args.fixed_fps)
+    physics_config = make_physics_config(
+        fixed_fps=args.fixed_fps,
+        fps_min=args.fps_min,
+        fps_max=args.fps_max,
+    )
     env = TM2DSimEnv(
         map_name=args.map_name,
         max_time=args.max_time,
@@ -461,6 +511,7 @@ def main() -> None:
         vertical_mode=args.vertical_mode,
         multi_surface_mode=args.multi_surface_mode,
         binary_gas_brake=not args.continuous_gas_brake,
+        lidar_observation_origin=args.lidar_observation_origin,
     )
     action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
     population = [
@@ -490,6 +541,8 @@ def main() -> None:
         "mutation_prob": args.mutation_prob,
         "mutation_sigma": args.mutation_sigma,
         "fixed_fps": args.fixed_fps,
+        "fps_min": args.fps_min,
+        "fps_max": args.fps_max,
         "fitness_mode": args.fitness_mode,
         "ranking_mode": args.ranking_mode,
         "ranking_key": ranking_key,
@@ -499,10 +552,11 @@ def main() -> None:
         "seed": int(args.seed),
         "collision_mode": args.collision_mode,
         "collision_distance_threshold": float(args.collision_distance_threshold),
+        "lidar_observation_origin": args.lidar_observation_origin,
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),
-        "elite_cache_enabled": bool(not args.disable_elite_cache),
+        "elite_cache_enabled": bool(elite_cache_enabled),
         "obs_dim": env.obs_dim,
         "act_dim": env.act_dim,
         "progress_bucket": env.progress_bucket,
@@ -544,6 +598,9 @@ def main() -> None:
                 "binary_gas_brake": bool(not args.continuous_gas_brake),
                 "seed": args.seed,
                 "fixed_fps": args.fixed_fps,
+                "fps_min": args.fps_min,
+                "fps_max": args.fps_max,
+                "lidar_observation_origin": args.lidar_observation_origin,
                 "obs_dim": env.obs_dim,
                 "hidden_dim": list(hidden_dim),
                 "hidden_activation": list(hidden_activation),
@@ -568,7 +625,7 @@ def main() -> None:
                 if worker_pool is None:
                     metrics = []
                     for individual in population:
-                        if bool(getattr(individual, "evaluation_valid", False)):
+                        if elite_cache_enabled and bool(getattr(individual, "evaluation_valid", False)):
                             cached_evaluations += 1
                             cached_by_id[id(individual)] = True
                             metrics.append(cached_metrics_from_individual(individual))
@@ -580,7 +637,7 @@ def main() -> None:
                 else:
                     metrics = [None for _ in population]
                     for idx, individual in enumerate(population):
-                        if bool(getattr(individual, "evaluation_valid", False)):
+                        if elite_cache_enabled and bool(getattr(individual, "evaluation_valid", False)):
                             cached_evaluations += 1
                             cached_by_id[id(individual)] = True
                             metrics[idx] = cached_metrics_from_individual(individual)
@@ -728,7 +785,7 @@ def main() -> None:
 
                 if generation < args.generations:
                     elites = [individual.copy() for individual in population[: args.elite_count]]
-                    if args.disable_elite_cache:
+                    if not elite_cache_enabled:
                         for elite in elites:
                             elite.invalidate_evaluation()
                     parents = [individual.copy() for individual in population[: args.parent_count]]

@@ -64,8 +64,8 @@ function Start-AblationRun {
     if (-not $UseVariableFps) {
         $ArgsList += @("--fixed-fps", "60")
     }
-    if (-not $UseEliteCache) {
-        $ArgsList += "--disable-elite-cache"
+    if ($UseEliteCache) {
+        $ArgsList += "--enable-elite-cache"
     }
     if ($UseContinuousGasBrake) {
         $ArgsList += "--continuous-gas-brake"

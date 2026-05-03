@@ -52,6 +52,36 @@ class TM2DPhysicsConfig:
             car_width=self.car_width,
         )
 
+    def with_fps_range(
+        self,
+        fps_min: float | None,
+        fps_max: float | None,
+    ) -> "TM2DPhysicsConfig":
+        if fps_min is None and fps_max is None:
+            return self
+        if fps_min is None or fps_max is None:
+            raise ValueError("fps_min and fps_max must be provided together.")
+        fps_min = float(fps_min)
+        fps_max = float(fps_max)
+        if fps_min <= 0.0 or fps_max <= 0.0:
+            raise ValueError("fps_min and fps_max must be positive.")
+        if fps_min > fps_max:
+            raise ValueError("fps_min must be less than or equal to fps_max.")
+        return TM2DPhysicsConfig(
+            min_dt=1.0 / fps_max,
+            max_dt=1.0 / fps_min,
+            max_speed=self.max_speed,
+            reverse_speed=self.reverse_speed,
+            gas_accel=self.gas_accel,
+            brake_accel=self.brake_accel,
+            drag=self.drag,
+            rolling_drag=self.rolling_drag,
+            lateral_grip=self.lateral_grip,
+            max_yaw_rate=self.max_yaw_rate,
+            car_length=self.car_length,
+            car_width=self.car_width,
+        )
+
 
 @dataclass
 class TM2DRewardConfig:
@@ -87,6 +117,7 @@ class TM2DSimEnv:
         vertical_mode: bool = False,
         multi_surface_mode: bool = False,
         binary_gas_brake: bool = True,
+        lidar_observation_origin: str = "center",
     ) -> None:
         self.geometry = TM2DGeometry(map_name=map_name)
         self.max_time = float(max_time)
@@ -97,6 +128,9 @@ class TM2DSimEnv:
         if self.collision_mode not in {"center", "corners", "laser", "lidar"}:
             raise ValueError("collision_mode must be 'center', 'corners', or 'laser'.")
         self.collision_distance_threshold = float(collision_distance_threshold)
+        self.lidar_observation_origin = str(lidar_observation_origin).strip().lower()
+        if self.lidar_observation_origin not in {"center", "hitbox"}:
+            raise ValueError("lidar_observation_origin must be 'center' or 'hitbox'.")
         self.start_idle_max_time = float(start_idle_max_time)
         self.start_idle_progress_epsilon = float(start_idle_progress_epsilon)
         self.start_idle_speed_threshold = float(start_idle_speed_threshold)
@@ -290,6 +324,9 @@ class TM2DSimEnv:
             distances = np.asarray(raycast.distances, dtype=np.float32)
             if distances.size <= 0:
                 return False
+            if self.lidar_observation_origin == "hitbox":
+                clearances = distances - float(self.collision_distance_threshold)
+                return bool(float(np.min(clearances)) <= 0.0)
             return bool(float(np.min(distances)) < self.collision_distance_threshold)
 
         if self.collision_mode == "center":
@@ -586,6 +623,7 @@ class TM2DSimEnv:
             "collision_mode": self.collision_mode,
             "min_laser_distance": float(np.min(raycast.distances)) if len(raycast.distances) else float("inf"),
             "collision_distance_threshold": float(self.collision_distance_threshold),
+            "lidar_observation_origin": self.lidar_observation_origin,
             "slip_mean": slip_mean,
             "slip_fl": slip_mean,
             "slip_fr": slip_mean,
@@ -646,7 +684,16 @@ class TM2DSimEnv:
 
         obs = self._obs_buffer
         offset = 0
-        obs[offset:offset + Car.NUM_LASERS] = distances / self.obs_encoder.laser_max_distance
+        if self.lidar_observation_origin == "hitbox":
+            laser_denominator = max(
+                1e-6,
+                self.obs_encoder.laser_max_distance - float(self.collision_distance_threshold),
+            )
+            obs[offset:offset + Car.NUM_LASERS] = (
+                distances - float(self.collision_distance_threshold)
+            ) / laser_denominator
+        else:
+            obs[offset:offset + Car.NUM_LASERS] = distances / self.obs_encoder.laser_max_distance
         np.clip(obs[offset:offset + Car.NUM_LASERS], 0.0, 1.0, out=obs[offset:offset + Car.NUM_LASERS])
         offset += Car.NUM_LASERS
 

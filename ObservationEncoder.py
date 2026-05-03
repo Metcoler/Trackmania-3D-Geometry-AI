@@ -1,6 +1,7 @@
 import numpy as np
 
 from Car import Car
+from VehicleHitbox import VehicleHitbox
 
 
 class ObservationEncoder:
@@ -57,6 +58,7 @@ class ObservationEncoder:
         dt_ratio_clip: float = 3.0,
         vertical_mode: bool = True,
         multi_surface_mode: bool = True,
+        vehicle_hitbox: VehicleHitbox | None = None,
     ) -> None:
         self.laser_max_distance = float(laser_max_distance)
         self.path_instruction_abs_max = float(path_instruction_abs_max)
@@ -71,6 +73,11 @@ class ObservationEncoder:
         self.dt_ratio_clip = float(dt_ratio_clip)
         self.vertical_mode = bool(vertical_mode)
         self.multi_surface_mode = bool(multi_surface_mode)
+        self.vehicle_hitbox = vehicle_hitbox or VehicleHitbox.stadium_car_sport()
+        self.laser_hitbox_offsets = self.vehicle_hitbox.laser_offsets_2d(
+            num_lasers=Car.NUM_LASERS,
+            angle_degrees=Car.ANGLE,
+        )
         if not np.isfinite(self.dt_ref) or self.dt_ref <= 0.0:
             raise ValueError("dt_ref must be a positive finite number.")
         if not np.isfinite(self.dt_ratio_clip) or self.dt_ratio_clip <= 0.0:
@@ -329,7 +336,28 @@ class ObservationEncoder:
             expected_size=Car.SIGHT_TILES,
             pad_value=0.0,
         )
-        distances_norm = np.clip(distances_vec / self.laser_max_distance, 0.0, 1.0)
+        laser_clearances = distances_vec - self.laser_hitbox_offsets
+        laser_denominators = np.maximum(
+            1e-6,
+            self.laser_max_distance - self.laser_hitbox_offsets,
+        )
+        distances_norm = np.clip(laser_clearances / laser_denominators, 0.0, 1.0)
+        min_clearance_index = int(np.argmin(laser_clearances)) if laser_clearances.size else -1
+        info["raw_laser_distances"] = distances_vec.astype(np.float32, copy=True)
+        info["laser_hitbox_offsets"] = self.laser_hitbox_offsets.astype(np.float32, copy=True)
+        info["laser_clearances"] = laser_clearances.astype(np.float32, copy=True)
+        info["lidar_mode"] = "aabb_clearance"
+        info["min_raw_laser_distance"] = float(np.min(distances_vec)) if distances_vec.size else float("inf")
+        info["min_laser_clearance"] = (
+            float(laser_clearances[min_clearance_index]) if min_clearance_index >= 0 else float("inf")
+        )
+        info["min_laser_distance"] = float(info["min_laser_clearance"])
+        info["min_laser_clearance_index"] = int(min_clearance_index)
+        info["hitbox_offset_at_min_clearance"] = (
+            float(self.laser_hitbox_offsets[min_clearance_index])
+            if min_clearance_index >= 0
+            else float("nan")
+        )
         instructions_norm = np.clip(
             instructions_vec / self.path_instruction_abs_max, -1.0, 1.0
         )
@@ -400,7 +428,7 @@ class ObservationEncoder:
             )
             height_instructions = np.clip(height_instructions, -1.0, 1.0)
         current_yaw = self._extract_yaw(info)
-        current_clearance_windows = self._compute_clearance_windows(distances_vec)
+        current_clearance_windows = self._compute_clearance_windows(laser_clearances)
 
         speed = float(info.get("speed", 0.0))
         side_speed = float(info.get("side_speed", 0.0))

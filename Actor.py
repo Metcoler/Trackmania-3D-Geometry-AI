@@ -37,6 +37,9 @@ class AttemptSample:
     dz: float
     slip_mean: float
     dt_ratio: float
+    raw_laser_distances: np.ndarray
+    laser_hitbox_offsets: np.ndarray
+    laser_clearances: np.ndarray
     finished: int
     crashes: int
     timeout: int
@@ -207,6 +210,8 @@ class AttemptWriter:
             "multi_surface_mode": bool(encoder.multi_surface_mode),
             "dt_ref": encoder.dt_ref,
             "dt_ratio_clip": encoder.dt_ratio_clip,
+            "lidar_mode": "aabb_clearance",
+            "vehicle_hitbox": encoder.vehicle_hitbox.as_dict(),
             "action_mode": "target",
             "action_layout": ["gas", "brake", "steer"],
             "recorded_action": "human_correction_action",
@@ -239,6 +244,15 @@ class AttemptWriter:
         directions = np.array([[sample.dx, sample.dy, sample.dz] for sample in samples], dtype=np.float32)
         slip_mean = np.array([sample.slip_mean for sample in samples], dtype=np.float32)
         dt_ratio = np.array([sample.dt_ratio for sample in samples], dtype=np.float32)
+        raw_laser_distances = np.stack(
+            [sample.raw_laser_distances for sample in samples]
+        ).astype(np.float32)
+        laser_hitbox_offsets = np.stack(
+            [sample.laser_hitbox_offsets for sample in samples]
+        ).astype(np.float32)
+        laser_clearances = np.stack(
+            [sample.laser_clearances for sample in samples]
+        ).astype(np.float32)
         finished = np.array([sample.finished for sample in samples], dtype=np.int32)
         crashes = np.array([sample.crashes for sample in samples], dtype=np.int32)
         timeout = np.array([sample.timeout for sample in samples], dtype=np.int32)
@@ -262,6 +276,9 @@ class AttemptWriter:
             directions=directions,
             slip_mean=slip_mean,
             dt_ratio=dt_ratio,
+            raw_laser_distances=raw_laser_distances,
+            laser_hitbox_offsets=laser_hitbox_offsets,
+            laser_clearances=laser_clearances,
             finished=finished,
             crashes=crashes,
             timeout=timeout,
@@ -421,6 +438,18 @@ if __name__ == "__main__":
                     instructions=instructions,
                     info=info,
                 )
+                raw_laser_distances = np.asarray(
+                    info.get("raw_laser_distances", distances),
+                    dtype=np.float32,
+                ).reshape(-1)
+                laser_hitbox_offsets = np.asarray(
+                    info.get("laser_hitbox_offsets", encoder.laser_hitbox_offsets),
+                    dtype=np.float32,
+                ).reshape(-1)
+                laser_clearances = np.asarray(
+                    info.get("laser_clearances", raw_laser_distances - laser_hitbox_offsets),
+                    dtype=np.float32,
+                ).reshape(-1)
                 finished_int = int(finished)
                 crashes = int(info.get("crashes", 0))
                 timeout = int(info.get("timeout", 0))
@@ -443,6 +472,9 @@ if __name__ == "__main__":
                         dz=float(info.get("dz", 0.0)),
                         slip_mean=float(info.get("slip_mean", 0.0)),
                         dt_ratio=float(info.get("dt_ratio", 1.0)),
+                        raw_laser_distances=raw_laser_distances.copy(),
+                        laser_hitbox_offsets=laser_hitbox_offsets.copy(),
+                        laser_clearances=laser_clearances.copy(),
                         finished=finished_int,
                         crashes=crashes,
                         timeout=timeout,

@@ -34,8 +34,7 @@ class RacingGameEnviroment(gym.Env):
         surface_probe_height: float = Car.SURFACE_PROBE_HEIGHT,
         surface_ray_lift: float = Car.SURFACE_RAY_LIFT,
         max_touches: int = 1,
-        touch_distance_threshold: float = 2.0,
-        touch_release_distance_threshold: float = 4.0,
+        touch_release_clearance_threshold: float = 2.0,
         wall_ride_max_contact_time: float = 0.5,
         stall_speed_threshold: float = 3.0,
         stall_release_speed_threshold: float = 6.0,
@@ -121,8 +120,7 @@ class RacingGameEnviroment(gym.Env):
         self.crashes = 0
         self.never_quit = never_quit
         self.max_touches = max(1, int(max_touches))
-        self.touch_distance_threshold = float(touch_distance_threshold)
-        self.touch_release_distance_threshold = float(touch_release_distance_threshold)
+        self.touch_release_clearance_threshold = max(0.0, float(touch_release_clearance_threshold))
         self.wall_ride_max_contact_time = float(wall_ride_max_contact_time)
         self.stall_speed_threshold = float(stall_speed_threshold)
         self.stall_release_speed_threshold = float(stall_release_speed_threshold)
@@ -542,17 +540,17 @@ class RacingGameEnviroment(gym.Env):
             else:
                 self._stuck_since_time = None
 
-            min_distance = min(distances) if len(distances) > 0 else self.laser_max_distance
-            if min_distance > self.touch_release_distance_threshold:
+            min_clearance = float(info.get("min_laser_clearance", float("inf")))
+            if min_clearance > self.touch_release_clearance_threshold:
                 self._laser_touch_latched = False
                 self._wall_contact_since_time = None
 
             # Anti wall-ride: if the car stays in wall contact continuously for too long
-            # (using the same collision threshold as touch detection), terminate the episode.
+            # (using the AABB-relative lidar contact), terminate the episode.
             if (
                 (not self.never_quit)
                 and (discrete_progress > self.stall_progress_epsilon)
-                and (min_distance < self.touch_distance_threshold)
+                and (min_clearance <= 0.0)
             ):
                 if self._wall_contact_since_time is None:
                     self._wall_contact_since_time = current_time
@@ -568,11 +566,11 @@ class RacingGameEnviroment(gym.Env):
                     self._annotate_outcome_info(info, timed_out=False)
                     self._print_live_status(info, distances)
                     return observation, reward, done, truncated, info
-            elif min_distance > self.touch_release_distance_threshold:
+            elif min_clearance > self.touch_release_clearance_threshold:
                 self._wall_contact_since_time = None
 
             laser_touch_event = (
-                (min_distance < self.touch_distance_threshold)
+                (min_clearance <= 0.0)
                 and (not self._laser_touch_latched)
                 and (not self.never_quit)
             )

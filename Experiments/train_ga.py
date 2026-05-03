@@ -249,7 +249,6 @@ def _init_worker(config: dict) -> None:
         vertical_mode=bool(config.get("vertical_mode", False)),
         multi_surface_mode=bool(config.get("multi_surface_mode", False)),
         binary_gas_brake=bool(config.get("binary_gas_brake", True)),
-        lidar_observation_origin=str(config.get("lidar_observation_origin", "center")),
     )
 
 
@@ -399,15 +398,9 @@ def main() -> None:
         "--collision-distance-threshold",
         type=float,
         default=2.0,
-        help="Laser/lidar collision threshold used when --collision-mode laser is selected.",
-    )
-    parser.add_argument(
-        "--lidar-observation-origin",
-        choices=["center", "hitbox"],
-        default="center",
         help=(
-            "Laser observation normalization origin. 'center' uses raw distances; "
-            "'hitbox' subtracts collision-distance-threshold before normalization."
+            "Legacy diagnostic value kept for config visibility. Lidar collision now "
+            "uses AABB-relative clearance instead of a global raw-distance threshold."
         ),
     )
     parser.add_argument(
@@ -511,7 +504,6 @@ def main() -> None:
         vertical_mode=args.vertical_mode,
         multi_surface_mode=args.multi_surface_mode,
         binary_gas_brake=not args.continuous_gas_brake,
-        lidar_observation_origin=args.lidar_observation_origin,
     )
     action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
     population = [
@@ -552,7 +544,8 @@ def main() -> None:
         "seed": int(args.seed),
         "collision_mode": args.collision_mode,
         "collision_distance_threshold": float(args.collision_distance_threshold),
-        "lidar_observation_origin": args.lidar_observation_origin,
+        "lidar_mode": "aabb_clearance",
+        "vehicle_hitbox": env.vehicle_hitbox.as_dict(),
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),
@@ -600,7 +593,6 @@ def main() -> None:
                 "fixed_fps": args.fixed_fps,
                 "fps_min": args.fps_min,
                 "fps_max": args.fps_max,
-                "lidar_observation_origin": args.lidar_observation_origin,
                 "obs_dim": env.obs_dim,
                 "hidden_dim": list(hidden_dim),
                 "hidden_activation": list(hidden_activation),

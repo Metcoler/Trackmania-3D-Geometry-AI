@@ -439,24 +439,67 @@ curve-feasibility parameter and should be validated by rollout behavior.
 - Small stochasticity helped: `50-60 FPS` found a finisher where fixed 60 FPS
   found none, but it was still weak (`6` finish individuals total). Full
   variable FPS remains the healthier training default for now.
+- Mutation-scale follow-up confirmed this is not only a bad sigma/probability
+  choice:
+  - fixed FPS with low mutation (`prob=0.12`, `sigma=0.08`) stayed stable but
+    weak: `0` finishers and about `17%` max dense progress;
+  - fixed FPS with high mutation (`prob=0.25`, `sigma=0.35`) explored farther:
+    `0` finishers but about `66%` max dense progress;
+  - `50-60 FPS` with the normal mutation settings found finishers. Therefore
+    rollout-level stochasticity is doing something qualitatively different from
+    simply increasing genome mutation. Treat fixed FPS as a strict evaluation
+    tool, not as the main GA training mode.
 - The raw lidar collision failure appears to be an observation-design problem:
   the network had to infer a hidden rule like "any laser below 2 means crash".
-  A hitbox-normalized lidar observation was added in TM2D:
+  The first diagnostic fix subtracted the global threshold before observation:
   `obs_laser = clip((raw_distance - collision_threshold) /
   (laser_max_distance - collision_threshold), 0, 1)`.
-- With the same lidar crash rule but hitbox-normalized observation, the run
+- With the same lidar crash rule but this threshold-normalized observation, the run
   reached the first finish at generation `160`, produced `214` finish
   individuals, and reached `100%` dense progress. This strongly suggests that
   if live Trackmania keeps lidar-based crash detection, the observation should
   also expose hitbox-relative laser clearances rather than raw center distances.
+  This is an important thesis example: the same physical rule can be almost
+  unusable or learnable depending on whether the observation exposes the
+  decision boundary in a neural-network-friendly coordinate system.
 - Important comparison caveat: the older ablation runs had elite caching
   enabled, while the newer `fps_50_60` and `collision_lidar_hitbox` runs used
   the newer no-cache default. Do not over-interpret exact counts across these
   groups; the qualitative failures and recovery signals are still clear.
+- Breaking lidar convention update on 2026-05-03: the old raw center-distance
+  lidar is now treated as a legacy experiment only. It was:
+  `obs_laser = raw_distance / 160` plus the hidden crash proxy
+  `min(raw_lidar) < 2.0`. This is no longer an active default because the
+  network had to discover a magic threshold and because one global threshold is
+  geometrically wrong for different laser angles.
+- The new project-wide meaning of `lidar` is AABB-relative clearance lidar:
+  rays still start at the car center for efficient batched raycasting, but each
+  laser subtracts the distance from the center to the empirical AABB hitbox
+  boundary in that laser direction. Therefore `lidar = 0` means contact.
+- The initial Stadium CarSport empirical hitbox is stored in `VehicleHitbox.py`:
+  `half_width ~= 1.10`, `front_half_length ~= 2.15`,
+  `rear_half_length ~= 1.95`, `half_height ~= 0.60`. It is based on the
+  primitive mesh AABB and checked against supervised near-contact runs; it is
+  not claimed to be the official `PhyModelSport.VehiclePhyModel.Gbx` hitbox.
+- `Experiments/analyze_vehicle_hitbox.py` was added to make the hitbox
+  reasoning reproducible. On the latest near-contact supervised run
+  `20260503_105804`, the selected AABB had minimum observed
+  supervised-minus-AABB margin about `0.216` and median margin about `0.326`.
+  That run finished successfully, so its laser minima are not treated as exact
+  collision truth, only as a sanity check that the selected AABB is not larger
+  than observed close-pass clearances.
+- TM2D and live Trackmania now use the same lidar convention:
+  `clearance_i = raw_distance_i - aabb_offset_i`, observation is
+  `clip(clearance_i / (laser_max_distance - aabb_offset_i), 0, 1)`, and
+  lidar collision/contact is `min(clearance_i) <= 0`.
+- `Actor.py` supervised attempts now store `raw_laser_distances`,
+  `laser_hitbox_offsets`, and `laser_clearances`, so future hitbox and
+  collision analyses do not need to reconstruct raw lidar from observation.
 - Current practical TM2D defaults for GA reward/selection research:
-  variable FPS, `center` collision for fast reward debugging, continuous
-  gas/brake, dense progress, no elite cache. Use `lidar + hitbox observation`
-  when testing live-like crash behavior.
+  variable FPS, AABB clearance lidar for live-like crash behavior, continuous
+  gas/brake, dense progress, no elite cache. `center` and `corners` collision
+  remain only fast diagnostic simplifications, not the canonical live-like
+  lidar model.
 
 Known physics limitation: Trackmania has a drift/slip regime when braking or
 turning at sufficient speed. In the current supervised data, about `3.5%` of

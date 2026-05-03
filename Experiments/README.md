@@ -49,7 +49,7 @@ Evaluate individuals in parallel when the population is large enough to amortize
 python Experiments/train_ga.py --map-name "AI Training #5" --generations 100 --population-size 48 --num-workers 4
 ```
 
-For stricter collision checks, add `--collision-mode corners`. The default `center` mode is intentionally faster for reward experiments.
+The default `--collision-mode laser` uses AABB-relative clearance lidar, matching the live Trackmania crash proxy more closely than the older raw-distance threshold. `center` and `corners` remain fast diagnostic simplifications when we want to isolate reward behavior from live-like wall contact.
 
 Use `--fixed-fps 60` for deterministic stepping. Leave `--fixed-fps` unset to sample frame times from the configured 100-30 FPS range, which is closer to realtime Trackmania jitter.
 
@@ -63,6 +63,12 @@ Recompute physics suggestions from supervised attempts:
 
 ```powershell
 python Experiments/calibrate_tm2d_physics.py --data-root logs/supervised_data
+```
+
+Analyze the empirical Stadium car AABB used by clearance lidar:
+
+```powershell
+python Experiments/analyze_vehicle_hitbox.py --data-roots logs/supervised_data --output-dir Experiments/analysis/vehicle_hitbox
 ```
 
 Visualize the 2D simulator with a simple heuristic driver:

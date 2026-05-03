@@ -484,6 +484,8 @@ def main() -> None:
         "max_runtime_minutes": float(args.max_runtime_minutes),
         "collision_mode": args.collision_mode,
         "collision_distance_threshold": float(args.collision_distance_threshold),
+        "lidar_mode": "aabb_clearance",
+        "vehicle_hitbox": raw_env.env.vehicle_hitbox.as_dict(),
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),

@@ -238,6 +238,8 @@ def main() -> None:
         "reward_mode": args.reward_mode,
         "collision_mode": args.collision_mode,
         "collision_distance_threshold": float(args.collision_distance_threshold),
+        "lidar_mode": "aabb_clearance",
+        "vehicle_hitbox": env.vehicle_hitbox.as_dict(),
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),

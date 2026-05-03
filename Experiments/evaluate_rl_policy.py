@@ -21,7 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--map-name", default=DEFAULT_MAP_NAME)
     parser.add_argument("--reward-mode", default=DEFAULT_REWARD_MODE)
     parser.add_argument("--action-layout", default=DEFAULT_ACTION_LAYOUT)
-    parser.add_argument("--collision-mode", default="corners", choices=["center", "corners"])
+    parser.add_argument("--collision-mode", default="laser", choices=["center", "corners", "laser", "lidar"])
+    parser.add_argument("--collision-distance-threshold", type=float, default=2.0)
     parser.add_argument("--env-max-time", type=float, default=45.0)
     parser.add_argument("--episodes", type=int, default=20)
     parser.add_argument("--seed", type=int, default=9000)
@@ -54,6 +55,7 @@ def main() -> None:
             env_max_time=args.env_max_time,
             action_layout=args.action_layout,
             collision_mode=args.collision_mode,
+            collision_distance_threshold=args.collision_distance_threshold,
             seed=int(args.seed) + episode,
         )
         obs, info = env.reset(seed=int(args.seed) + episode)

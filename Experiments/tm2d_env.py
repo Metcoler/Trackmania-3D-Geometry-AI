@@ -117,7 +117,6 @@ class TM2DSimEnv:
         vertical_mode: bool = False,
         multi_surface_mode: bool = False,
         binary_gas_brake: bool = True,
-        lidar_observation_origin: str = "center",
     ) -> None:
         self.geometry = TM2DGeometry(map_name=map_name)
         self.max_time = float(max_time)
@@ -128,9 +127,7 @@ class TM2DSimEnv:
         if self.collision_mode not in {"center", "corners", "laser", "lidar"}:
             raise ValueError("collision_mode must be 'center', 'corners', or 'laser'.")
         self.collision_distance_threshold = float(collision_distance_threshold)
-        self.lidar_observation_origin = str(lidar_observation_origin).strip().lower()
-        if self.lidar_observation_origin not in {"center", "hitbox"}:
-            raise ValueError("lidar_observation_origin must be 'center' or 'hitbox'.")
+        self.lidar_mode = "aabb_clearance"
         self.start_idle_max_time = float(start_idle_max_time)
         self.start_idle_progress_epsilon = float(start_idle_progress_epsilon)
         self.start_idle_speed_threshold = float(start_idle_speed_threshold)
@@ -142,6 +139,8 @@ class TM2DSimEnv:
             vertical_mode=bool(vertical_mode),
             multi_surface_mode=bool(multi_surface_mode),
         )
+        self.vehicle_hitbox = self.obs_encoder.vehicle_hitbox
+        self.laser_hitbox_offsets = self.obs_encoder.laser_hitbox_offsets
         self._clearance_windows = ObservationEncoder.clearance_window_bounds()
         self._obs_buffer = np.zeros(self.obs_encoder.obs_dim, dtype=np.float32)
         self._path_instr_buffer = np.zeros(Car.SIGHT_TILES, dtype=np.float32)
@@ -324,10 +323,8 @@ class TM2DSimEnv:
             distances = np.asarray(raycast.distances, dtype=np.float32)
             if distances.size <= 0:
                 return False
-            if self.lidar_observation_origin == "hitbox":
-                clearances = distances - float(self.collision_distance_threshold)
-                return bool(float(np.min(clearances)) <= 0.0)
-            return bool(float(np.min(distances)) < self.collision_distance_threshold)
+            clearances = distances - self.laser_hitbox_offsets
+            return bool(float(np.min(clearances)) <= 0.0)
 
         if self.collision_mode == "center":
             return not self.geometry.point_on_road(self.position)
@@ -621,9 +618,10 @@ class TM2DSimEnv:
             "crashes": int(self.crashes),
             "timeout": int(self.done and int(self.finished) == 0 and int(self.crashes) == 0),
             "collision_mode": self.collision_mode,
-            "min_laser_distance": float(np.min(raycast.distances)) if len(raycast.distances) else float("inf"),
+            "min_raw_laser_distance": float(np.min(raycast.distances)) if len(raycast.distances) else float("inf"),
             "collision_distance_threshold": float(self.collision_distance_threshold),
-            "lidar_observation_origin": self.lidar_observation_origin,
+            "lidar_mode": self.lidar_mode,
+            "vehicle_hitbox": self.vehicle_hitbox.as_dict(),
             "slip_mean": slip_mean,
             "slip_fl": slip_mean,
             "slip_fr": slip_mean,
@@ -643,6 +641,21 @@ class TM2DSimEnv:
 
     def _build_fast_observation(self, distances: np.ndarray, info: dict) -> np.ndarray:
         distances = np.asarray(distances, dtype=np.float32)
+        laser_clearances = distances - self.laser_hitbox_offsets
+        min_clearance_index = int(np.argmin(laser_clearances)) if laser_clearances.size else -1
+        info["raw_laser_distances"] = distances.astype(np.float32, copy=True)
+        info["laser_hitbox_offsets"] = self.laser_hitbox_offsets.astype(np.float32, copy=True)
+        info["laser_clearances"] = laser_clearances.astype(np.float32, copy=True)
+        info["min_laser_clearance"] = (
+            float(laser_clearances[min_clearance_index]) if min_clearance_index >= 0 else float("inf")
+        )
+        info["min_laser_distance"] = float(info["min_laser_clearance"])
+        info["min_laser_clearance_index"] = int(min_clearance_index)
+        info["hitbox_offset_at_min_clearance"] = (
+            float(self.laser_hitbox_offsets[min_clearance_index])
+            if min_clearance_index >= 0
+            else float("nan")
+        )
         self._path_instr_buffer[:] = self.geometry.path_instructions_at(self.path_index)
         if self.obs_encoder.multi_surface_mode:
             self._surface_instr_buffer[:] = info["next_surface_instructions"]
@@ -654,7 +667,7 @@ class TM2DSimEnv:
         dt_ratio = float(np.clip(dt / self.obs_encoder.dt_ref, 0.0, self.obs_encoder.dt_ratio_clip))
         clearance_windows = np.asarray(
             [
-                float(np.mean(distances[start:end]))
+                float(np.mean(laser_clearances[start:end]))
                 for start, end in self._clearance_windows
             ],
             dtype=np.float32,
@@ -684,16 +697,11 @@ class TM2DSimEnv:
 
         obs = self._obs_buffer
         offset = 0
-        if self.lidar_observation_origin == "hitbox":
-            laser_denominator = max(
-                1e-6,
-                self.obs_encoder.laser_max_distance - float(self.collision_distance_threshold),
-            )
-            obs[offset:offset + Car.NUM_LASERS] = (
-                distances - float(self.collision_distance_threshold)
-            ) / laser_denominator
-        else:
-            obs[offset:offset + Car.NUM_LASERS] = distances / self.obs_encoder.laser_max_distance
+        laser_denominators = np.maximum(
+            1e-6,
+            self.obs_encoder.laser_max_distance - self.laser_hitbox_offsets,
+        )
+        obs[offset:offset + Car.NUM_LASERS] = laser_clearances / laser_denominators
         np.clip(obs[offset:offset + Car.NUM_LASERS], 0.0, 1.0, out=obs[offset:offset + Car.NUM_LASERS])
         offset += Car.NUM_LASERS
 

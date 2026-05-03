@@ -33,7 +33,6 @@ RL_test/logs/sb3_runs/**/*.zip
 # Local simulator run artifacts
 Experiments/runs/
 Experiments/runs_rl/
-Experiments/runs_ga_architecture_ablation/
 Experiments/analysis/**/combined_individual_metrics.csv
 
 Maps/Meshes/material_0.png

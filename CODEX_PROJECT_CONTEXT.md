@@ -419,6 +419,45 @@ curve-feasibility parameter and should be validated by rollout behavior.
   mechanism such as `easy` vs `calibrated` instead of silently changing the
   defaults.
 
+2026-05-03 intermediate-physics GA ablation:
+
+- To keep reward-function experiments learnable without returning to the very
+  easy toy physics, TM2D was set to an intermediate diagnostic profile:
+  `max_speed=130`, `gas_accel=22`, `max_yaw_rate=1.5`.
+- A sweep on AI Training #5 with `(finished, progress, -time)`, dense progress,
+  `48/4/16`, continuous gas/brake and 200 generations showed that some
+  "more realistic" switches can badly damage GA training:
+  - deterministic `fixed_fps=60` produced `0` finishers and only about `31%`
+    max dense progress;
+  - raw `collision_lidar` with crash at `min_lidar < 2.0` produced `0`
+    finishers and only about `26%` max dense progress.
+- The interpretation is not that deterministic evaluation is useless. Rather,
+  fixed FPS is a poor training mode for this GA because it removes useful
+  rollout perturbations, creates a sharper fitness landscape, and can repeat
+  exactly the same local failure for a near-good genome. Keep fixed FPS mainly
+  as an evaluation/reproducibility mode, not as the default training mode.
+- Small stochasticity helped: `50-60 FPS` found a finisher where fixed 60 FPS
+  found none, but it was still weak (`6` finish individuals total). Full
+  variable FPS remains the healthier training default for now.
+- The raw lidar collision failure appears to be an observation-design problem:
+  the network had to infer a hidden rule like "any laser below 2 means crash".
+  A hitbox-normalized lidar observation was added in TM2D:
+  `obs_laser = clip((raw_distance - collision_threshold) /
+  (laser_max_distance - collision_threshold), 0, 1)`.
+- With the same lidar crash rule but hitbox-normalized observation, the run
+  reached the first finish at generation `160`, produced `214` finish
+  individuals, and reached `100%` dense progress. This strongly suggests that
+  if live Trackmania keeps lidar-based crash detection, the observation should
+  also expose hitbox-relative laser clearances rather than raw center distances.
+- Important comparison caveat: the older ablation runs had elite caching
+  enabled, while the newer `fps_50_60` and `collision_lidar_hitbox` runs used
+  the newer no-cache default. Do not over-interpret exact counts across these
+  groups; the qualitative failures and recovery signals are still clear.
+- Current practical TM2D defaults for GA reward/selection research:
+  variable FPS, `center` collision for fast reward debugging, continuous
+  gas/brake, dense progress, no elite cache. Use `lidar + hitbox observation`
+  when testing live-like crash behavior.
+
 Known physics limitation: Trackmania has a drift/slip regime when braking or
 turning at sufficient speed. In the current supervised data, about `3.5%` of
 frames have `brake > 0.5`, `speed > 45`, and `slip_mean > 0.5`; these frames

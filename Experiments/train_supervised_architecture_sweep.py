@@ -47,7 +47,12 @@ DEFAULT_DATA_ROOTS = [
 ]
 
 DEFAULT_ARCHITECTURES = "8;16;24;32;16,8;24,12;32,16;48,24;64,32;32,16,8;128,64"
-DEFAULT_ACTIVATIONS = "tanh;relu;relu,tanh;tanh,tanh;relu,relu;sigmoid"
+DEFAULT_ACTIVATIONS = "auto"
+DEFAULT_ACTIVATIONS_BY_DEPTH = {
+    1: "relu;tanh;sigmoid",
+    2: "relu,relu;relu,tanh;tanh,tanh;sigmoid,sigmoid",
+    3: "relu,relu,relu;tanh,tanh,tanh;relu,relu,tanh;sigmoid,sigmoid,sigmoid",
+}
 DEFAULT_MASK_FEATURES = (
     "steer,gas,brake,input_steer,input_gas,input_brake,"
     "previous_steer,previous_gas,previous_brake"
@@ -88,6 +93,31 @@ def parse_activation_candidates(value: str) -> list[tuple[str, ...]]:
     if not result:
         raise ValueError("Activation list is empty.")
     return result
+
+
+def activation_candidates_for_depth(value: str, depth: int) -> list[tuple[str, ...]]:
+    value = str(value).strip()
+    if value.lower() == "auto":
+        if int(depth) not in DEFAULT_ACTIVATIONS_BY_DEPTH:
+            raise ValueError(f"No default activation candidates configured for {depth} hidden layers.")
+        raw_candidates = parse_activation_candidates(DEFAULT_ACTIVATIONS_BY_DEPTH[int(depth)])
+    else:
+        raw_candidates = parse_activation_candidates(value)
+
+    normalized_candidates: list[tuple[str, ...]] = []
+    seen: set[tuple[str, ...]] = set()
+    for candidate in raw_candidates:
+        try:
+            normalized = normalize_hidden_activations(candidate, num_hidden_layers=int(depth))
+        except ValueError:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        normalized_candidates.append(normalized)
+    if not normalized_candidates:
+        raise ValueError(f"No compatible activation candidates for {depth} hidden layers.")
+    return normalized_candidates
 
 
 def dims_label(dims: tuple[int, ...]) -> str:
@@ -388,7 +418,12 @@ def plot_heatmap(summary_rows: list[dict], output_dir: Path) -> None:
     )
     if pivot.empty:
         return
-    pivot = pivot.reindex([row["architecture"] for row in summary_rows if row["activation"] == summary_rows[0]["activation"]])
+    architecture_order: list[str] = []
+    for row in summary_rows:
+        architecture = str(row["architecture"])
+        if architecture not in architecture_order:
+            architecture_order.append(architecture)
+    pivot = pivot.reindex(architecture_order)
     pivot = pivot.loc[~pivot.index.duplicated(keep="first")]
     values = pivot.to_numpy(dtype=float)
     masked = np.ma.masked_invalid(values)
@@ -456,14 +491,44 @@ def markdown_table(rows: list[dict], columns: list[str], limit: int = 12) -> str
     return "\n".join(lines)
 
 
+def tolerance_rows(summary_rows: list[dict], best_loss: float) -> list[dict]:
+    rows: list[dict] = []
+    if not summary_rows or not np.isfinite(best_loss):
+        return rows
+    for tolerance in (0.05, 0.10, 0.15, 0.20):
+        limit = best_loss * (1.0 + tolerance)
+        candidates = [
+            row for row in sorted(summary_rows, key=lambda item: int(item["parameter_count"]))
+            if float(row["best_val_loss"]) <= limit
+        ]
+        if not candidates:
+            rows.append(
+                {
+                    "tolerance": f"{int(tolerance * 100)}%",
+                    "candidate_id": "",
+                    "architecture": "",
+                    "activation": "",
+                    "parameter_count": "",
+                    "best_val_loss": "",
+                    "loss_ratio": "",
+                    "best_val_steer_mae": "",
+                    "best_val_gas_accuracy": "",
+                    "best_val_brake_accuracy": "",
+                    "best_epoch": "",
+                }
+            )
+            continue
+        candidate = candidates[0]
+        enriched = dict(candidate)
+        enriched["tolerance"] = f"{int(tolerance * 100)}%"
+        enriched["loss_ratio"] = float(candidate["best_val_loss"]) / best_loss
+        rows.append(enriched)
+    return rows
+
+
 def write_report(output_dir: Path, summary_rows: list[dict], skipped_rows: list[dict], config: dict) -> None:
     ranked = sorted(summary_rows, key=lambda row: (float(row["best_val_loss"]), int(row["parameter_count"])))
     best_loss = float(ranked[0]["best_val_loss"]) if ranked else float("nan")
-    elbow_rows = [
-        row for row in sorted(summary_rows, key=lambda item: int(item["parameter_count"]))
-        if np.isfinite(best_loss) and float(row["best_val_loss"]) <= best_loss * 1.05
-    ]
-    elbow = elbow_rows[0] if elbow_rows else None
     columns = [
         "candidate_id",
         "architecture",
@@ -475,6 +540,20 @@ def write_report(output_dir: Path, summary_rows: list[dict], skipped_rows: list[
         "best_val_brake_accuracy",
         "best_epoch",
     ]
+    tolerance_columns = [
+        "tolerance",
+        "candidate_id",
+        "architecture",
+        "activation",
+        "parameter_count",
+        "best_val_loss",
+        "loss_ratio",
+        "best_val_steer_mae",
+        "best_val_gas_accuracy",
+        "best_val_brake_accuracy",
+        "best_epoch",
+    ]
+    smallest_tolerances = tolerance_rows(summary_rows, best_loss)
     report = f"""# Supervised Architecture Capacity Sweep
 
 ## Purpose
@@ -497,13 +576,13 @@ This experiment estimates whether a small MLP can approximate the mapping `obser
 
 {markdown_table(ranked, columns=columns, limit=12)}
 
-## Smallest Candidate Within 5% Of Best Loss
+## Smallest Candidates Within Loss Tolerances
 
-{markdown_table([elbow], columns=columns, limit=1) if elbow is not None else "_No candidate within tolerance._"}
+{markdown_table(smallest_tolerances, columns=tolerance_columns, limit=4)}
 
-## Skipped Configurations
+## Skipped Or Duplicate Configurations
 
-Skipped incompatible architecture/activation combinations: `{len(skipped_rows)}`.
+Skipped incompatible or duplicate architecture/activation combinations: `{len(skipped_rows)}`.
 
 ## Generated Plots
 
@@ -527,8 +606,15 @@ def main() -> None:
     parser.add_argument("--vertical-mode", type=parse_bool, default=False)
     parser.add_argument("--multi-surface-mode", type=parse_bool, default=False)
     parser.add_argument("--architectures", default=DEFAULT_ARCHITECTURES)
-    parser.add_argument("--hidden-activations", default=DEFAULT_ACTIVATIONS)
-    parser.add_argument("--epochs", type=int, default=80)
+    parser.add_argument(
+        "--hidden-activations",
+        default=DEFAULT_ACTIVATIONS,
+        help=(
+            "'auto' uses depth-specific clean candidates; otherwise provide a semicolon-separated "
+            "activation list such as 'relu;relu,tanh;tanh,tanh'."
+        ),
+    )
+    parser.add_argument("--epochs", type=int, default=120)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--batch-size", type=int, default=None)
@@ -548,7 +634,14 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=False)
 
     architectures = parse_architectures(args.architectures)
-    activation_candidates = parse_activation_candidates(args.hidden_activations)
+    activation_candidates_by_depth: dict[int, list[tuple[str, ...]]] = {}
+    for hidden_dims in architectures:
+        depth = len(hidden_dims)
+        if depth not in activation_candidates_by_depth:
+            activation_candidates_by_depth[depth] = activation_candidates_for_depth(
+                args.hidden_activations,
+                depth=depth,
+            )
     mask_feature_names = parse_csv_values(args.mask_feature_names)
     random_seed = int(args.random_seed)
     split_rng = np.random.default_rng(random_seed)
@@ -619,7 +712,12 @@ def main() -> None:
             multi_surface_mode=bool(args.multi_surface_mode),
         ),
         "architectures": [list(value) for value in architectures],
-        "hidden_activation_candidates": [list(value) for value in activation_candidates],
+        "hidden_activation_mode": str(args.hidden_activations),
+        "hidden_activation_candidates_by_depth": {
+            str(depth): [list(value) for value in candidates]
+            for depth, candidates in sorted(activation_candidates_by_depth.items())
+        },
+        "default_activations_by_depth": DEFAULT_ACTIVATIONS_BY_DEPTH,
         "epochs": int(args.epochs),
         "learning_rate": float(args.learning_rate),
         "weight_decay": float(args.weight_decay),
@@ -646,28 +744,35 @@ def main() -> None:
     epoch_rows: list[dict] = []
     skipped_rows: list[dict] = []
     candidate_index = 0
+    seen_configs: set[tuple[tuple[int, ...], tuple[str, ...]]] = set()
+    seen_candidate_ids: set[str] = set()
 
     for hidden_dims in architectures:
-        for activation_candidate in activation_candidates:
+        activation_candidates = activation_candidates_by_depth[len(hidden_dims)]
+        for normalized_activations in activation_candidates:
             arch_label = dims_label(hidden_dims)
-            requested_activation = activation_label(activation_candidate)
-            try:
-                normalized_activations = normalize_hidden_activations(
-                    activation_candidate,
-                    num_hidden_layers=len(hidden_dims),
-                )
-            except ValueError as exc:
+            requested_activation = activation_label(normalized_activations)
+            config_key = (hidden_dims, normalized_activations)
+            if config_key in seen_configs:
                 skipped_rows.append(
                     {
                         "architecture": arch_label,
                         "requested_activation": requested_activation,
-                        "reason": str(exc),
+                        "reason": "duplicate normalized architecture/activation",
                     }
                 )
                 continue
+            seen_configs.add(config_key)
 
             candidate_index += 1
-            candidate_id = f"arch_{safe_label(arch_label)}_act_{safe_label(activation_label(normalized_activations))}"
+            candidate_id = (
+                f"c{candidate_index:03d}_"
+                f"arch_{safe_label(arch_label)}_"
+                f"act_{safe_label(activation_label(normalized_activations))}"
+            )
+            if candidate_id in seen_candidate_ids:
+                raise RuntimeError(f"Duplicate candidate_id generated: {candidate_id}")
+            seen_candidate_ids.add(candidate_id)
             candidate_seed = random_seed + 1000 + candidate_index
             print(
                 f"[{candidate_index:03d}] {candidate_id} | "
@@ -693,6 +798,16 @@ def main() -> None:
             summary["candidate_index"] = candidate_index
             summary_rows.append(summary)
             epoch_rows.extend(candidate_epoch_rows)
+
+    normalized_pairs = [
+        (str(row["architecture"]), str(row["activation"]))
+        for row in summary_rows
+    ]
+    if len(set(normalized_pairs)) != len(normalized_pairs):
+        raise RuntimeError("Duplicate architecture + activation rows detected in summary.")
+    candidate_ids = [str(row["candidate_id"]) for row in summary_rows]
+    if len(set(candidate_ids)) != len(candidate_ids):
+        raise RuntimeError("Duplicate candidate_id rows detected in summary.")
 
     summary_fieldnames = [
         "candidate_index",

@@ -1,0 +1,2 @@
+architecture,requested_activation,reason
+8,"relu,tanh","hidden_activation must provide either one activation or exactly 1 activations, got 2."

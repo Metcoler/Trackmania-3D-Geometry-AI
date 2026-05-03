@@ -93,3 +93,6 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_lexicographic_sweep_a
 
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selection_grid_pc2.ps1
+
+
+python Experiments\train_supervised_architecture_sweep.py

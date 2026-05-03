@@ -1,2 +1,0 @@
-attempt_index,saved,num_frames,finish_time,discrete_progress,dense_progress,finished,crashes,timeout,distance,path
-1,1,11770,197.13999938964844,100.0,100.0,1,0,0,1794.50341796875,logs/supervised_data\20260503_105804_map_AI Training #5_v2d_asphalt_target_dataset\attempts\attempt_0001.npz

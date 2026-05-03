@@ -96,3 +96,5 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selecti
 
 
 python Experiments\train_supervised_architecture_sweep.py
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_mutation_grid_pc2_prob25_30.ps1

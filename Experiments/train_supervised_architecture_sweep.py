@@ -614,7 +614,7 @@ def main() -> None:
             "activation list such as 'relu;relu,tanh;tanh,tanh'."
         ),
     )
-    parser.add_argument("--epochs", type=int, default=120)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--batch-size", type=int, default=None)

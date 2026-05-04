@@ -120,3 +120,6 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selecti
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_selection_refinement_pc1.ps1
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_hyperparam_mutation_refinement_pc2.ps1
+
+
+python Experiments\train_ga.py --map-name "AI Training #5" --generations 300 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.2 --mutation-sigma 0.2 --fitness-mode ranking --ranking-mode lexicographic --ranking-key "(finished, progress, -time, -crashes)" --ranking-progress-source dense_progress --reward-mode terminal_fitness --collision-mode lidar --physics-tick-profile supervised_v2d --seed 2026050405 --num-workers 8 --disable-elite-cache --log-dir Experiments\runs_ga_diagnostic\variable_physics_tick_lidar_finished_progress_time_crashes_seed_2026050405

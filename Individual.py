@@ -53,6 +53,7 @@ class Individual:
         self.evaluation_terminated: bool = False
         self.evaluation_truncated: bool = False
         self.evaluation_trajectory = None
+        self.evaluation_context: str = ""
         self.selection_rank: Optional[int] = None
         self.selection_crowding: float = 0.0
         self.selection_objectives: Optional[Tuple[float, ...]] = None
@@ -87,6 +88,7 @@ class Individual:
         self.evaluation_terminated = False
         self.evaluation_truncated = False
         self.evaluation_trajectory = None
+        self.evaluation_context = ""
         self.selection_rank = None
         self.selection_crowding = 0.0
         self.selection_objectives = None
@@ -807,6 +809,7 @@ class Individual:
         new.evaluation_terminated = self.evaluation_terminated
         new.evaluation_truncated = self.evaluation_truncated
         new.evaluation_trajectory = self.evaluation_trajectory
+        new.evaluation_context = self.evaluation_context
         new.selection_rank = self.selection_rank
         new.selection_crowding = self.selection_crowding
         new.selection_objectives = self.selection_objectives

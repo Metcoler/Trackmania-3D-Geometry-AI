@@ -1,5 +1,0 @@
-variant,ranking_key,runs,completed_runs,first_finish_mean,first_finish_std,best_finish_time_min,best_finish_time_mean,best_finish_time_std,final_finish_rate_mean,final_finish_rate_std,final_crash_rate_mean,final_timeout_rate_mean,final_mean_dense_progress_mean,max_cached_evaluations
-finished_progress,"(finished, progress)",2,2,,,,,,0.0,0.0,1.0,0.0,13.201759661642724,0
-finished_progress_time,"(finished, progress, -time)",2,2,,,,,,0.0,0.0,1.0,0.0,13.50739433784705,0
-finished_progress_time_crashes,"(finished, progress, -time, -crashes)",2,2,,,,,,0.0,0.0,1.0,0.0,11.658225773703384,0
-finished_progress_crashes_time,"(finished, progress, -crashes, -time)",2,2,,,,,,0.0,0.0,1.0,0.0,16.795624613070355,0

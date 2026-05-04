@@ -75,6 +75,7 @@ class TM2DSB3Env(gym.Env):
         terminal_fitness_scale: float = 1_000_000.0,
         pace_target_time: float | None = None,
         fixed_fps: float | None = None,
+        physics_tick_profile: str = "supervised_v2d",
         vertical_mode: bool = False,
         multi_surface_mode: bool = False,
         binary_gas_brake: bool = True,
@@ -89,7 +90,9 @@ class TM2DSB3Env(gym.Env):
             map_name=map_name,
             max_time=float(env_max_time),
             reward_config=self.reward_config,
-            physics_config=TM2DPhysicsConfig().with_fixed_fps(fixed_fps),
+            physics_config=TM2DPhysicsConfig().with_tick_profile(
+                "fixed100" if fixed_fps is not None else physics_tick_profile
+            ),
             seed=seed,
             collision_mode=collision_mode,
             collision_distance_threshold=collision_distance_threshold,
@@ -409,7 +412,7 @@ def parse_args() -> argparse.Namespace:
         "--fixed-fps",
         type=float,
         default=None,
-        help="Use deterministic fixed simulation FPS by setting min_dt=max_dt=1/fps.",
+        help="Legacy alias for deterministic 100 Hz TM2D physics when set to 100.",
     )
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--learning-rate", type=float, default=3e-4)

@@ -374,7 +374,7 @@ def main() -> None:
 
     encoder = ObservationEncoder(
         dt_ref=1.0 / 100.0,
-        dt_ratio_clip=3.0,
+        action_dt_ratio_clip=3.0,
         vertical_mode=vertical_mode,
         multi_surface_mode=multi_surface_mode,
     )
@@ -538,7 +538,23 @@ def main() -> None:
                         dy=float(info.get("dy", 0.0)),
                         dz=float(info.get("dz", 0.0)),
                         slip_mean=float(info.get("slip_mean", 0.0)),
-                        dt_ratio=float(info.get("dt_ratio", 1.0)),
+                        game_dt=float(info.get("game_dt", encoder.dt_ref)),
+                        physics_tick_count=int(info.get("physics_tick_count", 1)),
+                        physics_hz=float(info.get("physics_hz", 1.0 / encoder.dt_ref)),
+                        physics_hz_norm=float(info.get("physics_hz_norm", 1.0)),
+                        physics_delay_norm=float(info.get("physics_delay_norm", 0.0)),
+                        raw_laser_distances=np.asarray(
+                            info.get("raw_laser_distances", distances),
+                            dtype=np.float32,
+                        ).copy(),
+                        laser_hitbox_offsets=np.asarray(
+                            info.get("laser_hitbox_offsets", encoder.laser_hitbox_offsets),
+                            dtype=np.float32,
+                        ).copy(),
+                        laser_clearances=np.asarray(
+                            info.get("laser_clearances", np.asarray(distances, dtype=np.float32) - encoder.laser_hitbox_offsets),
+                            dtype=np.float32,
+                        ).copy(),
                         finished=int(finished),
                         crashes=crashes,
                         timeout=timeout,

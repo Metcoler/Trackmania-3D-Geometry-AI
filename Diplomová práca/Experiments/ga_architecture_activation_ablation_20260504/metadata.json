@@ -1,0 +1,31 @@
+{
+  "experiment_id": "ga_architecture_activation_ablation_20260504",
+  "title": "Closed-loop architecture activation ablation",
+  "category": "thesis_grade",
+  "status": "closed_loop_single_seed",
+  "thesis_relevance": "Closed-loop GA comparison of 32x16/48x24 and relu,tanh versus relu,relu under the selected reward tuple.",
+  "interpretation": "relu,tanh outperformed relu,relu in the closed-loop ablation; 48x24 is the stronger candidate, while 32x16 remains the cheaper experimental baseline.",
+  "keywords": [
+    "architecture",
+    "activation",
+    "relu_tanh",
+    "closed_loop_ga"
+  ],
+  "analysis_sources": [
+    "Experiments/analysis/architecture_ablation_debug_20260504"
+  ],
+  "run_sources": [
+    "Experiments/runs_ga_architecture_ablation/fixed100_lidar_finished_progress_time_crashes_seed_2026050314"
+  ],
+  "script_sources": [
+    "Experiments/train_ga.py"
+  ],
+  "curated_at": "2026-05-04T13:13:09",
+  "copy_policy": {
+    "skipped_file_names": [
+      "combined_individual_metrics.csv"
+    ],
+    "max_copy_size_bytes": 99614720
+  },
+  "skipped_files": []
+}

@@ -1,0 +1,34 @@
+{
+  "experiment_id": "ga_mutation_grid_20260504",
+  "title": "GA mutation probability and sigma grid",
+  "category": "thesis_grade",
+  "status": "screening_single_seed",
+  "thesis_relevance": "Mutation probability/sigma screening for the selected reward tuple and baseline selection settings.",
+  "interpretation": "Best region suggests mutating fewer weights with medium-to-larger steps, around mutation_prob=0.10 and mutation_sigma=0.25-0.30.",
+  "keywords": [
+    "ga_hyperparameters",
+    "mutation_probability",
+    "mutation_sigma"
+  ],
+  "analysis_sources": [
+    "Experiments/analysis/ga_hyperparam_mutation_grid_20260504"
+  ],
+  "run_sources": [
+    "Experiments/runs_ga_hyperparam/pc1_mutation_grid_seed_2026050311"
+  ],
+  "script_sources": [
+    "Experiments/run_ga_hyperparam_mutation_grid_pc1.ps1",
+    "Experiments/run_ga_hyperparam_mutation_grid_pc2_prob25_30.ps1",
+    "Experiments/analyze_ga_hyperparam_sweep.py"
+  ],
+  "curated_at": "2026-05-04T13:13:07",
+  "copy_policy": {
+    "skipped_file_names": [
+      "combined_individual_metrics.csv"
+    ],
+    "max_copy_size_bytes": 99614720
+  },
+  "skipped_files": [
+    "Experiments/analysis/ga_hyperparam_mutation_grid_20260504/combined_individual_metrics.csv"
+  ]
+}

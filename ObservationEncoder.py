@@ -10,7 +10,7 @@ class ObservationEncoder:
         "side_speed",
         "segment_heading_error",
         "next_segment_heading_error",
-        "dt_ratio",
+        "physics_delay_norm",
     )
     WHEEL_SLIP_FEATURE_NAMES = (
         "slip_mean",
@@ -55,7 +55,7 @@ class ObservationEncoder:
         clearance_rate_abs_max: float = 200.0,
         surface_elevation_rate_abs_max: float = 0.35,
         dt_ref: float = 1.0 / 100.0,
-        dt_ratio_clip: float = 3.0,
+        action_dt_ratio_clip: float = 3.0,
         vertical_mode: bool = True,
         multi_surface_mode: bool = True,
         vehicle_hitbox: VehicleHitbox | None = None,
@@ -70,7 +70,7 @@ class ObservationEncoder:
         self.clearance_rate_abs_max = float(clearance_rate_abs_max)
         self.surface_elevation_rate_abs_max = float(surface_elevation_rate_abs_max)
         self.dt_ref = float(dt_ref)
-        self.dt_ratio_clip = float(dt_ratio_clip)
+        self.action_dt_ratio_clip = float(action_dt_ratio_clip)
         self.vertical_mode = bool(vertical_mode)
         self.multi_surface_mode = bool(multi_surface_mode)
         self.vehicle_hitbox = vehicle_hitbox or VehicleHitbox.stadium_car_sport()
@@ -80,8 +80,8 @@ class ObservationEncoder:
         )
         if not np.isfinite(self.dt_ref) or self.dt_ref <= 0.0:
             raise ValueError("dt_ref must be a positive finite number.")
-        if not np.isfinite(self.dt_ratio_clip) or self.dt_ratio_clip <= 0.0:
-            raise ValueError("dt_ratio_clip must be a positive finite number.")
+        if not np.isfinite(self.action_dt_ratio_clip) or self.action_dt_ratio_clip <= 0.0:
+            raise ValueError("action_dt_ratio_clip must be a positive finite number.")
         if not np.isfinite(self.accel_abs_max) or self.accel_abs_max <= 0.0:
             raise ValueError("accel_abs_max must be a positive finite number.")
         if not np.isfinite(self.vertical_speed_abs_max) or self.vertical_speed_abs_max <= 0.0:
@@ -97,7 +97,11 @@ class ObservationEncoder:
             raise ValueError("surface_elevation_rate_abs_max must be a positive finite number.")
         self.previous_game_time = None
         self.current_dt = self.dt_ref
-        self.current_dt_ratio = 1.0
+        self.current_action_dt_ratio = 1.0
+        self.current_physics_tick_count = 1
+        self.current_physics_hz = 1.0 / self.dt_ref
+        self.current_physics_hz_norm = 1.0
+        self.current_physics_delay_norm = 0.0
         self.previous_speed = None
         self.previous_side_speed = None
         self.previous_yaw = None
@@ -207,7 +211,11 @@ class ObservationEncoder:
     def reset(self) -> None:
         self.previous_game_time = None
         self.current_dt = self.dt_ref
-        self.current_dt_ratio = 1.0
+        self.current_action_dt_ratio = 1.0
+        self.current_physics_tick_count = 1
+        self.current_physics_hz = 1.0 / self.dt_ref
+        self.current_physics_hz_norm = 1.0
+        self.current_physics_delay_norm = 0.0
         self.previous_speed = None
         self.previous_side_speed = None
         self.previous_yaw = None
@@ -256,7 +264,7 @@ class ObservationEncoder:
             np.array(
                 [1.0] * Car.NUM_LASERS
                 + [1.0] * Car.SIGHT_TILES
-                + [1.0, 1.0, 1.0, 1.0, self.dt_ratio_clip]
+                + [1.0, 1.0, 1.0, 1.0, 1.0]
                 + [1.0] * len(self.WHEEL_SLIP_FEATURE_NAMES),
                 dtype=np.float32,
             )
@@ -306,7 +314,28 @@ class ObservationEncoder:
             vector = vector[:expected_size]
         return vector
 
-    def update_dt_ratio(self, current_time: float) -> float:
+    def _set_timing_from_dt(self, dt: float) -> float:
+        dt = float(dt)
+        if not np.isfinite(dt) or dt <= 0.0 or dt > 0.25:
+            dt = self.dt_ref
+
+        self.current_dt = float(dt)
+        physics_ticks = max(1, int(round(dt / self.dt_ref)))
+        physics_hz_norm = 1.0 / float(physics_ticks)
+        physics_hz = physics_hz_norm / self.dt_ref
+        physics_delay_norm = float(np.clip(1.0 - physics_hz_norm, 0.0, 1.0))
+        action_dt_ratio = float(
+            np.clip(dt / self.dt_ref, 0.0, self.action_dt_ratio_clip)
+        )
+
+        self.current_action_dt_ratio = action_dt_ratio
+        self.current_physics_tick_count = int(physics_ticks)
+        self.current_physics_hz = float(physics_hz)
+        self.current_physics_hz_norm = float(physics_hz_norm)
+        self.current_physics_delay_norm = float(physics_delay_norm)
+        return action_dt_ratio
+
+    def update_timing(self, current_time: float) -> float:
         current_time = float(current_time)
         dt = self.dt_ref
         if np.isfinite(current_time) and current_time >= 0.0:
@@ -320,10 +349,16 @@ class ObservationEncoder:
         else:
             self.previous_game_time = None
 
-        self.current_dt = float(dt)
-        dt_ratio = float(np.clip(dt / self.dt_ref, 0.0, self.dt_ratio_clip))
-        self.current_dt_ratio = dt_ratio
-        return dt_ratio
+        return self._set_timing_from_dt(dt)
+
+    def update_dt_ratio(self, current_time: float) -> float:
+        """Legacy internal helper for delta-action scaling.
+
+        The observation no longer exposes this value.  It exposes
+        `physics_delay_norm`, while this return value remains useful for
+        scaling per-step action deltas by elapsed game time.
+        """
+        return self.update_timing(current_time)
 
     def build_observation(self, distances, instructions, info) -> np.ndarray:
         distances_vec = self.fit_vector(
@@ -392,8 +427,13 @@ class ObservationEncoder:
             self.previous_height = None
             self.previous_game_time = None
 
-        dt_ratio = self.update_dt_ratio(current_time)
-        info["dt_ratio"] = dt_ratio
+        action_dt_ratio = self.update_timing(current_time)
+        info["game_dt"] = float(self.current_dt)
+        info["action_dt_ratio"] = float(action_dt_ratio)
+        info["physics_tick_count"] = int(self.current_physics_tick_count)
+        info["physics_hz"] = float(self.current_physics_hz)
+        info["physics_hz_norm"] = float(self.current_physics_hz_norm)
+        info["physics_delay_norm"] = float(self.current_physics_delay_norm)
         if "slip_mean" in info:
             slip_mean = float(info.get("slip_mean", 0.0))
         else:
@@ -521,7 +561,7 @@ class ObservationEncoder:
                     side_speed_norm,
                     segment_heading_error,
                     next_segment_heading_error,
-                    dt_ratio,
+                    float(self.current_physics_delay_norm),
                 ],
                 dtype=np.float32,
             ),

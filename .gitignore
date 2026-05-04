@@ -19,11 +19,19 @@ venv/
 # .NET / C# local build artifacts
 Map Extractor C#/bin/
 Map Extractor C#/obj/
+Experiments/physics_research/gbx_probe/bin/
+Experiments/physics_research/gbx_probe/obj/
+Experiments/physics_research/gbx_probe_v2/bin/
+Experiments/physics_research/gbx_probe_v2/obj/
+Experiments/physics_research/gbx_py_probe/.venv/
+Experiments/physics_research/gbx_py_probe/__pycache__/
 
 
 # Local-only folders
 Bakalárska práca/
-Diplomová práca/
+Diplomová práca/*
+!Diplomová práca/Experiments/
+!Diplomová práca/Experiments/**
 Cars Evolution Training Project/
 
 # Local SAC model checkpoints
@@ -33,6 +41,9 @@ RL_test/logs/sb3_runs/**/*.zip
 # Local simulator run artifacts
 Experiments/runs/
 Experiments/runs_rl/
+Experiments/_discarded/
 Experiments/analysis/**/combined_individual_metrics.csv
+Diplomová práca/Experiments/**/combined_individual_metrics.csv
+Diplomová práca/Experiments/**/individual_metrics.csv
 
 Maps/Meshes/material_0.png

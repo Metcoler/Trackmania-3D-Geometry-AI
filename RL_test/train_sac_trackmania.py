@@ -153,7 +153,7 @@ class TrackmaniaSB3Env(gym.Env):
             never_quit=False,
             action_mode="target",
             dt_ref=1.0 / 100.0,
-            dt_ratio_clip=3.0,
+            action_dt_ratio_clip=3.0,
             vertical_mode=vertical_mode,
             multi_surface_mode=multi_surface_mode,
             surface_probe_height=Car.SURFACE_PROBE_HEIGHT,

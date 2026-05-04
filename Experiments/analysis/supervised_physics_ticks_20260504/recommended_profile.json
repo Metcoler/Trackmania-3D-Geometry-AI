@@ -1,0 +1,21 @@
+{
+  "dt_ref": 0.01,
+  "max_game_dt": 0.25,
+  "max_profile_tick": 4,
+  "attempt_files": 12,
+  "valid_attempt_files": 12,
+  "valid_deltas": 28486,
+  "physics_tick_probs": "1:0.938285,2:0.060381,3:0.000562,4:0.000772",
+  "physics_tick_values": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "physics_tick_probabilities": [
+    0.9382854735659623,
+    0.06038053780804606,
+    0.0005616794214701959,
+    0.0007723092045215193
+  ]
+}

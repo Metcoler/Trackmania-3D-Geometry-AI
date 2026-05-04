@@ -75,8 +75,8 @@ def _neutral_feature_value(name: str) -> float:
         return 1.0
     if name == "support_normal_y":
         return 1.0
-    if name == "dt_ratio":
-        return 1.0
+    if name == "physics_delay_norm":
+        return 0.0
     return 0.0
 
 

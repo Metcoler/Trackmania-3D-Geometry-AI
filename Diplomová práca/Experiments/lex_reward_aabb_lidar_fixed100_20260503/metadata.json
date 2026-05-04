@@ -1,0 +1,33 @@
+{
+  "experiment_id": "lex_reward_aabb_lidar_fixed100_20260503",
+  "title": "Lexicographic reward sweep with AABB-clearance lidar",
+  "category": "thesis_grade",
+  "status": "single_seed_strong_signal",
+  "thesis_relevance": "Main reward-function comparison after switching to AABB-clearance lidar, fixed FPS 100, binary gas/brake, no elite cache.",
+  "interpretation": "Current evidence favors (finished, progress, -time, -crashes) as the base lexicographic GA ranking tuple.",
+  "keywords": [
+    "lexicographic_ga",
+    "reward_sweep",
+    "aabb_lidar",
+    "fixed100"
+  ],
+  "analysis_sources": [
+    "Experiments/analysis/lex_sweep_aabb_lidar_fixed100_20260503"
+  ],
+  "run_sources": [
+    "Experiments/runs_ga/lex_sweep_aabb_lidar_fixed100_seed_2026050306"
+  ],
+  "script_sources": [
+    "Experiments/run_lexicographic_sweep_aabb_lidar_fixed100.ps1",
+    "Experiments/run_lexicographic_sweep_aabb_lidar_fixed100_2.ps1",
+    "Experiments/analyze_lexicographic_sweep.py"
+  ],
+  "curated_at": "2026-05-04T13:13:04",
+  "copy_policy": {
+    "skipped_file_names": [
+      "combined_individual_metrics.csv"
+    ],
+    "max_copy_size_bytes": 99614720
+  },
+  "skipped_files": []
+}

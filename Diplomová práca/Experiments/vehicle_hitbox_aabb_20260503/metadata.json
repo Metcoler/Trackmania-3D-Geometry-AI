@@ -1,0 +1,28 @@
+{
+  "experiment_id": "vehicle_hitbox_aabb_20260503",
+  "title": "Vehicle AABB hitbox analysis",
+  "category": "thesis_grade",
+  "status": "empirical_model",
+  "thesis_relevance": "Justification for replacing a global raw lidar threshold with AABB-relative clearance lidar.",
+  "interpretation": "The selected AABB is empirical, derived from mesh estimates and sanity-checked against near-contact supervised data.",
+  "keywords": [
+    "aabb_lidar",
+    "vehicle_hitbox",
+    "observation_design"
+  ],
+  "analysis_sources": [
+    "Experiments/analysis/vehicle_hitbox_20260503_smoke"
+  ],
+  "run_sources": [],
+  "script_sources": [
+    "Experiments/analyze_vehicle_hitbox.py"
+  ],
+  "curated_at": "2026-05-04T13:13:09",
+  "copy_policy": {
+    "skipped_file_names": [
+      "combined_individual_metrics.csv"
+    ],
+    "max_copy_size_bytes": 99614720
+  },
+  "skipped_files": []
+}

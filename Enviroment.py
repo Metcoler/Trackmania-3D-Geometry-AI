@@ -28,7 +28,7 @@ class RacingGameEnviroment(gym.Env):
         never_quit=False,
         action_mode: str = "delta",
         dt_ref: float = 1.0 / 100.0,
-        dt_ratio_clip: float = 3.0,
+        action_dt_ratio_clip: float = 3.0,
         vertical_mode: bool = True,
         multi_surface_mode: bool = True,
         surface_probe_height: float = Car.SURFACE_PROBE_HEIGHT,
@@ -53,12 +53,12 @@ class RacingGameEnviroment(gym.Env):
         self.multi_surface_mode = bool(multi_surface_mode)
         self.obs_encoder = ObservationEncoder(
             dt_ref=dt_ref,
-            dt_ratio_clip=dt_ratio_clip,
+            action_dt_ratio_clip=action_dt_ratio_clip,
             vertical_mode=self.vertical_mode,
             multi_surface_mode=self.multi_surface_mode,
         )
         self.dt_ref = self.obs_encoder.dt_ref
-        self.dt_ratio_clip = self.obs_encoder.dt_ratio_clip
+        self.action_dt_ratio_clip = self.obs_encoder.action_dt_ratio_clip
         self.laser_max_distance = self.obs_encoder.laser_max_distance
         action_mode = str(action_mode).strip().lower()
         if action_mode not in {"delta", "target"}:
@@ -67,7 +67,7 @@ class RacingGameEnviroment(gym.Env):
 
         # Observations:
         # [lasers N] + [path instructions M] +
-        # [speed, side_speed, segment_heading_error, next_segment_heading_error, dt_ratio,
+        # [speed, side_speed, segment_heading_error, next_segment_heading_error, physics_delay_norm,
         #  slip_mean,
         #  longitudinal_accel, lateral_accel, yaw_rate,
         #  clearance_rate_sector_0..4]
@@ -139,16 +139,18 @@ class RacingGameEnviroment(gym.Env):
         self.last_reset_attempts = 0
         self.last_reset_seconds = 0.0
         self._post_finish_reset_pending = False
-        self.current_dt_ratio = 1.0
+        self.current_action_dt_ratio = 1.0
         self.live_status = bool(live_status)
         self._live_status_last_game_time = None
         self._live_status_fps = 0.0
-        self._live_status_width = 132
+        self._live_status_physics_hz = 0.0
+        self._live_status_physics_ticks = 0
+        self._live_status_width = 160
 
     def _clear_episode_runtime_state(self) -> None:
         self.current_step = 0
         self.obs_encoder.reset()
-        self.current_dt_ratio = 1.0
+        self.current_action_dt_ratio = 1.0
         self._reset_live_status()
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
         self.previous_observation = np.zeros(self.observation_space.shape, dtype=np.float32)
@@ -170,6 +172,8 @@ class RacingGameEnviroment(gym.Env):
     def _reset_live_status(self) -> None:
         self._live_status_last_game_time = None
         self._live_status_fps = 0.0
+        self._live_status_physics_hz = 0.0
+        self._live_status_physics_ticks = 0
 
     def _update_live_status_fps(self, game_time: float) -> float:
         game_time = float(game_time)
@@ -188,6 +192,10 @@ class RacingGameEnviroment(gym.Env):
         if game_dt > 0.25:
             # Reset/finish confirmation pauses are not gameplay FPS samples.
             return float(self._live_status_fps)
+
+        physics_ticks = max(1, int(round(game_dt / max(1e-6, self.dt_ref))))
+        self._live_status_physics_ticks = physics_ticks
+        self._live_status_physics_hz = 1.0 / max(1e-6, physics_ticks * self.dt_ref)
 
         instantaneous_fps = 1.0 / game_dt
         instantaneous_fps = float(np.clip(instantaneous_fps, 0.0, 240.0))
@@ -208,6 +216,7 @@ class RacingGameEnviroment(gym.Env):
         parts = [
             f"step={self.current_step:<6d}",
             f"fps={fps:<6.1f}",
+            f"phys_Hz={self._live_status_physics_hz:<6.1f}",
             f"progress={progress:<7.3f}",
             f"time={game_time:<7.2f}",
             f"speed={speed:<7.2f}",
@@ -632,13 +641,13 @@ class RacingGameEnviroment(gym.Env):
             instructions=instructions,
             info=info,
         )
-        self.current_dt_ratio = self.obs_encoder.current_dt_ratio
+        self.current_action_dt_ratio = self.obs_encoder.current_action_dt_ratio
         return observation
 
     def _update_dt_ratio(self, current_time: float) -> float:
-        dt_ratio = self.obs_encoder.update_dt_ratio(current_time)
-        self.current_dt_ratio = dt_ratio
-        return dt_ratio
+        action_dt_ratio = self.obs_encoder.update_dt_ratio(current_time)
+        self.current_action_dt_ratio = action_dt_ratio
+        return action_dt_ratio
     
     def perform_action(self, action_input):
         if self.race_terminated != 0:
@@ -651,7 +660,7 @@ class RacingGameEnviroment(gym.Env):
             return
 
         if self.action_mode == "delta":
-            scaled_delta = action_input * float(self.current_dt_ratio)
+            scaled_delta = action_input * float(self.current_action_dt_ratio)
             action = self.previous_action + scaled_delta
             action = np.clip(action, -1.0, 1.0)
         else:

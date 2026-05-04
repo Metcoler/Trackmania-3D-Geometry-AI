@@ -33,11 +33,12 @@ def main() -> None:
     parser.add_argument("--model-path", default=None)
     parser.add_argument("--max-time", type=float, default=45.0)
     parser.add_argument(
-        "--fixed-fps",
-        type=float,
-        default=None,
-        help="Use deterministic fixed simulation FPS by setting min_dt=max_dt=1/fps.",
+        "--physics-tick-profile",
+        choices=["fixed100", "supervised_v2d"],
+        default="supervised_v2d",
+        help="Discrete physics tick profile used by TM2D.",
     )
+    parser.add_argument("--fixed-fps", type=float, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--vertical-mode", action="store_true")
     parser.add_argument("--multi-surface-mode", action="store_true")
     parser.add_argument(
@@ -47,11 +48,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    profile = "fixed100" if args.fixed_fps is not None else args.physics_tick_profile
     env = TM2DSimEnv(
         map_name=args.map_name,
         max_time=args.max_time,
         reward_config=TM2DRewardConfig(mode="progress_primary_delta"),
-        physics_config=TM2DPhysicsConfig().with_fixed_fps(args.fixed_fps),
+        physics_config=TM2DPhysicsConfig().with_tick_profile(profile),
         vertical_mode=args.vertical_mode,
         multi_surface_mode=args.multi_surface_mode,
         binary_gas_brake=not args.continuous_gas_brake,

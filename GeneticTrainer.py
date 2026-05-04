@@ -763,7 +763,7 @@ class GeneticTrainer:
                 min(int(metrics["finished"]) for metrics in rollout_metrics)
             )
             representative_crashes = int(
-                round(float(np.mean([metrics["crashes"] for metrics in rollout_metrics])))
+                max(int(metrics["crashes"]) for metrics in rollout_metrics)
             )
             representative_terminated = bool(
                 any(bool(metrics["terminated"]) for metrics in rollout_metrics)
@@ -2122,7 +2122,7 @@ if __name__ == "__main__":
 
     # map dependend constants
     map_name = "AI Training #5"
-    env_max_time = 45
+    env_max_time = 30
     
     # neural network architecture
     hidden_dim = [48, 24]
@@ -2135,7 +2135,7 @@ if __name__ == "__main__":
     pop_size = 48
     elite_count = 2
     parent_count = 14
-    generations_to_run = 200
+    generations_to_run = 300
     checkpoint_every = 10
 
     # Selection metric for the overnight GA experiment.
@@ -2185,7 +2185,7 @@ if __name__ == "__main__":
     act_dim = 3
     max_steps = None
     env_dt_ref = 1.0 / 100.0
-    env_dt_ratio_clip = 3.0
+    env_action_dt_ratio_clip = 3.0
     surface_probe_height = Car.SURFACE_PROBE_HEIGHT
     surface_ray_lift = Car.SURFACE_RAY_LIFT
     policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
@@ -2242,7 +2242,7 @@ if __name__ == "__main__":
         never_quit=False,
         action_mode=action_mode,
         dt_ref=env_dt_ref,
-        dt_ratio_clip=env_dt_ratio_clip,
+        action_dt_ratio_clip=env_action_dt_ratio_clip,
         vertical_mode=vertical_mode,
         multi_surface_mode=multi_surface_mode,
         surface_probe_height=surface_probe_height,
@@ -2364,7 +2364,7 @@ if __name__ == "__main__":
                 max_steps=max_steps,
                 env_max_time=env_max_time,
                 env_dt_ref=env_dt_ref,
-                env_dt_ratio_clip=env_dt_ratio_clip,
+                env_action_dt_ratio_clip=env_action_dt_ratio_clip,
                 vertical_mode=vertical_mode,
                 multi_surface_mode=multi_surface_mode,
                 surface_probe_height=surface_probe_height,

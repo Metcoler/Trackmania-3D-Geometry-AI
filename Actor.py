@@ -36,7 +36,11 @@ class AttemptSample:
     dy: float
     dz: float
     slip_mean: float
-    dt_ratio: float
+    game_dt: float
+    physics_tick_count: int
+    physics_hz: float
+    physics_hz_norm: float
+    physics_delay_norm: float
     raw_laser_distances: np.ndarray
     laser_hitbox_offsets: np.ndarray
     laser_clearances: np.ndarray
@@ -209,7 +213,8 @@ class AttemptWriter:
             "vertical_mode": bool(encoder.vertical_mode),
             "multi_surface_mode": bool(encoder.multi_surface_mode),
             "dt_ref": encoder.dt_ref,
-            "dt_ratio_clip": encoder.dt_ratio_clip,
+            "action_dt_ratio_clip": encoder.action_dt_ratio_clip,
+            "timing_feature": "physics_delay_norm",
             "lidar_mode": "aabb_clearance",
             "vehicle_hitbox": encoder.vehicle_hitbox.as_dict(),
             "action_mode": "target",
@@ -243,7 +248,20 @@ class AttemptWriter:
         positions = np.array([[sample.x, sample.y, sample.z] for sample in samples], dtype=np.float32)
         directions = np.array([[sample.dx, sample.dy, sample.dz] for sample in samples], dtype=np.float32)
         slip_mean = np.array([sample.slip_mean for sample in samples], dtype=np.float32)
-        dt_ratio = np.array([sample.dt_ratio for sample in samples], dtype=np.float32)
+        game_dt = np.array([sample.game_dt for sample in samples], dtype=np.float32)
+        physics_tick_count = np.array(
+            [sample.physics_tick_count for sample in samples],
+            dtype=np.int32,
+        )
+        physics_hz = np.array([sample.physics_hz for sample in samples], dtype=np.float32)
+        physics_hz_norm = np.array(
+            [sample.physics_hz_norm for sample in samples],
+            dtype=np.float32,
+        )
+        physics_delay_norm = np.array(
+            [sample.physics_delay_norm for sample in samples],
+            dtype=np.float32,
+        )
         raw_laser_distances = np.stack(
             [sample.raw_laser_distances for sample in samples]
         ).astype(np.float32)
@@ -275,7 +293,11 @@ class AttemptWriter:
             positions=positions,
             directions=directions,
             slip_mean=slip_mean,
-            dt_ratio=dt_ratio,
+            game_dt=game_dt,
+            physics_tick_count=physics_tick_count,
+            physics_hz=physics_hz,
+            physics_hz_norm=physics_hz_norm,
+            physics_delay_norm=physics_delay_norm,
             raw_laser_distances=raw_laser_distances,
             laser_hitbox_offsets=laser_hitbox_offsets,
             laser_clearances=laser_clearances,
@@ -360,7 +382,7 @@ if __name__ == "__main__":
     apply_perturbed_action_to_virtual_gamepad = True
     encoder = ObservationEncoder(
         dt_ref=1.0 / 100.0,
-        dt_ratio_clip=3.0,
+        action_dt_ratio_clip=3.0,
         vertical_mode=vertical_mode,
         multi_surface_mode=multi_surface_mode,
     )
@@ -471,7 +493,11 @@ if __name__ == "__main__":
                         dy=float(info.get("dy", 0.0)),
                         dz=float(info.get("dz", 0.0)),
                         slip_mean=float(info.get("slip_mean", 0.0)),
-                        dt_ratio=float(info.get("dt_ratio", 1.0)),
+                        game_dt=float(info.get("game_dt", encoder.dt_ref)),
+                        physics_tick_count=int(info.get("physics_tick_count", 1)),
+                        physics_hz=float(info.get("physics_hz", 1.0 / encoder.dt_ref)),
+                        physics_hz_norm=float(info.get("physics_hz_norm", 1.0)),
+                        physics_delay_norm=float(info.get("physics_delay_norm", 0.0)),
                         raw_laser_distances=raw_laser_distances.copy(),
                         laser_hitbox_offsets=laser_hitbox_offsets.copy(),
                         laser_clearances=laser_clearances.copy(),

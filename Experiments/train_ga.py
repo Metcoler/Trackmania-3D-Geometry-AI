@@ -7,6 +7,7 @@ import multiprocessing as mp
 import random
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
@@ -349,6 +350,13 @@ def generation_metric_fieldnames() -> list[str]:
         "mean_physics_tick_count",
         "mean_physics_hz",
         "mean_physics_delay_norm",
+        "generalization_test_map",
+        "generalization_best_finished",
+        "generalization_best_crashes",
+        "generalization_best_progress",
+        "generalization_best_dense_progress",
+        "generalization_best_time",
+        "generalization_best_distance",
     ]
     stat_fields: list[str] = []
     for prefix in (
@@ -396,6 +404,36 @@ def individual_metric_fieldnames() -> list[str]:
         "physics_delay_norm_mean",
         "terminated",
         "truncated",
+    ]
+
+
+def generalization_metric_fieldnames() -> list[str]:
+    return [
+        "generation",
+        "train_rank",
+        "original_index",
+        "test_map",
+        "train_finished",
+        "train_crashes",
+        "train_time",
+        "train_progress",
+        "train_dense_progress",
+        "train_distance",
+        "test_finished",
+        "test_crashes",
+        "test_timeout",
+        "test_time",
+        "test_progress",
+        "test_dense_progress",
+        "test_distance",
+        "test_steps",
+        "test_reward",
+        "test_fitness",
+        "test_physics_tick_mean",
+        "test_physics_hz_mean",
+        "test_physics_delay_norm_mean",
+        "test_terminated",
+        "test_truncated",
     ]
 
 
@@ -737,6 +775,29 @@ def main() -> None:
         action="store_true",
         help="Also store gas/brake/steer arrays in trajectory NPZ files.",
     )
+    parser.add_argument(
+        "--generalization-test-map",
+        default="",
+        help="Optional holdout map for post-generation top-K evaluation. Does not affect training fitness.",
+    )
+    parser.add_argument(
+        "--generalization-test-top-k",
+        type=int,
+        default=1,
+        help="Number of top-ranked individuals to evaluate on the holdout map.",
+    )
+    parser.add_argument(
+        "--generalization-test-every",
+        type=int,
+        default=1,
+        help="Run holdout-map evaluation every N generations.",
+    )
+    parser.add_argument(
+        "--generalization-test-max-time",
+        type=float,
+        default=None,
+        help="Max episode time for holdout-map evaluation. Defaults to --max-time.",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -763,6 +824,13 @@ def main() -> None:
     evaluate_both_mirrors = bool(args.evaluate_both_mirrors)
     if evaluate_both_mirrors:
         mirror_episode_prob = 0.0
+    generalization_test_map = str(args.generalization_test_map).strip()
+    generalization_test_enabled = bool(generalization_test_map)
+    generalization_test_top_k = max(1, int(args.generalization_test_top_k))
+    generalization_test_every = max(1, int(args.generalization_test_every))
+    generalization_test_max_time = float(
+        args.max_time if args.generalization_test_max_time is None else args.generalization_test_max_time
+    )
 
     hidden_dim = tuple(parse_list(args.hidden_dim, int))
     hidden_activation = tuple(parse_list(args.hidden_activation, str))
@@ -851,6 +919,14 @@ def main() -> None:
         "trajectory_log_mode": str(args.trajectory_log_mode),
         "trajectory_top_k": int(args.trajectory_top_k),
         "trajectory_log_actions": bool(args.trajectory_log_actions),
+        "generalization_test_map": generalization_test_map,
+        "generalization_test_top_k": int(generalization_test_top_k),
+        "generalization_test_every": int(generalization_test_every),
+        "generalization_test_max_time": float(generalization_test_max_time),
+        "generalization_test_note": (
+            "Holdout-map rollouts are diagnostic only and never affect ranking, "
+            "selection, elite cache, mutation, or best policy selection."
+        ),
         "trajectory_logging_note": (
             "TM2D trajectories are replayed after selection to avoid worker IPC. "
             "With stochastic FPS they are diagnostic replays of the same genome, "
@@ -868,20 +944,55 @@ def main() -> None:
         if trajectory_logger is not None
         else None
     )
+    generalization_reward_config = TM2DRewardConfig(mode=args.reward_mode)
+    generalization_env = (
+        TM2DSimEnv(
+            map_name=generalization_test_map,
+            max_time=generalization_test_max_time,
+            reward_config=generalization_reward_config,
+            physics_config=physics_config,
+            seed=args.seed + 2_000_000,
+            collision_mode=args.collision_mode,
+            collision_distance_threshold=args.collision_distance_threshold,
+            vertical_mode=args.vertical_mode,
+            multi_surface_mode=args.multi_surface_mode,
+            binary_gas_brake=bool(not args.continuous_gas_brake),
+            max_touches=int(args.max_touches),
+            collision_bounce_speed_retention=float(args.collision_bounce_speed_retention),
+            collision_bounce_backoff=float(args.collision_bounce_backoff),
+            touch_release_clearance_threshold=float(args.touch_release_clearance_threshold),
+            mask_physics_delay_observation=bool(args.mask_physics_delay_observation),
+        )
+        if generalization_test_enabled
+        else None
+    )
 
     csv_path = run_dir / "generation_metrics.csv"
     individual_csv_path = run_dir / "individual_metrics.csv"
+    generalization_csv_path = run_dir / "generalization_metrics.csv"
     with (
         csv_path.open("w", newline="", encoding="utf-8") as handle,
         individual_csv_path.open("w", newline="", encoding="utf-8") as individual_handle,
+        (
+            generalization_csv_path.open("w", newline="", encoding="utf-8")
+            if generalization_test_enabled
+            else nullcontext()
+        ) as generalization_handle,
     ):
         writer = csv.DictWriter(handle, fieldnames=generation_metric_fieldnames())
         individual_writer = csv.DictWriter(
             individual_handle,
             fieldnames=individual_metric_fieldnames(),
         )
+        generalization_writer = (
+            csv.DictWriter(generalization_handle, fieldnames=generalization_metric_fieldnames())
+            if generalization_test_enabled
+            else None
+        )
         writer.writeheader()
         individual_writer.writeheader()
+        if generalization_writer is not None:
+            generalization_writer.writeheader()
 
         worker_pool = None
         best_overall: Individual | None = None
@@ -1089,6 +1200,74 @@ def main() -> None:
                         mutation_sigma_min,
                         remaining_decay_generations,
                     )
+                generalization_summary = {
+                    "generalization_test_map": generalization_test_map if generalization_test_enabled else "",
+                    "generalization_best_finished": "",
+                    "generalization_best_crashes": "",
+                    "generalization_best_progress": "",
+                    "generalization_best_dense_progress": "",
+                    "generalization_best_time": "",
+                    "generalization_best_distance": "",
+                }
+                if (
+                    generalization_env is not None
+                    and generalization_writer is not None
+                    and generation % generalization_test_every == 0
+                ):
+                    top_k = min(generalization_test_top_k, len(population))
+                    for train_rank, individual in enumerate(population[:top_k], start=1):
+                        original_index = int(original_index_by_id.get(id(individual), -1))
+                        test_seed = int(args.seed) + 2_000_000 + generation * 10_000 + train_rank
+                        test_metrics = generalization_env.rollout_policy(
+                            NumpyPolicyView(individual.policy),
+                            reset_seed=test_seed,
+                            mirrored=False,
+                        )
+                        generalization_writer.writerow(
+                            {
+                                "generation": int(generation),
+                                "train_rank": int(train_rank),
+                                "original_index": original_index,
+                                "test_map": generalization_test_map,
+                                "train_finished": int(individual.finished),
+                                "train_crashes": int(individual.crashes),
+                                "train_time": float(individual.time),
+                                "train_progress": float(individual.discrete_progress),
+                                "train_dense_progress": float(individual.dense_progress),
+                                "train_distance": float(individual.distance),
+                                "test_finished": int(test_metrics.get("finished", 0)),
+                                "test_crashes": int(test_metrics.get("crashes", 0)),
+                                "test_timeout": int(test_metrics.get("timeout", 0)),
+                                "test_time": float(test_metrics.get("time", 0.0)),
+                                "test_progress": float(test_metrics.get("progress", 0.0)),
+                                "test_dense_progress": float(test_metrics.get("dense_progress", 0.0)),
+                                "test_distance": float(test_metrics.get("distance", 0.0)),
+                                "test_steps": int(test_metrics.get("steps", 0)),
+                                "test_reward": float(test_metrics.get("reward", 0.0)),
+                                "test_fitness": float(test_metrics.get("fitness", 0.0)),
+                                "test_physics_tick_mean": float(test_metrics.get("physics_tick_mean", 1.0)),
+                                "test_physics_hz_mean": float(test_metrics.get("physics_hz_mean", 100.0)),
+                                "test_physics_delay_norm_mean": float(
+                                    test_metrics.get("physics_delay_norm_mean", 0.0)
+                                ),
+                                "test_terminated": int(bool(test_metrics.get("terminated", False))),
+                                "test_truncated": int(bool(test_metrics.get("truncated", False))),
+                            }
+                        )
+                        if train_rank == 1:
+                            generalization_summary.update(
+                                {
+                                    "generalization_best_finished": int(test_metrics.get("finished", 0)),
+                                    "generalization_best_crashes": int(test_metrics.get("crashes", 0)),
+                                    "generalization_best_progress": float(test_metrics.get("progress", 0.0)),
+                                    "generalization_best_dense_progress": float(
+                                        test_metrics.get("dense_progress", 0.0)
+                                    ),
+                                    "generalization_best_time": float(test_metrics.get("time", 0.0)),
+                                    "generalization_best_distance": float(test_metrics.get("distance", 0.0)),
+                                }
+                            )
+                    generalization_handle.flush()
                 virtual_time_sum = float(np.sum(time_values))
                 virtual_steps_sum = int(np.sum(step_values))
                 cumulative_virtual_time += virtual_time_sum
@@ -1143,6 +1322,7 @@ def main() -> None:
                     "mean_physics_hz": float(np.mean(physics_hz_values)),
                     "mean_physics_delay_norm": float(np.mean(physics_delay_values)),
                 }
+                row.update(generalization_summary)
                 row.update(metric_stats("progress", progress_values))
                 row.update(metric_stats("dense_progress", dense_progress_values))
                 row.update(metric_stats("ranking_progress", ranking_progress_values))

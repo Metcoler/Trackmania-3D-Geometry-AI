@@ -2324,14 +2324,14 @@ if __name__ == "__main__":
     moo_objective_priority = "finished,progress,neg_time,neg_crashes,neg_distance"
     pareto_tiebreak = "priority"
 
-    mutation_prob = 0.10
+    mutation_prob = 0.15
     mutation_prob_decay = 1.0
-    mutation_prob_min = 0.10
+    mutation_prob_min = 0.05
 
-    mutation_sigma = 0.25
+    mutation_sigma = 0.30
     mutation_sigma_decay = 1.0
-    mutation_sigma_min = 0.25
-    mutation_decay_trigger = "immediate"
+    mutation_sigma_min = 0.20
+    mutation_decay_trigger = "first_finish"
 
 
     # Fancy updates

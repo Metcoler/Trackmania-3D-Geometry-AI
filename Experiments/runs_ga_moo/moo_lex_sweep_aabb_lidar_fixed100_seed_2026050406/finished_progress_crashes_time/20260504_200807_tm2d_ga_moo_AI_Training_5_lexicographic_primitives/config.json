@@ -1,0 +1,96 @@
+{
+  "map_name": "AI Training #5",
+  "generations": 300,
+  "population_size": 48,
+  "elite_count": 4,
+  "parent_count": 16,
+  "max_time": 30.0,
+  "hidden_dim": [
+    32,
+    16
+  ],
+  "hidden_activation": [
+    "relu",
+    "tanh"
+  ],
+  "mutation_prob": 0.2,
+  "mutation_sigma": 0.2,
+  "physics_tick_profile": "fixed100",
+  "physics_tick_probs": null,
+  "mask_physics_delay_observation": false,
+  "legacy_fixed_fps": null,
+  "selection_mode": "pareto",
+  "objective_mode": "lexicographic_primitives",
+  "available_objective_names": [
+    "finished",
+    "progress",
+    "neg_time",
+    "neg_crashes",
+    "neg_distance"
+  ],
+  "objective_subset": [
+    "finished",
+    "progress",
+    "neg_crashes",
+    "neg_time"
+  ],
+  "objective_names": [
+    "finished",
+    "progress",
+    "neg_crashes",
+    "neg_time"
+  ],
+  "objective_priority": [
+    "finished",
+    "progress",
+    "neg_crashes",
+    "neg_time"
+  ],
+  "pareto_tiebreak": "priority",
+  "reward_mode": "terminal_fitness",
+  "collision_mode": "lidar",
+  "collision_distance_threshold": 2.0,
+  "lidar_mode": "aabb_clearance",
+  "vehicle_hitbox": {
+    "half_width": 1.1,
+    "front_half_length": 2.15,
+    "rear_half_length": 1.95,
+    "half_height": 0.6,
+    "safety_margin": 0.7,
+    "source": "empirical_mesh_and_supervised_aabb_20260503"
+  },
+  "max_touches": 1,
+  "collision_bounce_speed_retention": 0.4,
+  "collision_bounce_backoff": 0.05,
+  "touch_release_clearance_threshold": 0.5,
+  "vertical_mode": false,
+  "multi_surface_mode": false,
+  "binary_gas_brake": true,
+  "elite_cache_enabled": false,
+  "obs_dim": 34,
+  "act_dim": 3,
+  "progress_bucket": 2.857142857142857,
+  "estimated_path_length": 1120.0,
+  "max_episode_distance": 3900.0,
+  "physics": {
+    "dt_ref": 0.01,
+    "physics_tick_profile": "fixed100",
+    "physics_tick_values": [
+      1
+    ],
+    "physics_tick_probabilities": [
+      1.0
+    ],
+    "max_speed": 130.0,
+    "reverse_speed": 10.0,
+    "gas_accel": 22.0,
+    "brake_accel": 17.463,
+    "drag": 0.1439,
+    "rolling_drag": 5.549,
+    "lateral_grip": 5.5,
+    "max_yaw_rate": 1.5,
+    "car_length": 4.8,
+    "car_width": 2.6
+  },
+  "num_workers": 4
+}

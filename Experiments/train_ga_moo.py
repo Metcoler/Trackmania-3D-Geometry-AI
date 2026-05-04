@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import json
 import multiprocessing as mp
 import random
 import sys
+import threading
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -26,6 +28,7 @@ from Experiments.multiobjective import (
 )
 from Experiments.tm2d_env import TM2DRewardConfig, TM2DSimEnv
 from Experiments.train_ga import (
+    NumpyGenomePolicyView,
     NumpyPolicyView,
     _evaluate_genome_worker,
     _init_worker,
@@ -36,6 +39,9 @@ from Experiments.train_ga import (
     metric_stats,
     parse_list,
 )
+
+
+_THREAD_LOCAL = threading.local()
 
 
 def evaluate_individual(env: TM2DSimEnv, individual: Individual) -> dict:
@@ -55,6 +61,51 @@ def apply_metrics_to_individual(individual: Individual, metrics: dict, selection
     individual.evaluation_terminated = bool(metrics.get("terminated", False))
     individual.evaluation_truncated = bool(metrics.get("truncated", False))
     individual.evaluation_valid = True
+
+
+def _thread_worker_env(config: dict) -> TM2DSimEnv:
+    env = getattr(_THREAD_LOCAL, "env", None)
+    if env is not None:
+        return env
+    reward_config = TM2DRewardConfig(mode=str(config["reward_mode"]))
+    env = TM2DSimEnv(
+        map_name=str(config["map_name"]),
+        max_time=float(config["max_time"]),
+        reward_config=reward_config,
+        physics_config=make_physics_config(
+            physics_tick_profile=str(config.get("physics_tick_profile", "supervised_v2d")),
+            physics_tick_probs=config.get("physics_tick_probs"),
+            fixed_fps=config.get("fixed_fps"),
+        ),
+        seed=int(config["seed"]),
+        collision_mode=str(config["collision_mode"]),
+        collision_distance_threshold=float(config.get("collision_distance_threshold", 2.0)),
+        vertical_mode=bool(config.get("vertical_mode", False)),
+        multi_surface_mode=bool(config.get("multi_surface_mode", False)),
+        binary_gas_brake=bool(config.get("binary_gas_brake", True)),
+        max_touches=int(config.get("max_touches", 1)),
+        collision_bounce_speed_retention=float(config.get("collision_bounce_speed_retention", 0.40)),
+        collision_bounce_backoff=float(config.get("collision_bounce_backoff", 0.05)),
+        touch_release_clearance_threshold=float(config.get("touch_release_clearance_threshold", 0.50)),
+        mask_physics_delay_observation=bool(config.get("mask_physics_delay_observation", False)),
+    )
+    _THREAD_LOCAL.env = env
+    return env
+
+
+def _evaluate_genome_thread_worker(config: dict, payload: tuple[int, np.ndarray, bool, bool]) -> tuple[int, dict]:
+    index, genome, mirrored, evaluate_both_mirrors = payload
+    policy = NumpyGenomePolicyView(
+        genome=np.asarray(genome, dtype=np.float32),
+        obs_dim=int(config["obs_dim"]),
+        hidden_dim=tuple(int(v) for v in config["hidden_dim"]),
+        hidden_activation=tuple(str(v) for v in config["hidden_activation"]),
+        act_dim=int(config["act_dim"]),
+        action_mode=str(config["action_mode"]),
+        action_scale=np.asarray(config["action_scale"], dtype=np.float32),
+    )
+    metrics = _thread_worker_env(config).rollout_policy(policy, mirrored=bool(mirrored))
+    return int(index), metrics
 
 
 def objective_priority_indices(names: list[str], priority: str) -> list[int]:
@@ -211,6 +262,15 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Number of worker processes for parallel individual evaluation. Use 1 to disable.",
     )
+    parser.add_argument(
+        "--worker-backend",
+        choices=["auto", "process", "thread"],
+        default="auto",
+        help=(
+            "Parallel evaluation backend. auto tries multiprocessing first and "
+            "falls back to threads if Windows denies Pipe creation."
+        ),
+    )
     parser.add_argument("--log-dir", default="Experiments/runs")
     parser.add_argument("--run-dir", default=None)
     parser.add_argument("--render-best", action="store_true")
@@ -317,6 +377,7 @@ def main() -> None:
         "max_episode_distance": max_episode_distance,
         "physics": asdict(env.physics),
         "num_workers": int(args.num_workers),
+        "worker_backend": str(args.worker_backend),
     }
     (run_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
@@ -374,11 +435,14 @@ def main() -> None:
         individual_writer.writeheader()
 
         worker_pool = None
+        thread_pool = None
+        worker_backend_active = "sequential"
         best_overall: Individual | None = None
         best_overall_key: tuple[float, ...] | None = None
         training_wall_start = time.perf_counter()
         cumulative_virtual_time = 0.0
         cumulative_virtual_steps = 0
+        worker_config = None
         if int(args.num_workers) > 1:
             worker_config = {
                 "map_name": args.map_name,
@@ -405,11 +469,25 @@ def main() -> None:
                 "action_mode": "target",
                 "action_scale": action_scale.tolist(),
             }
-            worker_pool = mp.get_context("spawn").Pool(
-                processes=int(args.num_workers),
-                initializer=_init_worker,
-                initargs=(worker_config,),
-            )
+            if args.worker_backend in {"auto", "process"}:
+                try:
+                    worker_pool = mp.get_context("spawn").Pool(
+                        processes=int(args.num_workers),
+                        initializer=_init_worker,
+                        initargs=(worker_config,),
+                    )
+                    worker_backend_active = "process"
+                except PermissionError as exc:
+                    if args.worker_backend == "process":
+                        raise
+                    print(
+                        "[TM2D MOO GA] multiprocessing was denied by Windows "
+                        f"({exc}). Falling back to thread workers."
+                    )
+            if worker_pool is None and args.worker_backend in {"auto", "thread"}:
+                thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=int(args.num_workers))
+                worker_backend_active = "thread"
+            print(f"[TM2D MOO GA] worker_backend={worker_backend_active} workers={int(args.num_workers)}")
 
         try:
             for generation in range(1, args.generations + 1):
@@ -417,16 +495,25 @@ def main() -> None:
                 original_index_by_id: dict[int, int] = {
                     id(individual): idx for idx, individual in enumerate(population)
                 }
-                if worker_pool is None:
+                if worker_pool is None and thread_pool is None:
                     metrics = [evaluate_individual(env, individual) for individual in population]
                 else:
                     payloads = [
-                        (idx, individual.genome.copy())
+                        (idx, individual.genome.copy(), False, False)
                         for idx, individual in enumerate(population)
                     ]
                     metrics = [None for _ in population]
-                    for idx, metric in worker_pool.map(_evaluate_genome_worker, payloads):
-                        metrics[idx] = metric
+                    if worker_pool is not None:
+                        mapped = worker_pool.map(_evaluate_genome_worker, payloads)
+                    else:
+                        assert thread_pool is not None
+                        assert worker_config is not None
+                        mapped = thread_pool.map(
+                            lambda payload: _evaluate_genome_thread_worker(worker_config, payload),
+                            payloads,
+                        )
+                    for idx, metric in mapped:
+                        metrics[int(idx)] = metric
                     metrics = [metric for metric in metrics if metric is not None]
 
                 objective_matrix = np.vstack(
@@ -638,6 +725,8 @@ def main() -> None:
             if worker_pool is not None:
                 worker_pool.close()
                 worker_pool.join()
+            if thread_pool is not None:
+                thread_pool.shutdown(wait=True)
 
     best_path = run_dir / "best_policy.pt"
     if best_overall is None:

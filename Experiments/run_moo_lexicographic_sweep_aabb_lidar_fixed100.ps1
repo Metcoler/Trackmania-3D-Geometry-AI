@@ -73,7 +73,12 @@ foreach ($Variant in $Variants) {
         --collision-mode lidar `
         --seed $Seed `
         --num-workers 4 `
+        --worker-backend auto `
         --log-dir $LogDir
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "MOO run '$Tag' failed with exit code $LASTEXITCODE"
+    }
 }
 
 Write-Host ""

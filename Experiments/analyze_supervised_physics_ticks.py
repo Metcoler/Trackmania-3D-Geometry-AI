@@ -6,6 +6,10 @@ import json
 from pathlib import Path
 
 import numpy as np
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 
 DEFAULT_ROOTS = [
@@ -75,6 +79,64 @@ def format_profile(values: np.ndarray, probs: np.ndarray) -> str:
     return ",".join(f"{int(value)}:{float(prob):.6f}" for value, prob in zip(values, probs))
 
 
+def write_tick_distribution_plot(
+    output_dir: Path,
+    values: np.ndarray,
+    counts: np.ndarray,
+    probs: np.ndarray,
+    dt_ref: float,
+) -> Path:
+    hz_values = np.asarray([1.0 / (float(value) * float(dt_ref)) for value in values], dtype=np.float64)
+    delay_values = 1.0 - (1.0 / values.astype(np.float64))
+    labels = [
+        f"{int(value)} tick\n{hz:.1f} Hz\ndelay={delay:.3f}"
+        for value, hz, delay in zip(values, hz_values, delay_values)
+    ]
+    percentages = probs * 100.0
+    skip_mask = values > 1
+    skip_percent = float(np.sum(probs[skip_mask]) * 100.0)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.8), constrained_layout=True)
+    fig.suptitle("Empirická distribúcia Trackmania physics tickov zo supervised dát", fontsize=13)
+
+    color_main = "#2f6f73"
+    color_skip = "#c76637"
+    colors = [color_skip if int(value) > 1 else color_main for value in values]
+
+    axes[0].bar(labels, percentages, color=colors, edgecolor="#1f2d2e", linewidth=0.8)
+    axes[0].set_ylabel("Podiel frame delta [%]")
+    axes[0].set_title("Celá distribúcia")
+    axes[0].set_ylim(0.0, max(100.0, float(np.max(percentages)) * 1.08))
+    axes[0].grid(axis="y", alpha=0.25)
+    for idx, percentage in enumerate(percentages):
+        axes[0].text(idx, percentage + 1.0, f"{percentage:.2f}%", ha="center", va="bottom", fontsize=9)
+
+    if np.any(skip_mask):
+        skipped_labels = [labels[idx] for idx, flag in enumerate(skip_mask) if flag]
+        skipped_percentages = percentages[skip_mask]
+        axes[1].bar(skipped_labels, skipped_percentages, color=color_skip, edgecolor="#1f2d2e", linewidth=0.8)
+        axes[1].set_ylim(0.0, max(0.25, float(np.max(skipped_percentages)) * 1.25))
+        for idx, percentage in enumerate(skipped_percentages):
+            axes[1].text(idx, percentage + 0.03, f"{percentage:.3f}%", ha="center", va="bottom", fontsize=9)
+    else:
+        axes[1].text(0.5, 0.5, "Bez vynechaných physics tickov", ha="center", va="center")
+        axes[1].set_xticks([])
+    axes[1].set_ylabel("Podiel zo všetkých frame delta [%]")
+    axes[1].set_title("Zoom na vynechané physics update-y")
+    axes[1].grid(axis="y", alpha=0.25)
+
+    note = (
+        f"Vynechaný physics update sa v dátach objavil v {skip_percent:.2f}% frame delta. "
+        "Preto variable-TM2D testy treba interpretovať cez physics tick delay, nie render FPS."
+    )
+    fig.text(0.5, -0.02, note, ha="center", va="top", fontsize=10)
+
+    output_path = output_dir / "physics_tick_distribution_thesis.png"
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze Trackmania supervised physics tick skips.")
     parser.add_argument("--roots", nargs="*", default=DEFAULT_ROOTS)
@@ -132,6 +194,14 @@ def main() -> None:
                 }
             )
 
+    plot_path = write_tick_distribution_plot(
+        output_dir=output_dir,
+        values=values,
+        counts=counts,
+        probs=probs,
+        dt_ref=float(args.dt_ref),
+    )
+
     recommended = {
         "dt_ref": float(args.dt_ref),
         "max_game_dt": float(args.max_game_dt),
@@ -155,6 +225,7 @@ def main() -> None:
         f"- Valid attempt files: {len(ok_rows)}",
         f"- Valid frame deltas: {int(all_ticks.size)}",
         f"- Recommended `--physics-tick-probs`: `{profile}`",
+        f"- Thesis plot: `{plot_path.name}`",
         "",
         "## Distribution",
         "",
@@ -170,6 +241,11 @@ def main() -> None:
             "",
             "Interpretation: the observation should encode physics-tick delay, not render FPS. "
             "`physics_delay_norm = 1 - 1 / tick_count` is zero at 100 Hz and grows when game physics updates are skipped.",
+            "",
+            "Elite-cache motivation: fixed-100 Hz TM2D experiments are deterministic, but live Trackmania can miss "
+            "physics updates. Re-evaluating an elite in a different tick sequence can therefore change the outcome "
+            "even when the genotype did not change. This does not prove that elite cache is always better, but it "
+            "explains why it is a meaningful training variant to test under variable physics timing.",
         ]
     )
     (output_dir / "REPORT.md").write_text("\n".join(report) + "\n", encoding="utf-8")

@@ -31,6 +31,7 @@ from Experiments.train_ga import (
     _init_worker,
     generation_metric_fieldnames,
     individual_metric_fieldnames,
+    make_physics_config,
     make_child_pool,
     metric_stats,
     parse_list,
@@ -98,6 +99,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-activation", default="relu,tanh")
     parser.add_argument("--mutation-prob", type=float, default=0.18)
     parser.add_argument("--mutation-sigma", type=float, default=0.22)
+    parser.add_argument(
+        "--physics-tick-profile",
+        choices=["fixed100", "supervised_v2d", "custom"],
+        default="supervised_v2d",
+        help="Discrete TM2D physics tick profile. Use fixed100 for deterministic 100 Hz thesis sweeps.",
+    )
+    parser.add_argument(
+        "--physics-tick-probs",
+        default=None,
+        help="Custom tick distribution as '1:0.938,2:0.060,3:0.001,4:0.001'. Requires --physics-tick-profile custom.",
+    )
+    parser.add_argument(
+        "--mask-physics-delay-observation",
+        action="store_true",
+        help="Keep variable physics ticks but force the observation physics_delay_norm feature to zero.",
+    )
+    parser.add_argument("--fixed-fps", type=float, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--collision-mode", choices=["center", "corners", "laser", "lidar"], default="laser")
     parser.add_argument(
         "--collision-distance-threshold",
@@ -122,6 +140,30 @@ def parse_args() -> argparse.Namespace:
         "--continuous-gas-brake",
         action="store_true",
         help="Disable live-TM-style gas/brake binarization in TM2D diagnostics.",
+    )
+    parser.add_argument(
+        "--max-touches",
+        type=int,
+        default=1,
+        help="Number of AABB-lidar touches allowed before terminating the TM2D episode.",
+    )
+    parser.add_argument(
+        "--collision-bounce-speed-retention",
+        type=float,
+        default=0.40,
+        help="Velocity multiplier after a non-terminal TM2D lidar touch when --max-touches > 1.",
+    )
+    parser.add_argument(
+        "--collision-bounce-backoff",
+        type=float,
+        default=0.05,
+        help="Small push away from the wall after a non-terminal TM2D lidar touch.",
+    )
+    parser.add_argument(
+        "--touch-release-clearance-threshold",
+        type=float,
+        default=0.50,
+        help="Required lidar clearance before another TM2D touch can be counted.",
     )
     parser.add_argument(
         "--objective-mode",
@@ -186,16 +228,32 @@ def main() -> None:
     hidden_activation = normalize_hidden_activations(hidden_activation, len(hidden_dim))
 
     reward_config = TM2DRewardConfig(mode=args.reward_mode)
+    physics_config = make_physics_config(
+        physics_tick_profile=args.physics_tick_profile,
+        physics_tick_probs=args.physics_tick_probs,
+        fixed_fps=args.fixed_fps,
+    )
+    effective_physics_tick_profile = (
+        "fixed100"
+        if args.fixed_fps is not None and float(args.fixed_fps) > 0.0
+        else str(args.physics_tick_profile)
+    )
     env = TM2DSimEnv(
         map_name=args.map_name,
         max_time=args.max_time,
         reward_config=reward_config,
+        physics_config=physics_config,
         seed=args.seed,
         collision_mode=args.collision_mode,
         collision_distance_threshold=args.collision_distance_threshold,
         vertical_mode=args.vertical_mode,
         multi_surface_mode=args.multi_surface_mode,
         binary_gas_brake=not args.continuous_gas_brake,
+        max_touches=args.max_touches,
+        collision_bounce_speed_retention=args.collision_bounce_speed_retention,
+        collision_bounce_backoff=args.collision_bounce_backoff,
+        touch_release_clearance_threshold=args.touch_release_clearance_threshold,
+        mask_physics_delay_observation=args.mask_physics_delay_observation,
     )
     action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
     population = [
@@ -228,6 +286,10 @@ def main() -> None:
         "hidden_activation": list(hidden_activation),
         "mutation_prob": args.mutation_prob,
         "mutation_sigma": args.mutation_sigma,
+        "physics_tick_profile": effective_physics_tick_profile,
+        "physics_tick_probs": args.physics_tick_probs,
+        "mask_physics_delay_observation": bool(args.mask_physics_delay_observation),
+        "legacy_fixed_fps": args.fixed_fps,
         "selection_mode": "pareto",
         "objective_mode": args.objective_mode,
         "available_objective_names": available_objective_names,
@@ -240,9 +302,14 @@ def main() -> None:
         "collision_distance_threshold": float(args.collision_distance_threshold),
         "lidar_mode": "aabb_clearance",
         "vehicle_hitbox": env.vehicle_hitbox.as_dict(),
+        "max_touches": int(args.max_touches),
+        "collision_bounce_speed_retention": float(args.collision_bounce_speed_retention),
+        "collision_bounce_backoff": float(args.collision_bounce_backoff),
+        "touch_release_clearance_threshold": float(args.touch_release_clearance_threshold),
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),
+        "elite_cache_enabled": False,
         "obs_dim": env.obs_dim,
         "act_dim": env.act_dim,
         "progress_bucket": env.progress_bucket,
@@ -322,6 +389,14 @@ def main() -> None:
                 "vertical_mode": bool(args.vertical_mode),
                 "multi_surface_mode": bool(args.multi_surface_mode),
                 "binary_gas_brake": bool(not args.continuous_gas_brake),
+                "max_touches": int(args.max_touches),
+                "collision_bounce_speed_retention": float(args.collision_bounce_speed_retention),
+                "collision_bounce_backoff": float(args.collision_bounce_backoff),
+                "touch_release_clearance_threshold": float(args.touch_release_clearance_threshold),
+                "physics_tick_profile": effective_physics_tick_profile,
+                "physics_tick_probs": args.physics_tick_probs,
+                "mask_physics_delay_observation": bool(args.mask_physics_delay_observation),
+                "fixed_fps": args.fixed_fps,
                 "seed": args.seed,
                 "obs_dim": env.obs_dim,
                 "hidden_dim": list(hidden_dim),
@@ -404,6 +479,18 @@ def main() -> None:
                 time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
                 distance_values = np.asarray([float(metric["distance"]) for metric in metrics], dtype=np.float64)
                 step_values = np.asarray([int(metric.get("steps", 0)) for metric in metrics], dtype=np.float64)
+                physics_tick_values = np.asarray(
+                    [float(metric.get("physics_tick_mean", 1.0)) for metric in metrics],
+                    dtype=np.float64,
+                )
+                physics_hz_values = np.asarray(
+                    [float(metric.get("physics_hz_mean", 100.0)) for metric in metrics],
+                    dtype=np.float64,
+                )
+                physics_delay_values = np.asarray(
+                    [float(metric.get("physics_delay_norm_mean", 0.0)) for metric in metrics],
+                    dtype=np.float64,
+                )
                 finished_values = np.asarray([int(metric.get("finished", 0)) for metric in metrics], dtype=np.int32)
                 crash_values = np.asarray([int(metric.get("crashes", 0)) for metric in metrics], dtype=np.int32)
                 timeout_values = np.asarray(
@@ -432,8 +519,13 @@ def main() -> None:
                     "best_steps": int(best_metric.get("steps", 0)),
                     "best_reward": float(best_metric["reward"]),
                     "best_ranking_key": json.dumps([float(value) for value in best_objectives]),
+                    "current_mutation_prob": float(args.mutation_prob),
+                    "current_mutation_sigma": float(args.mutation_sigma),
                     "cached_evaluations": 0,
                     "evaluated_count": int(len(population)),
+                    "rollout_count": int(len(population)),
+                    "mirror_rollout_count": 0,
+                    "mirror_individual_count": 0,
                     "population_size": int(len(population)),
                     "finish_count": int(np.sum(finished_values > 0)),
                     "crash_count": int(np.sum(crash_values > 0)),
@@ -451,6 +543,9 @@ def main() -> None:
                     "mean_ranking_progress": float(np.mean(ranking_progress_values)),
                     "mean_reward": float(np.mean(reward_values)),
                     "mean_time": float(np.mean(time_values)),
+                    "mean_physics_tick_count": float(np.mean(physics_tick_values)),
+                    "mean_physics_hz": float(np.mean(physics_hz_values)),
+                    "mean_physics_delay_norm": float(np.mean(physics_delay_values)),
                     "front0_size": len(ordering.fronts[0]) if ordering.fronts else 0,
                     "best_rank": int(ordered_ranks[0]),
                     "best_crowding": float(ordered_crowding[0]),
@@ -468,6 +563,9 @@ def main() -> None:
                 row.update(metric_stats("reward", reward_values))
                 row.update(metric_stats("fitness", fitness_values))
                 row.update(metric_stats("steps", step_values))
+                row.update(metric_stats("physics_tick", physics_tick_values))
+                row.update(metric_stats("physics_hz", physics_hz_values))
+                row.update(metric_stats("physics_delay_norm", physics_delay_values))
                 writer.writerow(row)
                 handle.flush()
 
@@ -482,6 +580,9 @@ def main() -> None:
                             original_index_by_id.get(id(individual), ordered_original_indices[rank - 1])
                         ),
                         "cached": 0,
+                        "evaluation_context": "",
+                        "mirrored": 0,
+                        "evaluate_both_mirrors": 0,
                         "is_elite": int(rank <= int(args.elite_count)),
                         "is_parent": int(rank <= int(args.parent_count)),
                         "fitness": float(metric["fitness"]),
@@ -499,6 +600,9 @@ def main() -> None:
                         "distance": float(metric["distance"]),
                         "reward": float(metric["reward"]),
                         "steps": int(metric.get("steps", 0)),
+                        "physics_tick_mean": float(metric.get("physics_tick_mean", 1.0)),
+                        "physics_hz_mean": float(metric.get("physics_hz_mean", 100.0)),
+                        "physics_delay_norm_mean": float(metric.get("physics_delay_norm_mean", 0.0)),
                         "terminated": int(bool(metric.get("terminated", False))),
                         "truncated": int(bool(metric.get("truncated", False))),
                         "front_rank": int(ordered_ranks[rank - 1]),
@@ -550,12 +654,18 @@ def main() -> None:
             map_name=args.map_name,
             max_time=args.max_time,
             reward_config=reward_config,
+            physics_config=physics_config,
             seed=args.seed + 1,
             collision_mode=args.collision_mode,
             collision_distance_threshold=args.collision_distance_threshold,
             vertical_mode=args.vertical_mode,
             multi_surface_mode=args.multi_surface_mode,
             binary_gas_brake=not args.continuous_gas_brake,
+            max_touches=args.max_touches,
+            collision_bounce_speed_retention=args.collision_bounce_speed_retention,
+            collision_bounce_backoff=args.collision_bounce_backoff,
+            touch_release_clearance_threshold=args.touch_release_clearance_threshold,
+            mask_physics_delay_observation=args.mask_physics_delay_observation,
         )
         viewer = TM2DViewer(viewer_env)
         obs, info = viewer_env.reset()

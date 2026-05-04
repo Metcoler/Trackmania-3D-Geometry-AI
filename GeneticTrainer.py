@@ -80,6 +80,18 @@ def safe_objective_tag(value: str) -> str:
     return "".join(ch if ch in allowed else "_" for ch in tag).strip("_")
 
 
+def finish_triggered_decay_factor(current_value: float, target_value: float, remaining_generations: int) -> float:
+    if remaining_generations <= 0:
+        return 1.0
+    current = float(current_value)
+    target = float(target_value)
+    if current <= target or current <= 0.0:
+        return 1.0
+    if target <= 0.0:
+        return 0.0
+    return float((target / current) ** (1.0 / float(remaining_generations)))
+
+
 def normalize_hidden_activations(
     hidden_activation: HiddenActivations,
     num_hidden_layers: int,
@@ -151,6 +163,13 @@ class TrainingLogger:
         "cached_evaluations",
         "evaluated_count",
         "population_size",
+        "current_mutation_prob",
+        "current_mutation_sigma",
+        "mutation_decay_trigger",
+        "mutation_decay_active",
+        "mutation_decay_trigger_generation",
+        "effective_mutation_prob_decay",
+        "effective_mutation_sigma_decay",
         "dist_avg",
         "dist_best_gen",
         "dist_best_global",
@@ -275,6 +294,10 @@ class TrainingLogger:
         best_individual: Optional[Individual] = None,
         current_mutation_prob: Optional[float] = None,
         current_mutation_sigma: Optional[float] = None,
+        mutation_decay_active: Optional[bool] = None,
+        mutation_decay_trigger_generation: Optional[int] = None,
+        effective_mutation_prob_decay: Optional[float] = None,
+        effective_mutation_sigma_decay: Optional[float] = None,
         observation_layout: Optional[Sequence[str]] = None,
         vertical_mode: bool = False,
         multi_surface_mode: bool = True,
@@ -343,6 +366,26 @@ class TrainingLogger:
         if current_mutation_sigma is not None:
             payload["current_mutation_sigma"] = np.array(
                 [float(current_mutation_sigma)],
+                dtype=np.float32,
+            )
+        if mutation_decay_active is not None:
+            payload["mutation_decay_active"] = np.array(
+                [int(bool(mutation_decay_active))],
+                dtype=np.int32,
+            )
+        if mutation_decay_trigger_generation is not None:
+            payload["mutation_decay_trigger_generation"] = np.array(
+                [int(mutation_decay_trigger_generation)],
+                dtype=np.int32,
+            )
+        if effective_mutation_prob_decay is not None:
+            payload["effective_mutation_prob_decay"] = np.array(
+                [float(effective_mutation_prob_decay)],
+                dtype=np.float32,
+            )
+        if effective_mutation_sigma_decay is not None:
+            payload["effective_mutation_sigma_decay"] = np.array(
+                [float(effective_mutation_sigma_decay)],
                 dtype=np.float32,
             )
         hidden_dims = normalize_hidden_dims(hidden_dim)
@@ -687,6 +730,10 @@ class GeneticTrainer:
         self._pending_initial_downselect: bool = False
         self._checkpoint_current_mutation_prob: Optional[float] = None
         self._checkpoint_current_mutation_sigma: Optional[float] = None
+        self._checkpoint_mutation_decay_active: Optional[bool] = None
+        self._checkpoint_mutation_decay_trigger_generation: Optional[int] = None
+        self._checkpoint_effective_mutation_prob_decay: Optional[float] = None
+        self._checkpoint_effective_mutation_sigma_decay: Optional[float] = None
 
     @staticmethod
     def _outcome_status_text(finished: int, crashes: int) -> str:
@@ -1354,6 +1401,13 @@ class GeneticTrainer:
         best_so_far: Individual,
         dnf_time_for_plot: float,
         history: Dict[str, List[float]],
+        current_mutation_prob: Optional[float] = None,
+        current_mutation_sigma: Optional[float] = None,
+        mutation_decay_trigger: str = "immediate",
+        mutation_decay_active: bool = True,
+        mutation_decay_trigger_generation: Optional[int] = 0,
+        effective_mutation_prob_decay: float = 1.0,
+        effective_mutation_sigma_decay: float = 1.0,
     ) -> None:
         if self.logger is None:
             return
@@ -1427,6 +1481,21 @@ class GeneticTrainer:
             cached_evaluations=int(self.last_cached_evaluations),
             evaluated_count=int(len(self.population) - self.last_cached_evaluations),
             population_size=int(len(self.population)),
+            current_mutation_prob=(
+                "" if current_mutation_prob is None else float(current_mutation_prob)
+            ),
+            current_mutation_sigma=(
+                "" if current_mutation_sigma is None else float(current_mutation_sigma)
+            ),
+            mutation_decay_trigger=str(mutation_decay_trigger),
+            mutation_decay_active=int(bool(mutation_decay_active)),
+            mutation_decay_trigger_generation=(
+                ""
+                if mutation_decay_trigger_generation is None
+                else int(mutation_decay_trigger_generation)
+            ),
+            effective_mutation_prob_decay=float(effective_mutation_prob_decay),
+            effective_mutation_sigma_decay=float(effective_mutation_sigma_decay),
             dist_avg=history["dist_avg"][-1],
             dist_best_gen=history["dist_best_gen"][-1],
             dist_best_global=history["dist_best_global"][-1],
@@ -1499,6 +1568,7 @@ class GeneticTrainer:
         mutation_prob_min: float = 0.0,
         mutation_sigma_decay: float = 1.0,
         mutation_sigma_min: float = 0.0,
+        mutation_decay_trigger: str = "immediate",
         mirror_episode_prob: float = 0.0,
         evaluate_both_mirrors: bool = True,
         cache_elite_evaluations: bool = True,
@@ -1540,6 +1610,9 @@ class GeneticTrainer:
             raise ValueError("elite_count must not exceed parent_count.")
         elite_population_ratio = elite_count / max(1, self.pop_size)
         parent_population_ratio = parent_pool_size / max(1, self.pop_size)
+        mutation_decay_trigger = str(mutation_decay_trigger).strip().lower()
+        if mutation_decay_trigger not in {"immediate", "first_finish"}:
+            raise ValueError("mutation_decay_trigger must be 'immediate' or 'first_finish'.")
 
         if self.logger is not None:
             cfg = dict(
@@ -1567,6 +1640,7 @@ class GeneticTrainer:
                 mutation_prob_min=mutation_prob_min,
                 mutation_sigma_decay=mutation_sigma_decay,
                 mutation_sigma_min=mutation_sigma_min,
+                mutation_decay_trigger=mutation_decay_trigger,
                 mirror_episode_prob=mirror_episode_prob,
                 evaluate_both_mirrors=bool(evaluate_both_mirrors),
                 cache_elite_evaluations=bool(cache_elite_evaluations),
@@ -1590,6 +1664,14 @@ class GeneticTrainer:
         mutation_prob_min = float(mutation_prob_min)
         mutation_sigma_decay = float(mutation_sigma_decay)
         mutation_sigma_min = float(mutation_sigma_min)
+        if mutation_prob_decay <= 0.0 or mutation_sigma_decay <= 0.0:
+            raise ValueError("Mutation decay factors must be positive.")
+        if mutation_prob_min < 0.0 or mutation_sigma_min < 0.0:
+            raise ValueError("Mutation minimum values must be non-negative.")
+        mutation_decay_active = mutation_decay_trigger == "immediate"
+        mutation_decay_trigger_generation: Optional[int] = 0 if mutation_decay_active else None
+        effective_mutation_prob_decay = float(mutation_prob_decay)
+        effective_mutation_sigma_decay = float(mutation_sigma_decay)
 
         restored_mutation_state = (
             self._loaded_checkpoint_evaluated
@@ -1599,6 +1681,20 @@ class GeneticTrainer:
         if restored_mutation_state:
             current_mutation_prob = float(self._checkpoint_current_mutation_prob)
             current_mutation_sigma = float(self._checkpoint_current_mutation_sigma)
+            if self._checkpoint_mutation_decay_active is not None:
+                mutation_decay_active = bool(self._checkpoint_mutation_decay_active)
+            if self._checkpoint_mutation_decay_trigger_generation is not None:
+                mutation_decay_trigger_generation = int(
+                    self._checkpoint_mutation_decay_trigger_generation
+                )
+            if self._checkpoint_effective_mutation_prob_decay is not None:
+                effective_mutation_prob_decay = float(
+                    self._checkpoint_effective_mutation_prob_decay
+                )
+            if self._checkpoint_effective_mutation_sigma_decay is not None:
+                effective_mutation_sigma_decay = float(
+                    self._checkpoint_effective_mutation_sigma_decay
+                )
             if verbose:
                 print(
                     "Restored mutation state from checkpoint: "
@@ -1626,6 +1722,10 @@ class GeneticTrainer:
             self._loaded_checkpoint_evaluated = False
             self._checkpoint_current_mutation_prob = None
             self._checkpoint_current_mutation_sigma = None
+            self._checkpoint_mutation_decay_active = None
+            self._checkpoint_mutation_decay_trigger_generation = None
+            self._checkpoint_effective_mutation_prob_decay = None
+            self._checkpoint_effective_mutation_sigma_decay = None
 
         if self._pending_initial_downselect:
             loaded_count = len(self.population)
@@ -1695,7 +1795,8 @@ class GeneticTrainer:
                 print("\n" + "=" * 20)
                 print(
                     f"Generation {current_generation} | "
-                    f"mut_p={current_mutation_prob:.4f}, sigma={current_mutation_sigma:.4f}"
+                    f"mut_p={current_mutation_prob:.4f}, sigma={current_mutation_sigma:.4f}, "
+                    f"decay={'active' if mutation_decay_active else 'waiting'}"
                 )
                 print("=" * 20)
 
@@ -1748,6 +1849,33 @@ class GeneticTrainer:
             if best_improved:
                 best_so_far = best_gen.copy()
 
+            finish_count = int(sum(int(ind.finished) > 0 for ind in self.population))
+            if (
+                mutation_decay_trigger == "first_finish"
+                and not mutation_decay_active
+                and finish_count > 0
+            ):
+                mutation_decay_active = True
+                mutation_decay_trigger_generation = int(current_generation)
+                remaining_decay_generations = max(0, int(generations) - int(local_gen) - 1)
+                effective_mutation_prob_decay = finish_triggered_decay_factor(
+                    current_mutation_prob,
+                    mutation_prob_min,
+                    remaining_decay_generations,
+                )
+                effective_mutation_sigma_decay = finish_triggered_decay_factor(
+                    current_mutation_sigma,
+                    mutation_sigma_min,
+                    remaining_decay_generations,
+                )
+                if verbose:
+                    print(
+                        "Mutation decay triggered by first finisher: "
+                        f"gen={current_generation}, "
+                        f"prob_decay={effective_mutation_prob_decay:.8f}, "
+                        f"sigma_decay={effective_mutation_sigma_decay:.8f}"
+                    )
+
             dist_best_global = float(best_so_far.ranking_progress())
             time_best_global = float(
                 best_so_far.time if int(best_so_far.finished) > 0 else dnf_time_for_plot
@@ -1776,6 +1904,13 @@ class GeneticTrainer:
                 best_so_far=best_so_far,
                 dnf_time_for_plot=dnf_time_for_plot,
                 history=history,
+                current_mutation_prob=current_mutation_prob,
+                current_mutation_sigma=current_mutation_sigma,
+                mutation_decay_trigger=mutation_decay_trigger,
+                mutation_decay_active=mutation_decay_active,
+                mutation_decay_trigger_generation=mutation_decay_trigger_generation,
+                effective_mutation_prob_decay=effective_mutation_prob_decay,
+                effective_mutation_sigma_decay=effective_mutation_sigma_decay,
             )
 
             if trajectory_logger is not None:
@@ -1834,6 +1969,10 @@ class GeneticTrainer:
                     best_individual=best_so_far,
                     current_mutation_prob=current_mutation_prob,
                     current_mutation_sigma=current_mutation_sigma,
+                    mutation_decay_active=mutation_decay_active,
+                    mutation_decay_trigger_generation=mutation_decay_trigger_generation,
+                    effective_mutation_prob_decay=effective_mutation_prob_decay,
+                    effective_mutation_sigma_decay=effective_mutation_sigma_decay,
                     observation_layout=self.observation_layout,
                     vertical_mode=self.vertical_mode,
                     multi_surface_mode=self.multi_surface_mode,
@@ -1849,14 +1988,15 @@ class GeneticTrainer:
                     mutation_sigma=current_mutation_sigma,
                     cache_elite_evaluations=cache_elite_evaluations,
                 )
-                current_mutation_prob = max(
-                    mutation_prob_min,
-                    current_mutation_prob * mutation_prob_decay,
-                )
-                current_mutation_sigma = max(
-                    mutation_sigma_min,
-                    current_mutation_sigma * mutation_sigma_decay,
-                )
+                if mutation_decay_active:
+                    current_mutation_prob = max(
+                        mutation_prob_min,
+                        current_mutation_prob * effective_mutation_prob_decay,
+                    )
+                    current_mutation_sigma = max(
+                        mutation_sigma_min,
+                        current_mutation_sigma * effective_mutation_sigma_decay,
+                    )
 
         self.best_individual = best_so_far
 
@@ -1979,6 +2119,26 @@ class GeneticTrainer:
             if "current_mutation_sigma" in data.files
             else None
         )
+        checkpoint_mutation_decay_active = (
+            bool(int(np.asarray(data["mutation_decay_active"]).reshape(-1)[0]))
+            if "mutation_decay_active" in data.files
+            else None
+        )
+        checkpoint_mutation_decay_trigger_generation = (
+            int(np.asarray(data["mutation_decay_trigger_generation"]).reshape(-1)[0])
+            if "mutation_decay_trigger_generation" in data.files
+            else None
+        )
+        checkpoint_effective_mutation_prob_decay = (
+            float(np.asarray(data["effective_mutation_prob_decay"]).reshape(-1)[0])
+            if "effective_mutation_prob_decay" in data.files
+            else None
+        )
+        checkpoint_effective_mutation_sigma_decay = (
+            float(np.asarray(data["effective_mutation_sigma_decay"]).reshape(-1)[0])
+            if "effective_mutation_sigma_decay" in data.files
+            else None
+        )
         restored_metrics_are_valid = bool(
             assume_evaluated_generation
             and progresses is not None
@@ -2044,6 +2204,10 @@ class GeneticTrainer:
         )
         self._checkpoint_current_mutation_prob = checkpoint_current_mutation_prob
         self._checkpoint_current_mutation_sigma = checkpoint_current_mutation_sigma
+        self._checkpoint_mutation_decay_active = checkpoint_mutation_decay_active
+        self._checkpoint_mutation_decay_trigger_generation = checkpoint_mutation_decay_trigger_generation
+        self._checkpoint_effective_mutation_prob_decay = checkpoint_effective_mutation_prob_decay
+        self._checkpoint_effective_mutation_sigma_decay = checkpoint_effective_mutation_sigma_decay
 
         if "best_genome" in data.files:
             best = Individual(
@@ -2167,6 +2331,7 @@ if __name__ == "__main__":
     mutation_sigma = 0.25
     mutation_sigma_decay = 1.0
     mutation_sigma_min = 0.25
+    mutation_decay_trigger = "immediate"
 
 
     # Fancy updates
@@ -2350,6 +2515,7 @@ if __name__ == "__main__":
             mutation_prob_min=mutation_prob_min,
             mutation_sigma_decay=mutation_sigma_decay,
             mutation_sigma_min=mutation_sigma_min,
+            mutation_decay_trigger=mutation_decay_trigger,
             mirror_episode_prob=mirror_episode_prob,
             evaluate_both_mirrors=evaluate_both_mirrors,
             cache_elite_evaluations=cache_elite_evaluations,
@@ -2409,6 +2575,7 @@ if __name__ == "__main__":
                 mutation_prob_min=mutation_prob_min,
                 mutation_sigma_decay=mutation_sigma_decay,
                 mutation_sigma_min=mutation_sigma_min,
+                mutation_decay_trigger=mutation_decay_trigger,
             ),
         )
 

@@ -291,6 +291,18 @@ def metric_stats(prefix: str, values) -> dict[str, float]:
     }
 
 
+def finish_triggered_decay_factor(current_value: float, target_value: float, remaining_generations: int) -> float:
+    if remaining_generations <= 0:
+        return 1.0
+    current = float(current_value)
+    target = float(target_value)
+    if current <= target or current <= 0.0:
+        return 1.0
+    if target <= 0.0:
+        return 0.0
+    return float((target / current) ** (1.0 / float(remaining_generations)))
+
+
 def generation_metric_fieldnames() -> list[str]:
     base_fields = [
         "generation",
@@ -307,6 +319,11 @@ def generation_metric_fieldnames() -> list[str]:
         "best_ranking_key",
         "current_mutation_prob",
         "current_mutation_sigma",
+        "mutation_decay_trigger",
+        "mutation_decay_active",
+        "mutation_decay_trigger_generation",
+        "effective_mutation_prob_decay",
+        "effective_mutation_sigma_decay",
         "cached_evaluations",
         "evaluated_count",
         "rollout_count",
@@ -545,6 +562,16 @@ def main() -> None:
         type=float,
         default=None,
         help="Lower bound for mutation sigma decay. Defaults to --mutation-sigma.",
+    )
+    parser.add_argument(
+        "--mutation-decay-trigger",
+        choices=["immediate", "first_finish"],
+        default="immediate",
+        help=(
+            "When to start applying mutation decay. immediate preserves the legacy "
+            "behavior; first_finish keeps exploration values until the first finisher "
+            "and then computes a decay that reaches the min values by the final generation."
+        ),
     )
     parser.add_argument(
         "--physics-tick-profile",
@@ -790,6 +817,7 @@ def main() -> None:
         "mutation_prob_min": float(mutation_prob_min),
         "mutation_sigma_decay": float(args.mutation_sigma_decay),
         "mutation_sigma_min": float(mutation_sigma_min),
+        "mutation_decay_trigger": str(args.mutation_decay_trigger),
         "physics_tick_profile": effective_physics_tick_profile,
         "physics_tick_probs": args.physics_tick_probs,
         "mask_physics_delay_observation": bool(args.mask_physics_delay_observation),
@@ -862,6 +890,11 @@ def main() -> None:
         cumulative_virtual_steps = 0
         current_mutation_prob = float(args.mutation_prob)
         current_mutation_sigma = float(args.mutation_sigma)
+        mutation_decay_trigger = str(args.mutation_decay_trigger)
+        mutation_decay_active = mutation_decay_trigger == "immediate"
+        mutation_decay_trigger_generation = 0 if mutation_decay_active else None
+        effective_mutation_prob_decay = float(args.mutation_prob_decay)
+        effective_mutation_sigma_decay = float(args.mutation_sigma_decay)
         if int(args.num_workers) > 1:
             worker_config = {
                 "map_name": args.map_name,
@@ -1035,6 +1068,27 @@ def main() -> None:
                         for metric in metrics
                     )
                 )
+                finish_count = int(np.sum(finished_values > 0))
+                crash_count = int(np.sum(crash_values > 0))
+                timeout_count = int(np.sum(timeout_values > 0))
+                if (
+                    mutation_decay_trigger == "first_finish"
+                    and not mutation_decay_active
+                    and finish_count > 0
+                ):
+                    mutation_decay_active = True
+                    mutation_decay_trigger_generation = int(generation)
+                    remaining_decay_generations = max(0, int(args.generations) - int(generation))
+                    effective_mutation_prob_decay = finish_triggered_decay_factor(
+                        current_mutation_prob,
+                        mutation_prob_min,
+                        remaining_decay_generations,
+                    )
+                    effective_mutation_sigma_decay = finish_triggered_decay_factor(
+                        current_mutation_sigma,
+                        mutation_sigma_min,
+                        remaining_decay_generations,
+                    )
                 virtual_time_sum = float(np.sum(time_values))
                 virtual_steps_sum = int(np.sum(step_values))
                 cumulative_virtual_time += virtual_time_sum
@@ -1056,15 +1110,22 @@ def main() -> None:
                     "best_ranking_key": json.dumps([float(value) for value in best.ranking_key()]),
                     "current_mutation_prob": float(current_mutation_prob),
                     "current_mutation_sigma": float(current_mutation_sigma),
+                    "mutation_decay_trigger": mutation_decay_trigger,
+                    "mutation_decay_active": int(bool(mutation_decay_active)),
+                    "mutation_decay_trigger_generation": (
+                        "" if mutation_decay_trigger_generation is None else int(mutation_decay_trigger_generation)
+                    ),
+                    "effective_mutation_prob_decay": float(effective_mutation_prob_decay),
+                    "effective_mutation_sigma_decay": float(effective_mutation_sigma_decay),
                     "cached_evaluations": int(cached_evaluations),
                     "evaluated_count": int(len(population) - cached_evaluations),
                     "rollout_count": int(rollout_count_sum),
                     "mirror_rollout_count": int(mirror_rollout_count),
                     "mirror_individual_count": int(mirror_individual_count),
                     "population_size": int(len(population)),
-                    "finish_count": int(np.sum(finished_values > 0)),
-                    "crash_count": int(np.sum(crash_values > 0)),
-                    "timeout_count": int(np.sum(timeout_values > 0)),
+                    "finish_count": finish_count,
+                    "crash_count": crash_count,
+                    "timeout_count": timeout_count,
                     "terminated_count": int(sum(bool(metric.get("terminated", False)) for metric in metrics)),
                     "truncated_count": int(sum(bool(metric.get("truncated", False)) for metric in metrics)),
                     "virtual_time_sum": virtual_time_sum,
@@ -1176,6 +1237,7 @@ def main() -> None:
                     f"best_rank={row['best_ranking_progress']:.2f}% "
                     f"best_time={row['best_time']:.2f}s mean_prog={row['mean_progress']:.2f}% "
                     f"mut_p={current_mutation_prob:.4f} sigma={current_mutation_sigma:.4f} "
+                    f"decay={'active' if mutation_decay_active else 'waiting'} "
                     f"mirror_rollouts={mirror_rollout_count} cached={cached_evaluations}"
                 )
 
@@ -1189,14 +1251,15 @@ def main() -> None:
                     for child in children:
                         child.mutate(current_mutation_prob, current_mutation_sigma)
                     population = elites + children
-                    current_mutation_prob = max(
-                        float(mutation_prob_min),
-                        float(current_mutation_prob) * float(args.mutation_prob_decay),
-                    )
-                    current_mutation_sigma = max(
-                        float(mutation_sigma_min),
-                        float(current_mutation_sigma) * float(args.mutation_sigma_decay),
-                    )
+                    if mutation_decay_active:
+                        current_mutation_prob = max(
+                            float(mutation_prob_min),
+                            float(current_mutation_prob) * float(effective_mutation_prob_decay),
+                        )
+                        current_mutation_sigma = max(
+                            float(mutation_sigma_min),
+                            float(current_mutation_sigma) * float(effective_mutation_sigma_decay),
+                        )
         finally:
             if worker_pool is not None:
                 worker_pool.close()

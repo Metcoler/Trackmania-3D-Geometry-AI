@@ -920,12 +920,12 @@ def main() -> None:
                 if worker_pool is None:
                     metrics = []
                     for idx, individual in enumerate(population):
-                        requested_context = requested_context_by_id[id(individual)]
-                        cache_context = str(getattr(individual, "evaluation_context", ""))
+                        # Elite cache is intentionally elite-safe: a valid cached elite
+                        # is not re-evaluated just because mirror_probability sampled
+                        # the opposite context in this generation.
                         can_use_cache = (
                             elite_cache_enabled
                             and bool(getattr(individual, "evaluation_valid", False))
-                            and cache_context == requested_context
                         )
                         if can_use_cache:
                             cached_evaluations += 1
@@ -945,12 +945,10 @@ def main() -> None:
                 else:
                     metrics = [None for _ in population]
                     for idx, individual in enumerate(population):
-                        requested_context = requested_context_by_id[id(individual)]
-                        cache_context = str(getattr(individual, "evaluation_context", ""))
+                        # Elite cache is intentionally elite-safe; see sequential branch.
                         can_use_cache = (
                             elite_cache_enabled
                             and bool(getattr(individual, "evaluation_valid", False))
-                            and cache_context == requested_context
                         )
                         if can_use_cache:
                             cached_evaluations += 1

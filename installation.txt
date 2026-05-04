@@ -135,3 +135,6 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_moo_lexicographic_swe
 
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_training_improvements_sweep_20260504.ps1
+
+
+python Experiments\train_ga_moo.py --map-name "AI Training #5" --generations 300 --population-size 48 --elite-count 4 --parent-count 16 --max-time 30 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.2 --mutation-sigma 0.2 --objective-mode trackmania_racing --objective-subset "finish,progress,speed_for_progress,safe_progress,path_efficiency" --objective-priority "finish,progress,speed_for_progress,safe_progress,path_efficiency" --pareto-tiebreak priority --reward-mode terminal_fitness --collision-mode lidar --physics-tick-profile fixed100 --seed 2026050406 --num-workers 4 --worker-backend auto --log-dir Experiments\runs_ga_moo\moo_trackmania_racing_aabb_lidar_fixed100_seed_2026050406

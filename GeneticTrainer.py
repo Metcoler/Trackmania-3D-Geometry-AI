@@ -2125,16 +2125,16 @@ if __name__ == "__main__":
     env_max_time = 30
     
     # neural network architecture
-    hidden_dim = [48, 24]
+    hidden_dim = [32, 16]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
     vertical_mode = False
     multi_surface_mode = False
 
     # Safe real-TM lexicographic GA baseline.
-    pop_size = 48
+    pop_size = 32
     elite_count = 2
-    parent_count = 14
+    parent_count = 10
     generations_to_run = 300
     checkpoint_every = 10
 
@@ -2172,7 +2172,7 @@ if __name__ == "__main__":
     # Fancy updates
     mirror_episode_prob = 0.0
     evaluate_both_mirrors = False
-    cache_elite_evaluations = False
+    cache_elite_evaluations = True
     trajectory_log_mode = "off"  # off / top / top-finishers-final / all
     trajectory_top_k = 1
     trajectory_log_actions = False

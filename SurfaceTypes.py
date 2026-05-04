@@ -87,6 +87,8 @@ EPLUG_SURFACE_MATERIAL_NAMES = {
 
 SURFACE_TRACTION_BY_PREFIX = {
     "RoadTech": 1.00,
+    "DirtTech": 0.50,
+    "PlatformTech": 1.00,
     "RoadDirt": 0.50,
     "PlatformDirt": 0.50,
     "PlatformGrass": 0.70,

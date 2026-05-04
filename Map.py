@@ -13,6 +13,8 @@ class MapBlock:
 
     SURFACE_PREFIXES = (
         "RoadTech",
+        "DirtTech",
+        "PlatformTech",
         "RoadDirt",
         "PlatformIce",
         "PlatformGrass",
@@ -31,6 +33,18 @@ class MapBlock:
         "Start": [0, 255, 0],
         "Finish": [255, 0, 0],
         "Checkpoint": [0, 0, 255],
+    }
+
+    SURFACE_ROAD_COLORS = {
+        "RoadTech": [185, 185, 185, 255],
+        "PlatformTech": [185, 185, 185, 255],
+        "DirtTech": [150, 95, 45, 255],
+        "RoadDirt": [150, 95, 45, 255],
+        "PlatformDirt": [150, 95, 45, 255],
+        "PlatformGrass": [65, 150, 70, 255],
+        "PlatformPlastic": [225, 205, 55, 255],
+        "PlatformIce": [120, 205, 235, 255],
+        "PlatformSnow": [220, 230, 235, 255],
     }
 
     in_out_tiles = {
@@ -95,7 +109,13 @@ class MapBlock:
 
     @classmethod
     def resolve_block_name(cls, raw_name: str) -> tuple[str, str, str, int, tuple[int, int]]:
-        surface, shape_name = cls._strip_surface_prefix(raw_name)
+        normalized_name = str(raw_name)
+        for suffix in (".Block.Gbx_CustomBlock", ".Block.Gbx"):
+            if normalized_name.endswith(suffix):
+                normalized_name = normalized_name[: -len(suffix)]
+                break
+
+        surface, shape_name = cls._strip_surface_prefix(normalized_name)
 
         if shape_name == "Base":
             shape_name = "Straight"
@@ -133,7 +153,7 @@ class MapBlock:
         elif semantic_name == "SlopeBase":
             mesh_name = "RoadTechSlopeBase" if block_size == 1 else f"RoadTechSlopeBase{block_size}"
         else:
-            mesh_name = raw_name
+            mesh_name = normalized_name
 
         mesh_path = block_mesh_path(mesh_name)
         if not mesh_path.exists():
@@ -149,6 +169,7 @@ class MapBlock:
         self.logical_position = np.array(logical_position)
         self.position = np.array([logical_position[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + logical_position[1] * MAP_BLOCK_SIZE // 4, logical_position[2] * MAP_BLOCK_SIZE])
         self.raw_name = name
+        self.direction = direction
         mesh_name, semantic_name, surface_name, block_size, footprint_tiles = self.resolve_block_name(name)
         self.mesh_name = mesh_name
         self.surface_name = surface_name
@@ -327,8 +348,9 @@ class MapBlock:
         # Road - Create a new mesh with faces pointing in the y-axis direction
         self.road_mesh = trimesh.Trimesh(vertices=self.mesh.vertices,
                                     faces=self.mesh.faces[road_indices])
-        self.road_mesh.visual.vertex_colors = [95, 145, 95, 255]
-        self.road_mesh.visual.face_colors = [95, 145, 95, 255]
+        road_color = self.SURFACE_ROAD_COLORS.get(self.surface_name, [185, 185, 185, 255])
+        self.road_mesh.visual.vertex_colors = road_color
+        self.road_mesh.visual.face_colors = road_color
         self.road_mesh.remove_unreferenced_vertices()
 
     def fit_road_plane(self):
@@ -523,6 +545,7 @@ class MapBlock:
         self.mesh.visual.vertex_colors = color
         self.mesh.visual.face_colors = color
         self.road_mesh.visual.vertex_colors = color
+        self.road_mesh.visual.face_colors = color
 
     
     def get_out_position_vector(self, input_logical_position, input_vector, try_index=0):
@@ -569,6 +592,8 @@ class Map:
 
         self.generate_block_grid_index()
         self.construct_path()
+        if getattr(self, "_path_reoriented_blocks", False):
+            self.generate_block_grid_index()
         self.generate_map_mesh()
         self.generate_walls_mesh()
         self.generate_sensor_walls_mesh()
@@ -688,8 +713,50 @@ class Map:
         ]
         return (max(heights) - min(heights)) > float(height_threshold)
 
+    @staticmethod
+    def _path_tile_key(tile) -> tuple[int, int, int]:
+        tile = np.asarray(tile, dtype=np.int64)
+        return tuple(int(value) for value in tile[:3])
+
+    def _block_containing_path_tile(self, tile, exclude_position: tuple[int, int, int] | None = None) -> MapBlock | None:
+        tile_key = self._path_tile_key(tile)
+        for block_position, block in self.blocks.items():
+            if exclude_position is not None and tuple(block_position) == tuple(exclude_position):
+                continue
+            if block.contains_in_out_tile(tile_key):
+                return block
+        return None
+
+    def _try_reorient_platform_straight_for_path(
+        self,
+        logical_position: tuple[int, int, int],
+        in_position,
+        in_vector,
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        block = self.blocks[logical_position]
+        if not (block.surface_name.startswith("Platform") and block.name == "Straight"):
+            return None
+
+        for direction in ("N", "E", "S", "W"):
+            candidate = MapBlock(block.raw_name, tuple(int(value) for value in block.logical_position), direction)
+            try:
+                out_position, out_vector = candidate.get_out_position_vector(in_position, in_vector)
+            except Exception:
+                continue
+
+            next_in_position = out_position + out_vector
+            if self._block_containing_path_tile(next_in_position, exclude_position=logical_position) is None:
+                continue
+
+            self.blocks[logical_position] = candidate
+            self._path_reoriented_blocks = True
+            return out_position, out_vector
+
+        return None
+
         
     def construct_path(self):
+        self._path_reoriented_blocks = False
         path = [self.start_logical_position]
         
         logical_position = tuple(self.start_logical_position)
@@ -698,17 +765,25 @@ class Map:
         
         while self.blocks[logical_position].name != "Finish":
 
-            out_position, out_vector = self.blocks[logical_position].get_out_position_vector(in_position, in_vector)
+            try:
+                out_position, out_vector = self.blocks[logical_position].get_out_position_vector(in_position, in_vector)
+            except Exception:
+                repaired_transition = self._try_reorient_platform_straight_for_path(
+                    logical_position,
+                    in_position,
+                    in_vector,
+                )
+                if repaired_transition is None:
+                    raise
+                out_position, out_vector = repaired_transition
             next_in_position = out_position + out_vector
             
-            for block in self.blocks.values():
-                if block.contains_in_out_tile(next_in_position):
-                
-                    in_position = next_in_position
-                    in_vector = out_vector
-                    logical_position = tuple(block.logical_position)
-                    path.append(logical_position)
-                    break
+            next_block = self._block_containing_path_tile(next_in_position)
+            if next_block is not None:
+                in_position = next_in_position
+                in_vector = out_vector
+                logical_position = tuple(next_block.logical_position)
+                path.append(logical_position)
             else:
                 break
                 #raise Exception("Error: path is not continuous")

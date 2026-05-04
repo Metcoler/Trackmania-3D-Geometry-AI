@@ -1,0 +1,7 @@
+DirtTechCurve3.Block.Gbx_CustomBlock;27,9,20;East
+DirtTechCurve2.Block.Gbx_CustomBlock;25,9,22;West
+RoadTechCurve2;24,9,24;East
+RoadTechFinish;23,9,25;East
+RoadTechStraight;29,9,19;South
+RoadTechStraight;29,9,18;South
+RoadTechStart;29,9,17;North

@@ -131,3 +131,7 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_moo_lexicographic_swe
 
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_moo_lexicographic_sweep_aabb_lidar_fixed100.ps1
+
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_training_improvements_sweep_20260504.ps1

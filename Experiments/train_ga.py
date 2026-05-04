@@ -248,9 +248,9 @@ def cached_metrics_from_individual(individual: Individual) -> dict:
         "evaluate_both_mirrors": int(evaluate_both_mirrors),
         "rollout_count": 2 if evaluate_both_mirrors else 1,
         "mirror_rollout_count": 1 if (evaluate_both_mirrors or mirrored) else 0,
-        "physics_tick_mean": float(metrics.get("physics_tick_mean", 0.0)),
-        "physics_hz_mean": float(metrics.get("physics_hz_mean", 0.0)),
-        "physics_delay_norm_mean": float(metrics.get("physics_delay_norm_mean", 0.0)),
+        "physics_tick_mean": float(getattr(individual, "physics_tick_mean", 0.0)),
+        "physics_hz_mean": float(getattr(individual, "physics_hz_mean", 0.0)),
+        "physics_delay_norm_mean": float(getattr(individual, "physics_delay_norm_mean", 0.0)),
     }
 
 

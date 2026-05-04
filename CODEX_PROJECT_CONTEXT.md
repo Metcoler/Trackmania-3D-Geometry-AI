@@ -496,10 +496,39 @@ curve-feasibility parameter and should be validated by rollout behavior.
   `laser_hitbox_offsets`, and `laser_clearances`, so future hitbox and
   collision analyses do not need to reconstruct raw lidar from observation.
 - Current practical TM2D defaults for GA reward/selection research:
-  variable FPS, AABB clearance lidar for live-like crash behavior, continuous
-  gas/brake, dense progress, no elite cache. `center` and `corners` collision
-  remain only fast diagnostic simplifications, not the canonical live-like
-  lidar model.
+  AABB clearance lidar for live-like crash behavior, dense progress, no elite
+  cache, and an explicit physics tick profile instead of the older continuous
+  FPS-range model. `center` and `corners` collision remain only fast diagnostic
+  simplifications, not the canonical live-like lidar model.
+
+2026-05-04 physics-tick variability check:
+
+- The old `fps_min/fps_max` TM2D timing model was replaced by discrete physics
+  tick profiles. The live-like profile `supervised_v2d` was estimated from
+  clean supervised attempts:
+  `1:0.938285,2:0.060381,3:0.000562,4:0.000772`, where `1` means `100 Hz`,
+  `2` means `50 Hz`, etc.
+- The exposed timing observation is now `physics_delay_norm = 1 - 1/ticks`.
+  This describes the just-observed game-time interval between the previous and
+  current observation; it does not predict the next physics tick.
+- Positive diagnostic run:
+  `Experiments/runs_ga_diagnostic/variable_physics_tick_lidar_finished_progress_time_crashes_seed_2026050405`.
+  Config: `(finished, progress, -time, -crashes)`, dense progress, AABB lidar,
+  binary gas/brake, no elite cache, `population=48`, `elite=4`, `parents=16`,
+  `mutation_prob=0.2`, `mutation_sigma=0.2`, `max_time=30`,
+  `physics_tick_profile=supervised_v2d`.
+- Result: the agent trained successfully under live-like physics tick
+  variability. First finish appeared at generation `176`, total finish
+  individuals `1432`, best finish time `17.33s` at generation `293`, and
+  last-50 finish rate was `33.33%`.
+- Fixed-100 Hz comparison with the same ranking tuple from the thesis reward
+  sweep had first finish at generation `137`, total finish individuals `2209`,
+  best finish time `17.33s`, and last-50 finish rate `32.21%`.
+- Interpretation: live-like tick variability makes the first finisher arrive
+  later than deterministic fixed100 in this single run, but it does not prevent
+  learning. The final best time matched fixed100 and late finish stability was
+  comparable. This is good evidence that the new `physics_delay_norm` and
+  discrete tick model are usable for future variable-physics experiments.
 
 Known physics limitation: Trackmania has a drift/slip regime when braking or
 turning at sufficient speed. In the current supervised data, about `3.5%` of

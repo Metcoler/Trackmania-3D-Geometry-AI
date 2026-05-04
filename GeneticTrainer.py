@@ -2338,7 +2338,7 @@ if __name__ == "__main__":
     mirror_episode_prob = 0.0
     evaluate_both_mirrors = False
     cache_elite_evaluations = True
-    trajectory_log_mode = "off"  # off / top / top-finishers-final / all
+    trajectory_log_mode = "top"  # off / top / top-finishers-final / all
     trajectory_top_k = 1
     trajectory_log_actions = False
     target_steer_deadzone = 0.00

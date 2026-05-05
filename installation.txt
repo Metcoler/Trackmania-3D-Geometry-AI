@@ -150,3 +150,7 @@ python Experiments\train_ga.py --map-name "AI Training #5" --generations 200 --p
 
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_rl_reward_equivalent_sweep_20260505.ps1
+
+
+python -m pip install stable-baselines3 gymnasium torch numpy pandas matplotlib
+python Experiments\train_sac.py --import-check

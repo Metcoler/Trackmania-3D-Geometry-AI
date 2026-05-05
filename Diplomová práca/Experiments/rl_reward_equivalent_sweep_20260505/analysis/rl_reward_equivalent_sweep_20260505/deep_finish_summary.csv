@@ -1,0 +1,7 @@
+run_short,run_label,algorithm,physics_tick_profile,finish_count,first_finish_episode,last_finish_episode,best_finish_time,median_finish_time,mean_finish_time,finish_count_last100,best_time_last100
+ppo_fixed100,PPO | fixed100 | delta_finished_progress_time_crashes | gas_brake_steer,PPO,fixed100,43,849,973,26.910000000001407,28.740000000001693,28.613488372094697,24,26.910000000001407
+ppo_supervised_v2d,PPO | supervised_v2d | delta_finished_progress_time_crashes | gas_brake_steer,PPO,supervised_v2d,33,759,999,25.040000000000965,27.330000000001267,27.317878787880034,22,25.040000000000965
+sac_fixed100,SAC | fixed100 | delta_finished_progress_time_crashes | gas_brake_steer,SAC,fixed100,0,-1,-1,,,,0,
+sac_supervised_v2d,SAC | supervised_v2d | delta_finished_progress_time_crashes | gas_brake_steer,SAC,supervised_v2d,0,-1,-1,,,,0,
+td3_fixed100,TD3 | fixed100 | delta_finished_progress_time_crashes | gas_brake_steer,TD3,fixed100,0,-1,-1,,,,0,
+td3_supervised_v2d,TD3 | supervised_v2d | delta_finished_progress_time_crashes | gas_brake_steer,TD3,supervised_v2d,0,-1,-1,,,,0,

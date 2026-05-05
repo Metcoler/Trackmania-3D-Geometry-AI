@@ -167,3 +167,6 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_supervised_seeded_
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_supervised_seeded_dense_pretrain_20260505.ps1
 
 python SupervisedTraining.py --data-root logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset --output-root logs\supervised_runs_map_specialists_500epoch_20260505\single_surface_flat --vertical-mode true --multi-surface-mode true --hidden-dim "48,24" --hidden-activation "relu,tanh" --epochs 500 --disable-boring-filter --random-seed 2026050505
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_pretrain_ai5_single_flat_48x24_20260506.ps1

@@ -17,7 +17,7 @@
   "script_sources": [
     "Experiments/analyze_vehicle_hitbox.py"
   ],
-  "curated_at": "2026-05-04T13:13:09",
+  "curated_at": "2026-05-05T23:09:45",
   "copy_policy": {
     "skipped_file_names": [
       "combined_individual_metrics.csv"

@@ -22,7 +22,7 @@
     "Experiments/run_lexicographic_sweep_aabb_lidar_fixed100_2.ps1",
     "Experiments/analyze_lexicographic_sweep.py"
   ],
-  "curated_at": "2026-05-04T13:13:04",
+  "curated_at": "2026-05-05T23:09:45",
   "copy_policy": {
     "skipped_file_names": [
       "combined_individual_metrics.csv"

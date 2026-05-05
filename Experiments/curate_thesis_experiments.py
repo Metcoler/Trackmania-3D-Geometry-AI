@@ -158,11 +158,85 @@ PACKAGES: tuple[ExperimentPackage, ...] = (
         script_sources=("Experiments/train_ga.py",),
         keywords=("architecture", "activation", "relu_tanh", "closed_loop_ga"),
     ),
+    ExperimentPackage(
+        experiment_id="training_improvements_20260505",
+        title="TM2D training improvements comparison",
+        category="thesis_grade_and_diagnostic",
+        status="mixed_single_seed_results",
+        thesis_relevance=(
+            "Comparison of selected GA training improvements after the reward and "
+            "hyperparameter sweeps: mutation decay, mirror evaluation, multi-touch, "
+            "variable tick, elite cache, MOO variants, and live TM overnight run."
+        ),
+        interpretation=(
+            "Variable physics tick with elite cache is the strongest positive result. "
+            "First-finish decay is a useful tradeoff; mirror holdout and max-touches "
+            "remain diagnostic rather than final improvements."
+        ),
+        analysis_sources=("Experiments/analysis/latest_training_results_20260505",),
+        run_sources=(),
+        script_sources=(
+            "Experiments/run_ga_training_improvements_sweep_20260504.ps1",
+            "Experiments/analyze_latest_training_results.py",
+        ),
+        keywords=("training_improvements", "elite_cache", "variable_tick", "mutation_decay", "moo"),
+    ),
+    ExperimentPackage(
+        experiment_id="rl_reward_equivalent_sweep_20260505",
+        title="RL reward-equivalent PPO/SAC/TD3 sweep",
+        category="comparison_branch",
+        status="single_seed_screening",
+        thesis_relevance=(
+            "Stable-Baselines3 PPO, SAC, and TD3 comparison using the same TM2D "
+            "environment, AABB lidar, strict gas/brake/steer actions, and a scalarized "
+            "equivalent of the GA tuple."
+        ),
+        interpretation=(
+            "Only PPO learned to finish in this screening. SAC and TD3 were useful "
+            "negative comparisons under the tested setup; GA remains the stronger "
+            "practical baseline."
+        ),
+        analysis_sources=("Experiments/analysis/rl_reward_equivalent_sweep_20260505",),
+        run_sources=(),
+        script_sources=(
+            "Experiments/run_rl_reward_equivalent_sweep_20260505.ps1",
+            "Experiments/train_sac.py",
+            "Experiments/analyze_rl_runs.py",
+        ),
+        keywords=("rl", "ppo", "sac", "td3", "stable_baselines3", "reward_equivalent"),
+    ),
+    ExperimentPackage(
+        experiment_id="ga_supervised_seeded_20260505",
+        title="Supervised-seeded GA initialization",
+        category="thesis_grade_hybrid",
+        status="single_seed_positive_with_negative_control",
+        thesis_relevance=(
+            "Hybrid behavior-cloning initialization plus GA fine-tuning experiment, "
+            "compared against the random initial population baseline."
+        ),
+        interpretation=(
+            "Dense weight-noise seeding produced a strong positive result and the best "
+            "time in the comparison. Sparse supervised seeding is a useful negative "
+            "control showing that naive BC seeding is too conservative."
+        ),
+        analysis_sources=("Experiments/analysis/ga_supervised_seeded_20260505",),
+        run_sources=(),
+        script_sources=(
+            "Experiments/run_ga_supervised_seeded_pretrain_20260505.ps1",
+            "Experiments/run_ga_supervised_seeded_dense_pretrain_20260505.ps1",
+            "Experiments/analyze_ga_supervised_seeded.py",
+        ),
+        keywords=("supervised_seed", "behavior_cloning", "hybrid_ga", "dense_noise"),
+    ),
 )
 
 
 WORKING_SOURCES: tuple[tuple[str, str], ...] = (
     ("Experiments/runs_rl", "RL comparison branch; keep until thesis role is decided."),
+    ("Experiments/runs_ga_training_improvements", "Main training-improvements raw runs; keep as source evidence."),
+    ("Experiments/runs_ga_moo", "MOO comparison raw runs; keep as source evidence for latest training analysis."),
+    ("Experiments/runs_ga_generalization", "Mirror holdout raw runs; keep as source evidence for latest training analysis."),
+    ("logs/supervised_data", "Current supervised datasets; keep until thesis data policy is finalized."),
 )
 
 
@@ -199,6 +273,38 @@ DISCARD_CANDIDATES: tuple[DiscardCandidate, ...] = (
         source="Experiments/runs_ga_hyperparam/pc2_selection_grid_seed_2026050311",
         reason="Superseded coarse selection-pressure runs; replaced by refined parent_count x elite_count grid.",
     ),
+    DiscardCandidate(
+        source="Experiments/analysis/focus_smoke_20260505",
+        reason="Smoke plot output only; not thesis evidence.",
+    ),
+    DiscardCandidate(
+        source="Experiments/analysis/focus_ab_cache_20260505",
+        reason="Temporary focus plot superseded by latest_training_results_20260505.",
+    ),
+    DiscardCandidate(
+        source="Experiments/analysis/supervised_map_specialists_500epoch_probe_20260505",
+        reason="Probe output superseded by fixed supervised map specialist analysis.",
+    ),
+    DiscardCandidate(
+        source="Experiments/analysis/supervised_map_specialists_500epoch_20260505",
+        reason="Superseded supervised map specialist analysis; fixed 2D/asphalt variant is retained.",
+    ),
+    DiscardCandidate(
+        source="Experiments/analysis/supervised_map_specialists_1000epoch_20260505",
+        reason="Superseded supervised map specialist probe; not selected for thesis package.",
+    ),
+    DiscardCandidate(
+        source="logs/supervised_runs_map_specialists_500epoch_20260505",
+        reason="Superseded supervised specialist run logs; fixed variant is retained.",
+    ),
+    DiscardCandidate(
+        source="logs/supervised_runs_map_specialists_1000epoch_20260505",
+        reason="Superseded supervised specialist run logs; fixed variant is retained.",
+    ),
+    DiscardCandidate(
+        source="logs/supervised_runs_map_specialists_500epoch_20260505_flat_2d",
+        reason="Incorrectly named/intermediate supervised specialist runs; fixed suffix variant is retained.",
+    ),
 )
 
 
@@ -211,6 +317,15 @@ def relative_to_repo(path: Path) -> str:
         return str(path.resolve().relative_to(REPO_ROOT.resolve())).replace("\\", "/")
     except ValueError:
         return str(path)
+
+
+def ensure_inside(parent: Path, child: Path, label: str) -> None:
+    parent_resolved = parent.resolve()
+    child_resolved = child.resolve()
+    try:
+        child_resolved.relative_to(parent_resolved)
+    except ValueError as exc:
+        raise RuntimeError(f"Refusing to operate on {label} outside {parent_resolved}: {child_resolved}") from exc
 
 
 def iter_files(source: Path) -> Iterable[Path]:
@@ -242,8 +357,7 @@ def copy_source(source: Path, destination: Path, *, dry_run: bool) -> CopyStats:
             stats.skipped_files.append(relative_to_repo(file_path))
             continue
 
-        relative = file_path.name if source.is_file() else file_path.relative_to(source)
-        target = destination / relative
+        target = destination if source.is_file() else destination / file_path.relative_to(source)
         stats.files_copied += 1
         stats.bytes_copied += file_path.stat().st_size
         if not dry_run:
@@ -362,6 +476,8 @@ def archive_discard(candidate: DiscardCandidate, *, dry_run: bool, hard_delete: 
     destination = DISCARDED_ROOT / timestamp / source.name
     exists = source.exists()
     if exists and not dry_run:
+        ensure_inside(REPO_ROOT, source, "discard source")
+        ensure_inside(DISCARDED_ROOT, destination, "discard destination")
         destination.parent.mkdir(parents=True, exist_ok=True)
         if hard_delete:
             if source.is_dir():

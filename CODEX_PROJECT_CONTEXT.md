@@ -12,664 +12,162 @@ It summarizes:
 - what the current baseline state is
 
 
+
 ## Project Summary
 
-This repository implements an autonomous driving agent for Trackmania.
+This repository implements an autonomous driving agent for Trackmania for the diploma thesis.
+It contains the live Trackmania integration, a fast local TM2D simulator, genetic algorithm /
+neuroevolution tooling, supervised and imitation-learning utilities, reinforcement-learning
+experiments, map extraction assets, and an OpenPlanet plugin that streams game state over TCP to
+Python.
 
-There are currently three main learning paths in the codebase:
+Current learning paths in the codebase:
 
-- a Genetic Algorithm / neuroevolution path for live training in Trackmania
-- a supervised learning path that records player driving data and trains a torch policy offline
-- a Stable-Baselines3 SAC reinforcement-learning experiment path under `RL_test/`
-- a fast local 2D experiment sandbox under `Experiments/`
+- **Main path:** lexicographic Genetic Algorithm / neuroevolution, locally in TM2D and live in Trackmania.
+- **Supervised / imitation path:** record human driving data, train `NeuralPolicy` offline, and use it for architecture selection, behavior-cloning baselines, recovery-data collection, and supervised-seeded GA.
+- **RL comparison path:** Stable-Baselines3 PPO/SAC/TD3 experiments through `Experiments/train_sac.py`. The old `RL_test/` branch is historical/legacy, not the active thesis comparison path.
+- **TM2D sandbox:** fast local simulator under `Experiments/` for reward, hyperparameter, architecture, timing, and algorithm experiments before moving ideas into live Trackmania.
 
-The project also contains Trackmania map extraction assets and an OpenPlanet plugin that streams game state over TCP to Python.
+### Current Thesis Snapshot - 2026-05-06
+
+This is the primary current-state summary for another Codex/agent before thesis writing.
+
+Current thesis sources of truth:
+
+- live project handoff: `CODEX_PROJECT_CONTEXT.md`
+- aggregated experiment handoff: `Diplomová práca/Experiments/EXPERIMENTS.md`
+- curated thesis packages: `Diplomová práca/Experiments/<experiment_id>`
+- current thesis report draft/context: `Diplomová práca/trackmania_ai_thesis_report.md`
+- assignment: `Diplomová práca/zadanie_diplomova.PDF`
+
+Current main training method:
+
+- Lexicographic GA / neuroevolution remains the main practical method.
+- Current thesis-grade ranking tuple: `(finished, progress, -time, -crashes)`.
+- `progress` now means dense/continuous geometric progress in percent. The old discrete path-tile/checkpoint value is `block_progress`; `dense_progress` and `discrete_progress` are legacy log/read aliases.
+- Current practical TM2D GA baseline: `population=48`, `parent_count=14`, `elite_count=2`, `mutation_prob=0.10`, `mutation_sigma=0.25`, AABB-clearance lidar, binary gas/brake, `max_time=30`, and ranking progress from continuous progress.
+- Current architecture baseline: `32x16 relu,tanh` for cheap broad experiments; `48x24 relu,tanh` is the stronger longer-run candidate.
+- Current lidar meaning: AABB-relative clearance lidar. `lidar = 0` means contact with the empirical vehicle hitbox boundary. Raw center-distance lidar and fixed hidden thresholds such as `min_lidar < 2.0` are legacy diagnostics only.
+- Current timing observation: `physics_delay_norm = 1 - 1/ticks`, derived from the previous observed Trackmania physics tick interval. It replaced public `dt_ratio`; `action_dt_ratio` remains internal for delta-action scaling only.
+- Current TM2D timing model: `--physics-tick-profile fixed100|supervised_v2d|custom`. Old `fps_min/fps_max` and continuous variable-FPS sampling are legacy.
+- Current action semantics for main GA/supervised paths: target action with binary gas/brake and analog steer.
+
+Current thesis-grade experiment conclusions:
+
+- **Supervised architecture capacity:** clean v2d/asphalt data showed that a small MLP can approximate `observation -> action`; `32x16 relu,tanh` is the cheap baseline, `48x24 relu,tanh` is stronger, and larger models are references rather than default GA candidates.
+- **Closed-loop architecture ablation:** `relu,tanh` was supported by actual GA driving runs and outperformed `relu,relu` in the closed-loop comparison.
+- **Reward sweep:** AABB-clearance lidar reward sweep selected `(finished, progress, -time, -crashes)` as the current lexicographic tuple.
+- **GA hyperparameters:** practical baseline is `48/14/2` for population/parents/elites. The refined grid found `48/14/1` slightly best on paper, but `elite_count=2` is preferred for elite diversity. Mutation baseline is `prob=0.10`, `sigma=0.25`.
+- **Training improvements:** variable physics tick with elite cache is the strongest positive result. First-finish mutation decay is a useful but mixed tradeoff. Mirror evaluation, mirror holdout, and max-touches are diagnostic rather than final improvements.
+- **GA MOO / NSGA-II:** useful for explaining conflicting objectives and Pareto-front selection, but current MOO variants did not beat the crash-aware lexicographic baseline. `trackmania_racing` has signal, but is not the default.
+- **RL reward-equivalent sweep:** PPO learned to finish under the scalar/delta reward equivalent to `(finished, progress, -time, -crashes)`. SAC and TD3 failed under the same tested setup. RL is a comparison branch; GA remains the stronger practical method.
+- **Supervised-seeded GA:** dense weight-noise behavior-cloning initialization plus GA fine-tuning is a positive hybrid result. Sparse/naive BC seeding is a useful negative control because it preserves the prior too strongly.
+- **Supervised map specialists and butterfly plots:** useful for explaining covariate shift and observation-action brittleness. They are not final autonomous-driving solutions by themselves.
+
+Current thesis package index:
+
+- `lex_reward_aabb_lidar_fixed100_20260503`
+- `ga_hyperparam_refinement_20260504`
+- `ga_mutation_grid_20260504`
+- `ga_architecture_activation_ablation_20260504`
+- `vehicle_hitbox_aabb_20260503`
+- `supervised_map_specialists_20260505`
+- `training_improvements_20260505`
+- `rl_reward_equivalent_sweep_20260505`
+- `ga_supervised_seeded_20260505`
 
 ### Current high-level project overview
 
-This section was moved here from a temporary README rewrite. README should stay
-as the human-facing thesis/project landing page; ongoing working context belongs
-in this file.
+The research direction is evidence-driven:
 
-Trackmania AI is an autonomous Trackmania driving-agent project for the diploma
-thesis. The repository contains the live Trackmania integration, a fast local
-2D simulator, genetic algorithm / neuroevolution tooling, supervised-learning
-utilities, and reinforcement-learning experiments.
-
-The current research direction is intentionally evidence-driven:
-
-- use the local TM2D simulator to test reward functions and algorithms quickly
+- use TM2D to test reward functions, algorithms, timing models, and architecture choices quickly
 - transfer only the best-supported ideas into realtime Trackmania
-- keep GA/neuroevolution as the main approach
-- use RL as an experimental comparison branch
-- keep Pareto / NSGA-II style multi-objective GA as a comparison branch, not
-  the current default, unless newer evidence beats the lexicographic baseline
+- keep lexicographic GA as the main method
+- use supervised/imitation learning to build baselines, pick architectures, collect recovery states, and seed GA when useful
+- use RL and Pareto/NSGA-II as comparison branches unless newer evidence beats the lexicographic GA baseline
 
-Current lexicographic GA status:
+Real Trackmania and TM2D metric contract:
 
-- The current thesis-grade lexicographic GA baseline is
-  `(finished, progress, -time, -crashes)`.
-- From 2026-05-05 onward, public `progress` means dense/continuous
-  geometric progress. The old discrete/path-tile value is `block_progress`.
-  `dense_progress` and `discrete_progress` are legacy log/read aliases only.
-- Interpretation: first prefer a finished run, otherwise prefer farther
-  continuous progress; among comparable policies prefer lower time, and then fewer
-  crashes/touches.
-- This tuple is the strongest result from the AABB-clearance lidar reward sweep
-  on `AI Training #5` and replaces the older `(finished, progress, -time)`
-  baseline for new GA experiments.
-- Current practical TM2D GA baseline: `population=48`, `parent_count=14`,
-  `elite_count=2`, `mutation_prob=0.10`, `mutation_sigma=0.25`,
-  AABB-clearance lidar, binary gas/brake, max time `30`, and continuous progress
-  ranking. The refined grid found `48/14/1` slightly stronger on paper, but
-  `48/14/2` is preferred for practical elite diversity.
-
-Real Trackmania GA metric contract (current):
-
-- Live `RacingGameEnviroment` now exposes the same raw rollout metrics as
-  TM2D through `raw_metrics_from_info`.
-- `progress` is dense/continuous geometric progress in percent, projected on
-  the current path segment.
-- `block_progress` is the legacy discrete path-tile/checkpoint progress in
-  percent.
-- `dense_progress` and `discrete_progress` may still appear in old logs and
-  compatibility code; new plots/reports should prefer `progress` and
-  `block_progress`.
-- `ranking_progress` is the value currently used by lexicographic ranking
-  according to `Individual.RANKING_PROGRESS_SOURCE`; current default is
-  `progress`.
-- New `generation_metrics.csv` should use `best_progress`, `mean_progress`,
-  percentile bands `progress_p10...progress_p90`, and `block_progress_*` only
-  when discrete progress is intentionally discussed.
-- New `individual_metrics.csv` should write `progress`, `block_progress`,
-  `ranking_progress`, `ranking_key`, `reward`, `evaluation_steps`,
-  `evaluation_terminated`, `evaluation_truncated`, and `evaluation_valid`.
-
-Legacy pre-2026-05-05 metric wording kept below for context only:
-
-- Reálny `RacingGameEnviroment` teraz vystavuje rovnaké raw metriky ako TM2D
-  sandbox cez `raw_metrics_from_info`.
-- `progress` znamená diskrétny path-tile/checkpoint progress v percentách.
-- `dense_progress` znamená plynulý geometrický progress v percentách,
-  premietnutý na aktuálny segment trate a vždy aspoň tak veľký ako
-  `discrete_progress`.
-- `finished` je `1` iba po prejdení cieľa, inak `0`.
-- `crashes` je počet započítaných kontaktov/nárazov počas rollout-u.
-- `timeout` je odvodený stav `finished == 0 and crashes == 0` pri ukončení
-  časom.
-- `time` je herný čas rollout-u, `distance` je prejdená vzdialenosť.
-- `ranking_progress` je progress, ktorý práve používa lexikografický ranking
-  podľa `Individual.RANKING_PROGRESS_SOURCE`; aktuálny default je
-  `dense_progress`.
-- Reálny `GeneticTrainer` loguje tieto raw metriky do
-  `individual_metrics.csv`, vrátane `ranking_key`, `reward`,
-  `evaluation_steps`, `evaluation_terminated`, `evaluation_truncated` a
-  `evaluation_valid`. Checkpointy ukladajú aj raw outcome polia, aby sa dalo
-  pokračovať bez straty hodnotenia elity.
-- `dist_avg`, `dist_best_gen` a `dist_best_global` v staršom
-  `generation_summary.csv` názvosloví teraz reprezentujú aktívny
-  `ranking_progress`, nie nutne iba diskrétny progress. Nové explicitné
-  stĺpce `best_dense_progress`, `best_ranking_progress`,
-  `mean_ranking_progress` a `std_ranking_progress` treba preferovať v nových
-  grafoch.
-
-Useful thesis GA baselines:
-
-```text
-(finished, progress)
-(finished, progress, -time)
-(finished, progress, -time, -crashes)
-(finished, progress, -crashes, -time)
-```
-
-These variants expose the tradeoff between progress-only learning, aggressive
-time pressure, and safer driving.
+- `progress`: dense/continuous geometric progress in percent
+- `block_progress`: discrete path-tile/checkpoint progress in percent
+- `finished`: `1` only after passing finish
+- `crashes`: counted touches/collisions during rollout
+- `timeout`: derived as unfinished and non-crashed termination by time
+- `ranking_progress`: progress value used by the active ranking configuration, normally `progress`
 
 Training graph convention:
 
 - Sweep heatmaps and large comparisons can stay single-metric for readability.
-- For one concrete training run or an A/B comparison, use the focus progress
-  plot from `Experiments/plot_training_focus.py`: best progress as the main
-  line, mean progress as dashed line, p25-p75 and p10-p90 population bands,
-  and optional population-density shading from `individual_metrics.csv`.
-- Thesis-facing axis labels should say `Progress [%]`; do not write
-  `dense_progress` unless explicitly discussing legacy logs or comparing
-  dense/continuous progress to `block_progress`.
+- For one concrete run or A/B comparison, use focus progress plots: best progress as main line, mean progress as dashed line, p25-p75 and p10-p90 bands, and optional population-density shading from `individual_metrics.csv`.
+- Thesis-facing labels should say `Progress [%]`. Use `dense_progress` only when discussing legacy logs or explicitly contrasting it with `block_progress`.
 
-Current thesis-grade experiment conclusions:
+Important entry points:
 
-- Curated experiment packages live under `Diplomová práca/Experiments/...`
-  and should be preferred over raw working runs when writing thesis-final
-  claims. Important packages so far:
-  `lex_reward_aabb_lidar_fixed100_20260503`,
-  `ga_hyperparam_refinement_20260504`, `ga_mutation_grid_20260504`,
-  `ga_architecture_activation_ablation_20260504`, and
-  `vehicle_hitbox_aabb_20260503`. The newest working analysis package is
-  `Experiments/analysis/latest_training_results_20260505`.
-- Supervised architecture capacity sweep used clean `v2d/asphalt` supervised
-  data with `34 -> 3` observation/action dimensions. It is a capacity test,
-  not a closed-loop driving proof. `128x64 relu,tanh` is the upper-capacity
-  reference; `48x24` is the stronger practical candidate; `32x16 relu,tanh`
-  remains the cheap experimental GA baseline because most existing GA evidence
-  uses it. Hidden sigmoid was consistently a useful negative/control
-  activation.
-- Closed-loop architecture ablation under the selected GA reward tuple showed
-  that `relu,tanh` outperformed `relu,relu` in actual driving runs. `48x24`
-  is stronger, while `32x16` remains cheaper and good enough for broad
-  experiment sweeps.
-- The AABB-clearance lidar reward sweep selected
-  `(finished, progress, -time, -crashes)` as the current lexicographic ranking
-  baseline. Older `(finished, progress, -time)` results are still useful as a
-  historical step, but they are no longer the recommended baseline.
-- GA hyperparameter refinement suggests moderate selection pressure and a very
-  small elite set. Best paper result was `population=48`, `parent_count=14`,
-  `elite_count=1`, `mutation_prob=0.10`, `mutation_sigma=0.25`; practical
-  baseline uses `elite_count=2` to preserve more elite diversity.
-- Mutation evidence points toward less frequent but meaningful mutations.
-  `mutation_prob=0.10` and `mutation_sigma=0.25` are the safe interior
-  baseline; lower probability with larger sigma remains a possible refinement
-  direction, but needs repeated seeds before becoming a default.
-- Training-improvement evidence is mixed:
-  variable physics tick with elite reuse/cache is the strongest positive
-  result so far; first-finish mutation decay is a useful tradeoff idea with
-  better best-time potential but weaker stability; max touches and mirror
-  holdout are diagnostic; both-mirror evaluation did not yet prove better
-  holdout-map generalization.
-- GA MOO / NSGA-II remains a research branch, not the default. Older MOO
-  variants were weak or unstable. The revised `trackmania_racing` objective has
-  a usable signal, but it has not beaten the crash-aware lexicographic baseline
-  as the practical default.
+- Live GA: `GeneticTrainer.py`
+- Policy: `NeuralPolicy.py`
+- Individual metrics/ranking: `Individual.py`, `RankingKey.py`
+- Observation: `ObservationEncoder.py`
+- Live environment and car state: `Enviroment.py`, `Car.py`
+- Driver replay/evaluation: `Driver.py`
+- Data collection and supervised/imitation: `Actor.py`, `SupervisedTraining.py`, `ImitationTrainer.py`
+- TM2D GA/MOO/RL: `Experiments/train_ga.py`, `Experiments/train_ga_moo.py`, `Experiments/train_sac.py`
+- Analysis and thesis figures: `Experiments/analysis/*`, `Experiments/plot_training_focus.py`, `Experiments/tm_map_plotting.py`, trajectory tools
 
-Current local RL status:
-
-- The local RL branch uses Stable-Baselines3 through `Experiments/train_sac.py`.
-- Despite the historical filename, it supports `PPO`, `SAC`, and `TD3`.
-- The current best RL reward is `delta_finished_progress_time`.
-- `delta_finished_progress_time` is a potential-difference version of the GA
-  tuple `(finished, progress, -time)`, so RL receives incremental signal while
-  preserving the same final objective.
-- `PPO + delta_finished_progress_time + gas_steer` solved `AI Training #5` in
-  TM2D.
-- In the 2-hour PPO/SAC/TD3 comparison, PPO was clearly strongest.
-- PPO deterministic best-policy evaluation reached `30/30` finishes with mean
-  finish time around `18.4s`.
-- TD3 found one finish during training but was not robust.
-- SAC stayed near the start in the same setup, suggesting an
-  algorithm/exploration issue rather than only a reward-sign bug.
-- A follow-up PPO `gas_brake_steer` run was a negative control: the action
-  space became harder and the short run collapsed near the start (`0` finishes,
-  max dense progress about `1.95%`). Keep RL experiments on `gas_steer` unless
-  brake is being tested explicitly.
-
-Current multi-objective GA / NSGA-II status:
-
-- Pareto-front selection is implemented in `Experiments/train_ga_moo.py`.
-- The same Pareto selection utility is now also wired into the live
-  `GeneticTrainer.py` as an optional selection mode. The default remains
-  `selection_mode = "lexicographic"`, so the proven real-Trackmania GA path is
-  unchanged unless explicitly switched to `selection_mode = "pareto"`.
-- The live MOO integration reuses the existing Trackmania evaluation loop,
-  logging, checkpointing, elite copying and mutation logic. It only changes the
-  population ordering/downselection step after all individuals in a generation
-  have been evaluated.
-- Live MOO logs `selection_rank`, `selection_crowding`,
-  `selection_objectives`, `selection_objective_names`, `front0_size` and the
-  best individual's selection diagnostics in addition to the existing GA raw
-  metrics.
-- The fair comparison objective is
-  `lexicographic_primitives = (finished, progress, -time, -crashes, -distance)`.
-- The implementation normalizes these values but keeps the same monotonic
-  ordering, so the Pareto experiment uses the same primitive metrics as the
-  lexicographic runs and changes only the selection mechanism.
-- The older shaped objective vector remains available as `trackmania_racing`:
-  `finish`, `progress`, `speed_for_progress`, `safe_progress`,
-  `path_efficiency`.
-- Current 2026-05-05 interpretation: MOO is still valuable for explaining
-  conflicting objectives and Pareto-front selection, but it is not the current
-  default training method. Recent MOO variants using the same primitive metrics
-  performed poorly; the revised `trackmania_racing` objective produced a
-  promising signal, but did not beat the practical lexicographic baseline
-  `(finished, progress, -time, -crashes)`.
-- 2026-05-01 MOO analysis on `AI Training #5`:
-  - `finished,progress,neg_time` did not reach a finish.
-  - `finished,progress,neg_time,neg_crashes` found a fast training finish
-    (`16.623s`) but failed 30-episode validation (`0/30` finishes).
-  - `finished,progress,neg_time,neg_crashes,neg_distance` was the only robust
-    MOO candidate: first finish at generation `101`, best training finish
-    `16.308s`, final population `7/48` finishes, validation `9/30` finishes
-    with best validation time `16.317s`.
-- Interpretation: MOO can discover very fast policies and preserves useful
-  trade-off diversity, but the current selection does not yet concentrate the
-  population around robust finishers as well as the best lexicographic GA.
-- The distance objective is important in MOO; without it, Pareto diversity can
-  keep risky/progress-only policies alive that do not validate.
-- `Experiments/train_ga_moo.py` now logs the same core generation/individual
-  metrics as local lexicographic GA: population size, evaluated count,
-  finish/crash/timeout counts, terminated/truncated counts, virtual time,
-  wall time, mean values and percentile/std summaries for progress, dense
-  progress, ranking progress, time, distance, reward, fitness and steps.
-  MOO-specific columns (`front0_size`, `front_rank`, `crowding`,
-  `priority_score`, `obj_*`) remain as extra diagnostics.
-
-Historical GA vs RL vs GA MOO comparison from 2026-05-01:
-
-- Analysis output:
-  `Experiments/analysis/ga_rl_moo_comparison_20260501/REPORT.md`.
-- Fastest observed training finish: GA MOO with
-  `(finished, progress, -time, -crashes, -distance)` at `16.308s`.
-- Strongest simple lexicographic training tuple remains
-  `(finished, progress, -time)`: first finish at generation `114`, best time
-  `16.323s`.
-- Validation nuance: `(finished, progress, -time)` is fast but less
-  reproducible in the 30-episode validation (`19/30` finishes) than the
-  crash-aware tuples:
-  `(finished, progress, -time, -crashes)` validated at `29/30`,
-  `(finished, progress, -crashes, -time)` at `27/30`.
-- RL comparison: PPO with `delta_finished_progress_time + gas_steer` validated
-  perfectly (`30/30`) but was slower (`18.063s` best deterministic validation)
-  and more sample-expensive than GA/MOO. SAC failed to leave the start; TD3 was
-  not robust.
-
-Important live Trackmania entry points:
-
-- `GeneticTrainer.py`: main live GA / neuroevolution trainer
-- `Individual.py`: individual policy wrapper, metrics and lexicographic ranking
-- `NeuralPolicy.py`: canonical MLP policy implementation
-- `Enviroment.py`: realtime Trackmania environment wrapper
-- `Car.py`: observation construction, lidar, car state and map context
-- `Map.py`: map parsing, block layout, path and geometry
-- `Driver.py`: replay/evaluation of saved policies
-- `Vizualizer.py`: debugging visualizer
-- `Actor.py`: supervised data collection / actor runtime
-- `SupervisedTraining.py`: supervised model training
-
-Important local experiment entry points:
-
-- `Experiments/train_ga.py`: fast lexicographic GA experiments
-- `Experiments/train_ga_moo.py`: Pareto / NSGA-II style multi-objective GA
-  experiments
-- `Experiments/train_sac.py`: local SB3 PPO/SAC/TD3 experiments
-- `Experiments/analyze_ga_runs.py`: GA comparison plots and summaries
-- `Experiments/analyze_rl_runs.py`: RL comparison plots and summaries
-- `Experiments/analyze_moo_runs.py`: GA MOO plots, summaries and best-policy
-  validation
-- `Experiments/analyze_method_comparison.py`: combined GA vs RL vs GA MOO
-  comparison report
-- `Experiments/visualize_tm2d.py`: local 2D simulator visualization
-
-Important live SB3 Trackmania test entry points:
-
-- `RL_test/train_sac_trackmania.py`: experimental live Trackmania SB3 training
-- `RL_test/plot_sb3_training.py`: live SB3 plotting
-
-The live SB3 branch is secondary. The local TM2D evidence currently points to
-PPO as the best RL candidate before returning to realtime Trackmania.
-
-Current data and asset layout:
-
-- `Maps/BlockLayouts/`: canonical map block layout text files
-- `Maps/ExportedBlocks/`: legacy fallback block layouts
-- `Maps/Gbx/`: original Trackmania `.Map.Gbx` files
-- `Maps/GameFiles/`: legacy fallback `.Map.Gbx` location
-- `Maps/TrackMeshes/`: whole-map exported meshes
-- `Maps/Meshes/`: legacy whole-map mesh location
-- `Assets/BlockMeshes/`: canonical block `.obj` meshes
-- `Meshes/`: legacy fallback block mesh location
-- `logs/`: live Trackmania logs, checkpoints and supervised data
-- `Experiments/runs/`: local GA runs
-- `Experiments/runs_rl/`: local RL runs
-- `Experiments/analysis/`: generated experiment summaries and plots
-
-Common commands:
-
-```powershell
-python GeneticTrainer.py
-```
-
-```powershell
-python Experiments/train_ga.py --map-name "AI Training #5" --generations 300 --population-size 48 --elite-count 4 --parent-count 16 --max-time 45 --hidden-dim "32,16" --hidden-activation "relu,tanh" --mutation-prob 0.18 --mutation-sigma 0.22 --fitness-mode ranking --ranking-key "(finished, progress, -time)" --collision-mode corners --num-workers 4
-```
-
-```powershell
-python Experiments/train_sac.py --algorithm PPO --map-name "AI Training #5" --reward-mode delta_finished_progress_time --action-layout gas_steer --collision-mode corners --max-runtime-minutes 120
-```
-
-```powershell
-python Experiments/train_ga_moo.py --map-name "AI Training #5" --objective-mode lexicographic_primitives --generations 300 --population-size 48 --collision-mode corners --num-workers 4
-```
+Common current TM2D baseline commands should be derived from the experiment scripts under `Experiments/`, not from older commands in historical notes.
 
 Project naming and workflow notes:
 
-- The project historically used both `Evolution*` and `Genetic*` names.
-- Current naming prefers `GeneticTrainer.py` for the trainer and
-  `NeuralPolicy.py` for the policy.
-- `Individual.py` intentionally keeps its name because it maps naturally to GA
-  terminology.
-- Dense progress is preferred for local reward experiments because discrete
-  checkpoint/block progress leaves too many early policies tied.
-- Scalar fitness values are mostly for plotting/logging. GA selection should use
-  explicit ranking tuples or Pareto objectives.
-- Live Trackmania is realtime and expensive to evaluate, so local TM2D
-  experiments should be used before long overnight runs.
+- Current naming prefers `GeneticTrainer.py` for the trainer and `NeuralPolicy.py` for the policy.
+- Historical `Evolution*` names should be mentioned only as old code names.
+- Scalar fitness values are mostly for plotting/logging. GA selection should use explicit lexicographic ranking tuples or Pareto objectives.
+- Live Trackmania is realtime and expensive to evaluate, so TM2D experiments should be used before long overnight runs.
+
 
 ### Fast 2D experiment sandbox
 
-`Experiments/` was added because live Trackmania is a poor place to iterate on reward design:
-there is only one realtime game instance, no headless mode, no parallel agents, and every GA/RL
-attempt costs real wall-clock time. The goal of this folder is to test reward functions,
-observation changes, simple physics assumptions, and GA behavior in minutes instead of hours.
+`Experiments/` exists because live Trackmania is a poor place to iterate on reward design:
+there is one realtime game instance, no headless mode, no parallel agents, and every attempt costs
+real wall-clock time. TM2D is the fast local sandbox for reward functions, observation changes,
+physics approximations, timing models, GA/RL behavior, and plotting before live runs.
 
-The sandbox intentionally reuses the main project pieces where possible:
+Current TM2D shape:
 
-- `Experiments/tm2d_geometry.py` loads the same exported TM maps through `Map.py`, projects road/wall `.obj` meshes into 2D XZ geometry, keeps the 32-unit TM grid, path tiles, path instructions, surface instructions, and height instructions.
-- `Experiments/tm2d_env.py` implements a synchronous but variable-dt 2D car environment. The random dt simulates Trackmania running at different frame rates, while still being fully local and fast.
-- The default flat sandbox observation is compatible with
-  `ObservationEncoder.total_obs_dim(vertical_mode=False, multi_surface_mode=False)`:
-  lasers, path instructions, speed/side speed, signed segment heading errors,
-  dt ratio, slip mean, and temporal derivative features. Surface and height
-  blocks can be appended explicitly through `--multi-surface-mode` and
-  `--vertical-mode`.
-- `Experiments/train_ga.py` uses `Individual`/`NeuralPolicy` for the same MLP architecture and genome semantics, but evaluates policies through a fast NumPy forward pass instead of calling torch every simulated frame.
-- `Experiments/train_ga.py` also supports `--num-workers N` for process-based parallel evaluation of independent individuals. Each worker creates its own read-only map/environment once and receives flat genomes to evaluate.
-- `Experiments/train_ga.py`, `Experiments/train_sac.py`, and `Experiments/visualize_tm2d.py` support `--fixed-fps FPS`. When set, the local simulator uses deterministic `min_dt = max_dt = 1 / FPS`; when omitted, it keeps the default variable-dt range to mimic variable Trackmania FPS.
-- TM2D binarizes gas and brake by default (`> 0.5` becomes `1`, otherwise
-  `0`) to match the current live Trackmania target-action controller path.
-  Use `--continuous-gas-brake` only for diagnostics where continuous trigger
-  physics is intentionally being tested.
-- TM2D now has live-like guard termination:
-  - `start_idle`: if the car stays near the start for too long at very low
-    speed, the rollout is counted as a crash/failure.
-  - `stuck_after_progress`: after measurable progress, if the car remains below
-    the stuck speed threshold for the configured duration, the rollout also
-    terminates as a crash/failure.
-- `Experiments/train_sac.py` wraps the same `TM2DSimEnv` as a Gymnasium environment and runs Stable-Baselines3 RL locally. Despite the historical filename, it now supports `--algorithm SAC`, `--algorithm PPO`, and `--algorithm TD3`, so reward modes can be tested quickly before using the realtime Trackmania RL scripts.
-- `Experiments/reward_lab.py` prints reward score tables for one map, including `progress_delta`, `progress_primary_delta`, `pace_delta`, and `terminal_fitness`.
-- `Experiments/visualize_tm2d.py` opens a small tkinter visualizer for the projected map, car, and lidar rays.
-- `Experiments/calibrate_tm2d_physics.py` reads supervised `attempt_*.npz` files and estimates simple 2D physics parameters from recorded `speed`, `game_times`, `distances`, and `gas/brake/steer` actions.
+- `Experiments/tm2d_geometry.py` loads exported maps through `Map.py`, projects road/wall meshes into 2D XZ geometry, keeps the 32-unit Trackmania grid, path tiles, path instructions, surface instructions, and height instructions.
+- `Experiments/tm2d_env.py` implements a synchronous local car environment with AABB-clearance lidar, binary gas/brake by default, max-touch diagnostics, wall-hug information, and discrete physics tick profiles.
+- `Experiments/train_ga.py` uses `Individual`/`NeuralPolicy` genome semantics, evaluates policies through a fast NumPy policy view, supports process workers, mutation schedules, mirror evaluation, holdout-map generalization metrics, max touches, elite cache, and supervised-seeded initial populations.
+- `Experiments/train_ga_moo.py` is the Pareto/NSGA-II comparison branch.
+- `Experiments/train_sac.py` is the local Stable-Baselines3 entrypoint for PPO/SAC/TD3 despite the historical filename.
+- `Experiments/visualize_tm2d.py` is a small visualizer for the projected map, car, and lidar rays.
 
-Metric-parity note:
+Current TM2D timing:
 
-- `TM2DSimEnv` mirrors the live `Car.get_data()` metric names for reward work:
-  `discrete_progress`, `dense_progress`, `finished`, `crashes`, `done`,
-  `time`, and `distance`.
-- `done` in the 2D env follows the OpenPlanet meaning used by live TM: it is
-  `1.0` only for finish, not for every terminated rollout.
-- The old three-valued `term` metric was removed from the current runtime data
-  model. Current code represents outcome as `finished` (`0/1`) and `crashes`
-  (`0..max_touches`). Timeout is derived for logging as
-  `finished == 0 and crashes == 0`, not optimized as its own objective.
-- Historical aliases such as `total_progress`, `tile_progress`,
-  `block_progress`, and `map_progress` were removed from the current runtime
-  data flow. Old logs/checkpoints may still contain those names, but new code
-  should use only `discrete_progress` for confirmed path-tile progress and
-  `dense_progress` for projected between-tile progress.
-- Runtime/log progress values stay in percent (`0..100`) because that is much
-  easier to read in graphs and console output. Ranking/objective code also
-  exposes normalized aliases (`progress_norm`, `discrete_progress_norm`,
-  `dense_progress_norm`, `ranking_progress_norm`) for formulas that should work
-  in clean `[0, 1]` units.
-- 2D rollout diagnostic `fitness` now uses `dense_progress` when
-  `Individual.RANKING_PROGRESS_SOURCE == "dense_progress"`, matching
-  `GeneticTrainer._evaluate_single_rollout()`.
-- TM2D supports collision modes `laser`/`lidar`, `center`, and `corners`.
-  The default `laser` mode matches the current live Trackmania crash heuristic
-  most closely: a rollout crashes when the minimum lidar distance falls below
-  the configured threshold, currently `2.0`.
-- The remaining intentional mismatch is vehicle physics and realtime execution:
-  TM2D is still a simplified synchronous 2D approximation, while live TM uses
-  real Trackmania physics, OpenPlanet state packets, reset handshakes and
-  realtime FPS variability. Reward functions that work locally should therefore
-  still be validated in live TM, but the observation/action/metric contract is
-  now much closer than in earlier experiments.
+- Use `--physics-tick-profile fixed100|supervised_v2d|custom`.
+- `fixed100` means deterministic `dt=0.01`.
+- `supervised_v2d` uses the supervised-data tick estimate: roughly `93.8%` 100 Hz, `6.0%` 50 Hz, with rare longer skips.
+- `--fixed-fps 100` may exist as a legacy alias in some scripts, but the preferred interface is the physics-tick profile.
+- `--fps-min/--fps-max` and continuous variable-FPS sampling are removed/legacy.
 
-Default GA experiment outputs go to ignored `Experiments/runs/`.
-Default local RL experiment outputs go to ignored `Experiments/runs_rl/`, so GA and RL artifacts stay separated.
+Current TM2D metrics and logging:
 
-Current planning state on 2026-05-01:
+- `progress` is continuous progress; `block_progress` is discrete progress.
+- Old logs may contain `dense_progress` / `discrete_progress`; analyzers should map them to current terminology.
+- `generation_metrics.csv` and `individual_metrics.csv` contain progress, outcome counts, time, distance, ranking fields, cached-evaluation diagnostics where applicable, and virtual/wall-clock training cost.
+- Focus plots should be used for concrete runs or A/B comparisons; sweep plots can stay single-metric.
 
-- The simple lexicographic GA baseline is considered ready enough to close as
-  the first main thesis result. The best local tuple is
-  `(finished, progress, -time)` with dense progress as the default progress
-  source.
-- The local RL baseline is also close to closed: PPO with
-  `delta_finished_progress_time` and `gas_steer` solves `AI Training #5` in
-  TM2D, while SAC stays near the start and TD3 is not robust. A final PPO
-  `gas_brake_steer` run is being tested to decide whether brake can be used
-  in the default local RL action layout.
-- The next major branch should be multi-objective GA / NSGA-II. The goal is to
-  show that lexicographic ordering is useful but brittle when safety, progress
-  and time conflict, then compare it with Pareto-front selection in
-  `Experiments/train_ga_moo.py`.
-- The first NSGA-II comparison mode should use the same primitive metrics as
-  the lexicographic GA experiments: `(finished, progress, -time, -crashes,
-  -distance)`. This is implemented as `--objective-mode
-  lexicographic_primitives`. Values are normalized internally, but remain
-  monotonic-equivalent to the tuple terms, so the comparison changes selection
-  strategy rather than changing the definition of a good run.
+Current TM2D collision and lidar:
 
-Local 2D GA logging is intentionally research-grade now. `train_ga.py` and
-`train_ga_moo.py` write:
+- The canonical live-like collision mode is AABB-clearance `lidar`.
+- `center` and `corners` remain fast diagnostic simplifications.
+- The old raw center-distance lidar threshold, including hidden rules like `min(raw_lidar) < 2.0`, is legacy and should only appear as historical explanation.
 
-- `generation_metrics.csv`: one row per generation with best/mean metrics plus
-  distribution statistics (`min`, `p10`, `p25`, `median`, `mean`, `std`, `p75`,
-  `p90`, `max`) for progress, dense progress, time, distance, reward, fitness,
-  and rollout steps.
-- `individual_metrics.csv`: one row per individual per generation with rank,
-  elite/parent flags, cached-evaluation flag where applicable, progress,
-  dense progress, time, finished/crashes/timeout fields, distance,
-  reward, fitness, steps, and selection-specific values such as ranking keys
-  or Pareto objectives.
-- Virtual experience counters: generation and cumulative virtual driving time
-  plus rollout step counts, so thesis plots can show both wall-clock training
-  cost and how many simulated driving hours the algorithm consumed.
+Current local RL comparison:
 
-Performance notes for the sandbox:
+- `Experiments/train_sac.py` supports `PPO`, `SAC`, and `TD3`.
+- Current reward-equivalent comparison uses `delta_finished_progress_time_crashes`, a scalar/delta version of `(finished, progress, -time, -crashes)`.
+- Current fair action layout is strict `gas_brake_steer` with binary gas/brake in TM2D.
+- In the latest 1000-episode screening, PPO learned to finish; SAC and TD3 did not.
 
-- runtime lidar no longer raycasts against `.obj` meshes directly
-- `tm2d_geometry.py` loads map meshes once, projects walls into cached 2D XZ line segments, and uses analytic ray/segment intersections for lidar
-- profiling shows the main costs are environment stepping, observation construction/clipping, lidar raycasts, and road-containment checks
-- policy inference is not the bottleneck during GA experiments because rollouts use the NumPy policy view
-- multiprocessing helps most on larger populations/generations; tiny smoke tests can be slower due to Windows process startup and per-worker map loading
-
-The current 2D physics defaults are calibrated from supervised data where possible.
-The latest calibration pass on 2026-05-02 used all available AI Training #5
-supervised datasets under `logs/supervised_data`:
-
-- usable transition samples: `47_089`
-- observed speed median is about `52.46` TM units/s
-- observed speed p95 is about `64.24` from the packet speed feature and about `59.26` from distance derivative
-- observed speed p99 is about `66.75` from packet speed and about `90.09` from distance derivative
-- median dt is about `0.010s`, while p95/p99 are about `0.020s`/`0.020s`
-- fitted longitudinal model is approximately `accel = -5.549 + 19.563*gas - 17.463*brake - 0.1439*speed`
-- fitted simplified steering model gives `max_yaw_rate ~= 1.011`
-
-This calibrates acceleration/drag/braking better than the original toy physics.
-The steering fit now uses recorded `directions`, but it is still a simplified 2D
-approximation of Trackmania handling. `lateral_grip` remains a pragmatic
-curve-feasibility parameter and should be validated by rollout behavior.
-
-2026-05-03 physics regression diagnostic:
-
-- After the fair lexicographic GA sweep failed to reproduce older fast TM2D
-  results, a local probe temporarily replaced the calibrated defaults with a
-  deliberately easier physics profile: `max_speed=140`, `gas_accel=25`, and
-  `max_yaw_rate=2.0`.
-- With the same learning-friendly GA setup
-  `(finished, progress, -time)`, `center` collision, continuous gas/brake,
-  `48/4/16`, `max_time=45`, `mutation_prob=0.18`, `mutation_sigma=0.2`, and
-  elite caching enabled, the probe reached the first finish at generation
-  `119`, finished `82` of `200` generations, reached final best time
-  `16.70s`, and ended with `15/48` finishers.
-- This strongly suggests that the post-calibration TM2D physics, especially the
-  lower `max_yaw_rate ~= 1.011` and weaker acceleration, is a major reason why
-  newer GA runs no longer reproduce the older easy-sandbox finishes. The reward
-  tuple was not the primary cause.
-- The easy profile was only a diagnostic patch and was reverted. Current TM2D
-  defaults remain calibrated to supervised data. If both fast reward research
-  and live-like validation are needed, add an explicit `physics_profile`
-  mechanism such as `easy` vs `calibrated` instead of silently changing the
-  defaults.
-
-2026-05-03 intermediate-physics GA ablation:
-
-- To keep reward-function experiments learnable without returning to the very
-  easy toy physics, TM2D was set to an intermediate diagnostic profile:
-  `max_speed=130`, `gas_accel=22`, `max_yaw_rate=1.5`.
-- A sweep on AI Training #5 with `(finished, progress, -time)`, dense progress,
-  `48/4/16`, continuous gas/brake and 200 generations showed that some
-  "more realistic" switches can badly damage GA training:
-  - deterministic `fixed_fps=60` produced `0` finishers and only about `31%`
-    max dense progress;
-  - raw `collision_lidar` with crash at `min_lidar < 2.0` produced `0`
-    finishers and only about `26%` max dense progress.
-- The interpretation is not that deterministic evaluation is useless. Rather,
-  fixed FPS is a poor training mode for this GA because it removes useful
-  rollout perturbations, creates a sharper fitness landscape, and can repeat
-  exactly the same local failure for a near-good genome. Keep fixed FPS mainly
-  as an evaluation/reproducibility mode, not as the default training mode.
-- Small stochasticity helped: `50-60 FPS` found a finisher where fixed 60 FPS
-  found none, but it was still weak (`6` finish individuals total). Full
-  variable FPS remains the healthier training default for now.
-- Mutation-scale follow-up confirmed this is not only a bad sigma/probability
-  choice:
-  - fixed FPS with low mutation (`prob=0.12`, `sigma=0.08`) stayed stable but
-    weak: `0` finishers and about `17%` max dense progress;
-  - fixed FPS with high mutation (`prob=0.25`, `sigma=0.35`) explored farther:
-    `0` finishers but about `66%` max dense progress;
-  - `50-60 FPS` with the normal mutation settings found finishers. Therefore
-    rollout-level stochasticity is doing something qualitatively different from
-    simply increasing genome mutation. Treat fixed FPS as a strict evaluation
-    tool, not as the main GA training mode.
-- The raw lidar collision failure appears to be an observation-design problem:
-  the network had to infer a hidden rule like "any laser below 2 means crash".
-  The first diagnostic fix subtracted the global threshold before observation:
-  `obs_laser = clip((raw_distance - collision_threshold) /
-  (laser_max_distance - collision_threshold), 0, 1)`.
-- With the same lidar crash rule but this threshold-normalized observation, the run
-  reached the first finish at generation `160`, produced `214` finish
-  individuals, and reached `100%` dense progress. This strongly suggests that
-  if live Trackmania keeps lidar-based crash detection, the observation should
-  also expose hitbox-relative laser clearances rather than raw center distances.
-  This is an important thesis example: the same physical rule can be almost
-  unusable or learnable depending on whether the observation exposes the
-  decision boundary in a neural-network-friendly coordinate system.
-- Important comparison caveat: the older ablation runs had elite caching
-  enabled, while the newer `fps_50_60` and `collision_lidar_hitbox` runs used
-  the newer no-cache default. Do not over-interpret exact counts across these
-  groups; the qualitative failures and recovery signals are still clear.
-- Breaking lidar convention update on 2026-05-03: the old raw center-distance
-  lidar is now treated as a legacy experiment only. It was:
-  `obs_laser = raw_distance / 160` plus the hidden crash proxy
-  `min(raw_lidar) < 2.0`. This is no longer an active default because the
-  network had to discover a magic threshold and because one global threshold is
-  geometrically wrong for different laser angles.
-- The new project-wide meaning of `lidar` is AABB-relative clearance lidar:
-  rays still start at the car center for efficient batched raycasting, but each
-  laser subtracts the distance from the center to the empirical AABB hitbox
-  boundary in that laser direction. Therefore `lidar = 0` means contact.
-- The initial Stadium CarSport empirical hitbox is stored in `VehicleHitbox.py`:
-  `half_width ~= 1.10`, `front_half_length ~= 2.15`,
-  `rear_half_length ~= 1.95`, `half_height ~= 0.60`. It is based on the
-  primitive mesh AABB and checked against supervised near-contact runs; it is
-  not claimed to be the official `PhyModelSport.VehiclePhyModel.Gbx` hitbox.
-- `Experiments/analyze_vehicle_hitbox.py` was added to make the hitbox
-  reasoning reproducible. On the latest near-contact supervised run
-  `20260503_105804`, the selected AABB had minimum observed
-  supervised-minus-AABB margin about `0.216` and median margin about `0.326`.
-  That run finished successfully, so its laser minima are not treated as exact
-  collision truth, only as a sanity check that the selected AABB is not larger
-  than observed close-pass clearances.
-- TM2D and live Trackmania now use the same lidar convention:
-  `clearance_i = raw_distance_i - aabb_offset_i`, observation is
-  `clip(clearance_i / (laser_max_distance - aabb_offset_i), 0, 1)`, and
-  lidar collision/contact is `min(clearance_i) <= 0`.
-- `Actor.py` supervised attempts now store `raw_laser_distances`,
-  `laser_hitbox_offsets`, and `laser_clearances`, so future hitbox and
-  collision analyses do not need to reconstruct raw lidar from observation.
-- Current practical TM2D defaults for GA reward/selection research:
-  AABB clearance lidar for live-like crash behavior, dense progress, binary
-  gas/brake, max time `30`, and an explicit physics tick profile instead of the
-  older continuous FPS-range model. The current practical GA baseline is
-  `population=48`, `parent_count=14`, `elite_count=2`,
-  `mutation_prob=0.10`, `mutation_sigma=0.25`, and ranking
-  `(finished, progress, -time, -crashes)`. `center` and `corners` collision
-  remain only fast diagnostic simplifications, not the canonical live-like
-  lidar model.
-
-2026-05-04 physics-tick variability check:
-
-- The old `fps_min/fps_max` TM2D timing model was replaced by discrete physics
-  tick profiles. The live-like profile `supervised_v2d` was estimated from
-  clean supervised attempts:
-  `1:0.938285,2:0.060381,3:0.000562,4:0.000772`, where `1` means `100 Hz`,
-  `2` means `50 Hz`, etc.
-- The exposed timing observation is now `physics_delay_norm = 1 - 1/ticks`.
-  This describes the just-observed game-time interval between the previous and
-  current observation; it does not predict the next physics tick.
-- Positive diagnostic run:
-  `Experiments/runs_ga_diagnostic/variable_physics_tick_lidar_finished_progress_time_crashes_seed_2026050405`.
-  Config: `(finished, progress, -time, -crashes)`, dense progress, AABB lidar,
-  binary gas/brake, no elite cache, `population=48`, `elite=4`, `parents=16`,
-  `mutation_prob=0.2`, `mutation_sigma=0.2`, `max_time=30`,
-  `physics_tick_profile=supervised_v2d`.
-- Result: the agent trained successfully under live-like physics tick
-  variability. First finish appeared at generation `176`, total finish
-  individuals `1432`, best finish time `17.33s` at generation `293`, and
-  last-50 finish rate was `33.33%`.
-- Fixed-100 Hz comparison with the same ranking tuple from the thesis reward
-  sweep had first finish at generation `137`, total finish individuals `2209`,
-  best finish time `17.33s`, and last-50 finish rate `32.21%`.
-- Interpretation: live-like tick variability makes the first finisher arrive
-  later than deterministic fixed100 in this single run, but it does not prevent
-  learning. The final best time matched fixed100 and late finish stability was
-  comparable. This is good evidence that the new `physics_delay_norm` and
-  discrete tick model are usable for future variable-physics experiments.
-
-Known physics limitation: Trackmania has a drift/slip regime when braking or
-turning at sufficient speed. In the current supervised data, about `3.5%` of
-frames have `brake > 0.5`, `speed > 45`, and `slip_mean > 0.5`; these frames
-also show much larger side speed. TM2D does not explicitly model a separate
-drift state. It only has a single lateral velocity damping term, so TM2D is a
-useful reward/selection sandbox but not a high-fidelity Trackmania vehicle
-simulator.
-
-The sandbox reward modes currently include:
-
-- `progress_delta`: score is current progress only
-- `progress_primary_delta`: score is progress minus at most one progress bucket over the full timeout
-- `pace_delta`: old aggressive pace reward, useful mainly as a negative control because it can prefer fast early failure
-- `terminal_fitness`: terminal-only `Individual.compute_scalar_fitness_for`
-- `individual_dense`: conservative `Individual.compute_scalar_fitness_for` style score using continuous geometric progress between path tiles; this was added because pure discrete progress left random GA populations tied at `0%`
-- `terminal_lexicographic`: bounded terminal score with `finished`, progress, time tie-break, crash count, and distance tie-break
-- `terminal_lexicographic_no_distance`: same terminal score without the distance tie-break
-- `terminal_lexicographic_progress20`: terminal score that ignores time/distance tie-breaks below `20%` progress
-- `delta_lexicographic`: dense bounded score with progress primary, time secondary, distance tertiary, and finish bonus; failure does not retroactively erase earlier progress
-- `delta_lexicographic_terminal`: same dense score, but collision/timeout also apply the terminal failure component at episode end
-- `terminal_progress_time_safety`: terminal-only SAC/debug score in progress-percent units; finish adds one full track (`+100`) and crash/timeout subtract one full track (`-100`)
-- `delta_progress_time_safety`: potential-difference version of `terminal_progress_time_safety`; useful to test whether SAC can learn from dense progress when failed episodes are still globally bad
-- `terminal_progress_time_block_penalty`: terminal-only SAC curriculum score; failed episodes subtract one map-derived progress bucket instead of one full track
-- `delta_progress_time_block_penalty`: potential-difference version of `terminal_progress_time_block_penalty`; current best SAC debug candidate because it keeps progress dense while making timeout/crash non-zero failures
-- `terminal_finished_progress_time`: terminal-only scalar version of the selected GA tuple `(finished, progress, -time)`
-- `delta_finished_progress_time`: potential-difference version of `(finished, progress, -time)`; this became the first-choice local RL reward on 2026-05-01 because it mirrors the best GA tuple without extra crash/distance terms
-- `progress_rate`: average progress-rate score, retained as a negative-control mode because it can prefer fast early crashes
-
-The same reward modes are usable from both `Experiments/train_ga.py` and `Experiments/train_sac.py`.
-For local RL, the wrapper exposes continuous action layouts `gas_steer`, `throttle_steer`, and `gas_brake_steer`.
-The current diagnostic default is `gas_steer` because early random exploration is much cleaner when gas and brake cannot cancel each other out. It logs
-`episode_metrics.csv`, `monitor.csv`, `latest_model.zip`, `best_model.zip`, and periodic checkpoints
-under `Experiments/runs_rl/`.
-
-Reward-sweep notes from the local sandbox:
-
-- static scenario ranking confirmed that `progress_rate` is unsafe, because a fast early crash can outrank a slower run that reaches farther
-- `terminal_lexicographic` and its variants preserve the desired ordering for terminal GA-style selection, but are sparse for SAC
-- a short GA sweep on `AI Training #5` found the best early progress with `delta_lexicographic_terminal` (`14.29%` best progress in the tested 10-generation/24-population run)
-- a short SAC sweep with `gas_brake_steer` mostly stayed near the start because random gas and brake cancel each other too often
-- a short SAC sweep with diagnostic `gas_steer` made reward comparison clearer: `delta_lexicographic` reached `6.80%` dense progress in 30 episodes, while `progress_delta` reached only `2.86%`
-- historical 2026-04-30 recommendation, later superseded by the 2026-05-01 PPO result:
-  - GA reward experiments: start with `delta_lexicographic_terminal`, compare against `terminal_lexicographic`
-  - SAC reward experiments: start with `delta_lexicographic`; avoid `progress_rate`
-  - use `gas_brake_steer` for live SAC so the trained policy learns the real `gas`, `brake`, `steer` layout; keep `gas_steer` only as a diagnostic switch when debugging early-start exploration
+Historical sandbox notes below are kept because they explain why current defaults exist. Treat dated 2026-04-30 and 2026-05-01 RL/reward notes as history unless they are explicitly referenced by a current thesis package.
 
 ### 2026-04-30 SAC debug follow-up
 
@@ -2262,313 +1760,86 @@ legacy layout. The physical folder move should be done only when no long-running
 experiments are active, because old processes may still read the legacy paths.
 
 
+
 ## Important Current Semantics
 
 ### Observation
 
-The current observation is built in `ObservationEncoder.py`.
+The current observation is built in `ObservationEncoder.py` and is controlled by two mode flags:
+`vertical_mode` and `multi_surface_mode`.
 
-Current observation layout:
+Current observation feature groups:
 
-- `15` laser distances
-- `5` path instructions
-  - same feature name as before, but current semantics are signed curvature:
-    `straight = 0`, `Curve1 = +/-1.0`, `Curve2 = +/-0.5`,
-    `Curve3 = +/-0.333`, `Curve4 = +/-0.25`
-  - sign encodes left/right turn direction; absolute value encodes turn
-    sharpness, so tighter turns produce stronger steering cues
-- `speed`
-- `side_speed`
-- `segment_heading_error`
-- `next_segment_heading_error`
-- `dt_ratio`
-- `slip_mean`, computed as the clipped average of FL/FR/RL/RR slip coefficients
-- optional `5` `surface_instruction_*` traction estimates aligned with the path
-  lookahead when `multi_surface_mode=True`
-- optional `5` `height_instruction_*` values aligned with the path lookahead
-  when `vertical_mode=True`
-  - `0.0` means same height
-  - `+0.5` / `-0.5` means one logical height step up/down
-  - `+1.0` / `-1.0` means two or more logical height steps up/down
-- `longitudinal_accel`
-- `lateral_accel`
-- `yaw_rate`
-- `5` overlapping laser clearance-rate sector averages
+- `15` AABB-clearance lidar values
+- `5` signed path-curvature instructions
+- `speed`, `side_speed`, `segment_heading_error`, `next_segment_heading_error`
+- `physics_delay_norm`, the public timing feature derived from the last observed physics tick interval
+- `slip_mean`
+- optional `5` `surface_instruction_*` values when `multi_surface_mode=True`
+- optional `5` `height_instruction_*` values when `vertical_mode=True`
+- temporal motion features: `longitudinal_accel`, `lateral_accel`, `yaw_rate`, and `5` clearance-rate sector averages
+- optional vertical terrain features when `vertical_mode=True`
 
 Current observation dimensions:
 
-- `vertical_mode=False`, `multi_surface_mode=False`: `34`
-  - 2D asphalt baseline
-  - this is the observation layout that should be used when comparing live
-    Trackmania against the local TM2D asphalt simulator
-- `vertical_mode=False`, `multi_surface_mode=True`: `39`
-  - 2D surface-aware layout
-  - appends `surface_instruction_0..4`
-- `vertical_mode=True`, `multi_surface_mode=False`: `48`
-  - 3D/asphalt layout
-  - appends height instructions and vertical terrain features but no surface
-    traction lookahead
-- `vertical_mode=True`, `multi_surface_mode=True`: `53`
-  - full layout with vertical terrain and surface traction
+- `34`: 2D asphalt baseline (`vertical_mode=False`, `multi_surface_mode=False`)
+- `39`: 2D surface-aware layout
+- `48`: 3D/asphalt layout
+- `53`: full 3D + surface layout
 
-Historical observation layout milestones:
+Timing semantics:
 
-- earlier 2D supervised/GA layouts used `10` path instructions and no surface/height instructions
-- after adding per-wheel slip and temporal motion features, the observation reached:
-  - `42` dims in the 10-lookahead version
-  - then `41` dims during the transition before path lookahead was shortened
-- after shortening lookahead to `5` and adding the first vertical-mode experiment:
-  - flat observation was `37`
-  - vertical observation was `46`
-  - vertical lidar tried exact triangle-by-triangle road traversal
-- after adding surface and height instructions while still keeping all four wheel slips:
-  - flat observation was `47`
-  - vertical/canonical observation was `56`
-- the current `34` / `39` / `48` / `53` layout matrix is intentionally not checkpoint-compatible with older SAC/GA/supervised models
-- the latest reduction from four slip inputs to one `slip_mean` was made because all four wheel slip values were usually highly correlated in practice, and the smaller input should reduce noise and model size
-- old SAC `.zip` checkpoints from the 56-dim observation were removed because they cannot be safely loaded into the new 53-dim policy
+- Public observation feature: `physics_delay_norm = 1 - 1/ticks`.
+- This describes the just-observed interval between previous and current observation. It does not predict the next physics tick.
+- `action_dt_ratio` remains an internal helper for delta-action scaling and should not be described as the public observation feature.
+- Historical `dt_ratio` wording should be treated as legacy.
 
-Current observation-mode standard:
+Important observation history:
 
-- live Trackmania, TM2D GA, TM2D MOO, TM2D RL, supervised data collection,
-  supervised training, driver replay, visualizer and live SB3 scripts all use
-  the same `ObservationEncoder` mode flags:
-  `vertical_mode` and `multi_surface_mode`
-- this gives four explicit modes instead of one implicit canonical layout:
-  - 2D asphalt: `vertical_mode=False`, `multi_surface_mode=False`
-  - 2D surface-aware: `vertical_mode=False`, `multi_surface_mode=True`
-  - 3D asphalt: `vertical_mode=True`, `multi_surface_mode=False`
-  - full 3D + surface: `vertical_mode=True`, `multi_surface_mode=True`
-- old models/checkpoints should not be mixed across these layouts unless the
-  saved `vertical_mode` and `multi_surface_mode` metadata matches the runtime
-  mode exactly
-- on all-asphalt maps, `multi_surface_mode=True` naturally yields surface
-  instructions near `1.0`, but the new toggle lets us run a true 2D asphalt
-  observation that matches the local TM2D baseline instead of carrying constant
-  surface features
-
-Current short-horizon settings:
-
-- path lookahead horizon is `5` tiles
-- lidar max range is `160` world units
-
-Optional vertical-mode extension:
-
-- `vertical_mode=False`
-  - uses the flat wall-only lidar and omits vertical observation features
-- `vertical_mode=True`
-  - enables block-grid surface-following lidar and appends vertical terrain
-    features
-  - appends:
-    - `height_instruction_0..4`
-    - `vertical_speed`
-    - `forward_y`
-    - `support_normal_y`
-    - `cross_slope`
-    - `5` overlapping `surface_elevation_sector_*` features
-  - adds `14` dimensions over the corresponding flat mode
-
-Optional multi-surface extension:
-
-- `multi_surface_mode=False`
-  - omits `surface_instruction_0..4`
-  - use this for asphalt-only experiments and for direct TM2D-vs-live 2D
-    parity checks
-- `multi_surface_mode=True`
-  - appends `surface_instruction_0..4`
-  - use this when maps contain grass/dirt/plastic/ice/snow or when testing the
-    full final-agent observation
-
-Current vertical-mode sensor semantics:
-
-- `Car.py` can run in a simplified block-grid surface-following lidar mode
-- the sensor first picks the current `MapBlock` from the car's X/Z grid cell and nearest fitted road plane height
-- if the upcoming `SIGHT_TILES + 1` path tiles have no height change and the current support plane is flat,
-  `vertical_mode=True` automatically uses the fast legacy flat wall raycast for that frame
-- each `MapBlock` fits its road surface as a simple plane `y = ax + bz + c`
-  - flat blocks become horizontal planes
-  - slope blocks become one sloped plate
-- on sloped blocks, laser directions are generated around the fitted road-plane normal and projected through the block-grid traversal
-- each laser walks from grid cell to grid cell instead of triangle to triangle
-  - within a cell, the ray follows the current block's fitted road plane at `surface_ray_lift`
-  - wall checks are performed only against that block's `sensor_walls_mesh`
-  - `sensor_walls_mesh` keeps the original wall mesh intact
-  - slope blocks add simple vertical side-curtain polygons along road boundary edges
-  - the curtains leave slope entry/exit open and only make the side catch surface taller
-  - transitions to another block are allowed only when those blocks are connected in the logical path
-  - if the ray exits the known block grid without a wall hit, the result is treated as `grid_gap`
-  - if the ray reaches `LASER_MAX_DISTANCE`, the result is `grid_open`
-  - if it hits padded block walls, the result is `grid_wall`
-  - if it tries to enter a non-connected neighboring block, the result is `grid_blocked_transition`
-- when `vertical_mode=False`, the old flat `walls_mesh`-only raycast remains active
-- historical note: the first vertical lidar prototype used fixed-step marching
-  over the road surface (`surface_step_size`). It was slow and unreliable
-  because correctness depended on the chosen step size. The active code no
-  longer exposes or logs `surface_step_size`; the replacement is block-grid
-  surface-following traversal with analytic wall checks per grid cell.
-- `surface_probe_height` and `surface_ray_lift` are still active parameters:
-  the former controls how high support probes start above the fitted road
-  surface and the latter keeps surface-following laser paths slightly above the
-  fitted road plane.
-
-Supported height-changing road blocks:
-
-- `RoadTechSlopeBase`
-  - 1x1 straight slope, height delta `+1` logical level when driven low-to-high
-- `RoadTechSlopeBase2`
-  - 1x1 steeper straight slope, height delta `+2`
-- `RoadTechSlopeBase2x1`
-  - 1x2 gentler straight slope, height delta `+1`
-  - this uses a non-square footprint and has custom orientation handling in `MapBlock`
-- `RoadTechSlopeBaseCurve2Left` / `RoadTechSlopeBaseCurve2Right`
-  - 2x2 curve2 slope, height delta `+1`
-  - left/right variants preserve the usual curve instruction sign while also adding height instruction `+0.5`
-- `RoadTechSlope2BaseCurve2Left` / `RoadTechSlope2BaseCurve2Right`
-  - 2x2 curve2 slope, height delta `+2`
-  - height instruction reaches `+1.0`
-- entering any of these blocks from the opposite side uses `MapBlock.swap_in_out()`,
-  so the same metadata also supports downhill `-0.5` / `-1.0` height instructions
-- vertical-mode lidar adds side-curtain helper polygons for all slope-like blocks,
-  not only straight slopes; entry and exit edges remain open for connected block traversal
-
-Current phased observation roadmap:
-
-- current 2D upgrade
-  - add one compact `slip_mean` feature derived from all four wheel slip coefficients
-  - add `5` compact future surface traction instructions:
-    - `RoadTech` / asphalt: `1.00`
-    - `PlatformGrass`: `0.70`
-    - `RoadDirt` / `PlatformDirt`: `0.50`
-    - `PlatformPlastic`: `0.75`
-    - `PlatformIce`: `0.05`
-    - `PlatformSnow`: `0.15` initial estimate
-  - add compact temporal summary:
-    - `longitudinal_accel`
-    - `lateral_accel`
-    - `yaw_rate`
-    - `5` overlapping clearance-rate sectors derived from the lidar fan
-  - add compact future height instructions:
-    - `height_instruction_0..4`
-    - `+0.5/-0.5` for one logical level step
-    - `+1.0/-1.0` for two or more logical level steps
-- next 2D/surface-aware upgrade
-  - add gear
-  - add rpm
-- later 3D upgrade
-  - current first 3D step
-    - add toggleable `vertical_mode`
-    - add block-grid surface-following lidar distances
-    - add compact vertical block:
-      - `vertical_speed`
-      - `forward_y`
-      - `support_normal_y`
-      - `cross_slope`
-      - `surface_elevation_sector_0..4`
-  - later 3D expansion
-    - add airborne/contact metrics
-    - add richer orientation metrics
-    - add more advanced surface/material state when needed
-
-Important history:
-
-- `previous_action` used to be part of the observation.
-- It was removed from the supervised-target pipeline because it created strong label leakage:
-  the network learned to repeat the previous action instead of reacting to state, especially failing at the very first frame after race start.
-- `next_point_direction` used to be a mostly unsigned/alignment-like cue.
-- It was replaced by signed current and next segment heading errors because the agent needed explicit left/right steering information.
-- `path_instructions` used to be stored at block granularity while the car advanced by tile index.
-- This created offsets on multi-tile curves; `Map.py` now expands block instructions into tile-aligned path entries.
-- `path_instructions` also used to encode signed curve size:
-  `Curve1 = +/-0.25`, `Curve2 = +/-0.5`, `Curve3 = +/-0.75`,
-  `Curve4 = +/-1.0` after observation normalization.
-- That meant larger absolute values actually described wider/easier turns, not
-  sharper turns. The current version keeps the same observation slot name but
-  changes the value to signed curvature, approximately `sign / curve_size`.
-  This is more physically meaningful for steering because `Curve1` is the
-  sharpest turn and therefore now has the largest absolute instruction.
-- Per-wheel slip was originally added as four separate observation values: `slip_fl`, `slip_fr`, `slip_rl`, `slip_rr`.
-- It was later compressed into `slip_mean` to reduce observation dimension after live inspection showed the four values are usually redundant for the current agent.
+- `previous_action` was removed because it caused label leakage in supervised target training.
+- `next_point_direction` was replaced by signed current/next segment heading errors.
+- Path instructions were moved from block-granularity to tile-aligned entries.
+- Curve instruction semantics now encode signed curvature so sharper turns have larger absolute values.
+- Four per-wheel slip inputs were compressed into one `slip_mean`.
+- The first vertical lidar prototype used fixed-step road-surface marching; the current version uses block-grid surface-following lidar with analytic wall checks per grid cell.
 
 ### Action modes
 
-Two action semantics exist in the project:
+Two action semantics exist:
 
-- `delta`
-  - policy outputs a delta action
-  - environment integrates it into the previous applied action
-  - `dt_ratio` is used to scale the delta
-- `target`
-  - policy outputs the target action directly
-  - this is the active direction for supervised learning
+- `target`: policy directly outputs target gas/brake/steer. This is the active direction for supervised learning, GA, Driver replay, and TM2D thesis experiments.
+- `delta`: policy outputs action deltas and the environment integrates them. This remains historical/diagnostic unless explicitly tested.
 
-### Stable-Baselines3 SAC RL path
+Current target-action semantics:
 
-The active SAC experiment lives in `RL_test/train_sac_trackmania.py`.
+- `gas` and `brake` are model outputs in `[0, 1]` and are thresholded at `0.5` for the binary-pedal default.
+- `steer` is analog in `[-1, 1]`.
+- The same target-action convention is used by supervised data collection and Driver replay.
 
-Current prepared default:
+### Stable-Baselines3 / RL path
 
-- map: `AI Training #5`
-- max wall-clock runtime: `8` hours
-- episode cap: `10000`
-- timestep cap: `50_000_000`
-- `vertical_mode=True`
-- `action_layout="gas_brake_steer"`
-- reward mode: `delta_lexicographic`
-- initial model: `None`, because this run intentionally starts from scratch with the latest observation/reward setup
-- policy architecture: SB3 `MlpPolicy` with hidden layers `[128, 128]`
-- hidden activation: `relu`
-- learning rate: `3e-4` by default, exposed as `--learning-rate` for quick sweeps without editing the script
-- train frequency: one update batch after each episode via `SAC_TRAIN_FREQ = (1, "episode")`
-- gradient steps after each episode: `64`
+The current local RL comparison path is `Experiments/train_sac.py`. The filename is historical; the script supports `PPO`, `SAC`, and `TD3`.
 
-Current `delta_lexicographic` reward:
+Current thesis interpretation:
 
-- shared implementation lives in `Individual.compute_delta_lexicographic_score_for`
-- emitted SAC reward is `score_now - score_previous`
-- progress is normalized to `[0, 1]` and is the primary term
-- one path-tile progress unit is always larger than the whole time tie-break range
-- the time tie-break is always larger than the whole distance tie-break range
-- finish adds `+1` through the terminal term
-- crash/timeout do not receive a large terminal penalty in the SAC delta mode; they end the episode and remove future reward opportunities
-- this was chosen because local SAC tests found terminal failure drops too harsh early in training
+- PPO is the only RL algorithm that learned to finish in the 2026-05-05 reward-equivalent sweep.
+- SAC and TD3 failed under the tested strict `gas_brake_steer`, AABB lidar, 32x16 ReLU, 1000-episode setup.
+- RL is useful as an algorithmic comparison branch and negative evidence for sample efficiency/credit assignment, but it is not the main practical method.
+- `RL_test/` and live Trackmania SAC scripts are legacy/historical unless a future experiment deliberately revives them.
 
-This intentionally avoids raw `delta_progress / delta_time` because that ratio can over-reward a very fast first block followed by an immediate crash.
+Current RL reward-equivalent setup:
 
-SAC/RL history notes:
+- reward mode: `delta_finished_progress_time_crashes`
+- formula family: scalar/delta equivalent of `(finished, progress, -time, -crashes)`
+- action layout: strict `gas_brake_steer`
+- tick profiles compared: `fixed100` and `supervised_v2d`
 
-- an older hand-written run-based RL trainer existed separately from GA, but the first long run learned very slowly and stalled around early-map progress
-- Stable-Baselines3 SAC was introduced as a testbed under `RL_test/` to check whether the task can be learned with a stronger off-policy algorithm
-- early SAC reward modes included:
-  - pure terminal fitness
-  - progress-delta shaping
-  - hybrid progress plus terminal fitness
-- pure terminal fitness was too sparse for efficient learning
-- progress-delta learned early movement faster but did not pressure enough for shortest-time driving
-- a raw `delta_progress / delta_time` idea was considered and rejected because it can reward sprinting into the first wall
-- the old pace-normalized `fitness_delta` was replaced by bounded `delta_lexicographic` after local sandbox tests showed it is less prone to rewarding fast early failure
-- a temporary `gas_steer` default was used to diagnose early movement because local SAC tests showed independent random gas/brake exploration can cancel movement near the start
-- the live default is now back to `gas_brake_steer`, because brake is still useful and we want the policy to learn the real control layout from scratch
-- a short local learning-rate sweep with `gas_brake_steer` compared `1e-4`, `3e-4`, and `1e-3`; it was too short to prove an optimum, but `1e-3` reduced entropy much faster, so `3e-4` remains the safer overnight default
-- older SAC models/checkpoints are expected to become incompatible whenever the observation dimension changes
-- after switching four wheel-slip inputs to one `slip_mean`, SAC training is intentionally restarted from scratch with `INITIAL_MODEL_PATH = None`
+### Current map/observation extensions
 
-### Current target-action semantics
-
-In target mode:
-
-- `gas` is a sigmoid output in `[0, 1]`
-- `brake` is a sigmoid output in `[0, 1]`
-- `steer` is a tanh output in `[-1, 1]`
-
-At environment/controller application time:
-
-- `gas` is thresholded at `0.5`
-- `brake` is thresholded at `0.5`
-- both may be active simultaneously
-- `steer` remains analog in `[-1, 1]`
-
-The same binary pedal semantics are used when collecting supervised data in `Actor.py`.
-
+- 2D asphalt mode is the baseline for most fair GA/RL comparisons.
+- `multi_surface_mode=True` appends surface/traction lookahead and should be used when maps contain non-asphalt surfaces or when testing final full-observation agents.
+- `vertical_mode=True` appends height instructions and vertical terrain features, and switches lidar to block-grid surface-following behavior where needed.
+- Height and surface modules are thesis extensions after the base flat/asphalt story is established.
 
 ## Core Files To Index First
 
@@ -2678,7 +1949,7 @@ Responsibilities:
 - standardize future height-change instructions
 - derive compact temporal motion features from previous vs current frame
 - optionally append compact vertical terrain features in `vertical_mode`
-- compute `dt_ratio = dt / dt_ref`
+- compute public `physics_delay_norm` and internal `action_dt_ratio`
 - expose observation bounds
 - provide mirror helpers for observations and actions
 
@@ -2935,7 +2206,7 @@ Lessons:
 
 - asynchronous real-time Trackmania behavior was a problem from the beginning
 - stale telemetry and reset timing can invalidate training, so later reset handshakes and latest-packet-only design are not incidental details
-- the current `RL_test/` SAC path is a new RL testbed, but it is not the first time this project tried RL `.zip` models
+- the historical `RL_test/` SAC path was a later RL testbed, but it is not the first time this project tried RL `.zip` models
 
 ### June 2024: early elevation support
 
@@ -3032,7 +2303,7 @@ Relevant commit:
 Main additions:
 
 - normalized observation
-- added `dt_ratio`
+- added the old `dt_ratio` timing feature, later replaced by `physics_delay_norm`
 - introduced dt-aware control semantics
 - added Xbox controller debug reader
 
@@ -3119,12 +2390,12 @@ Main additions and lessons:
 
 Main additions and lessons:
 
-- the project reintroduced RL through Stable-Baselines3 SAC under `RL_test/`
+- the project reintroduced RL through Stable-Baselines3 SAC under the now-legacy `RL_test/` branch
 - SAC uses continuous `gas`, `brake`, and `steer` actions mapped through `ContinuousTargetRacingEnv`
 - training uses the same `Enviroment.py`, `Car.py`, and `ObservationEncoder.py` gateway as GA/supervised code
 - early SAC runs showed progress-delta feedback learns faster than terminal-only reward
 - reward shaping is still experimental and should be judged by actual live training curves, not only offline intuition
-- after reducing slip inputs from four values to `slip_mean`, all old SAC checkpoints were deleted and current SAC defaults restart from scratch
+- after reducing slip inputs from four values to `slip_mean`, old SAC checkpoints were deleted because observation dimensions were no longer compatible
 
 ### Training-map and artifact-management notes from the full history
 
@@ -3142,243 +2413,179 @@ Main lessons:
 - when reviewing history, distinguish code architecture commits from experiment-output commits; both are informative, but only code/config commits should usually drive current behavior
 
 
-## Important Experiments Already Tried
 
-This section is critical. Another Codex instance should not rediscover these from scratch.
+## Important Experiment Branches Already Tried
 
-### 1. Mirror augmentation
+This section is critical. Another Codex instance should not rediscover these from scratch. Current thesis-grade evidence is summarized in `Diplomová práca/Experiments/EXPERIMENTS.md`; the notes below explain the major branches and their status.
 
-Tried in both the mini project and Trackmania GA.
+### 1. Mirror augmentation and mirror evaluation
 
-Goal:
-
-- reduce one-sided overfitting
-- teach left/right symmetry
+Goal: reduce one-sided overfitting and test whether left/right symmetry improves robustness.
 
 Status:
 
-- mechanism exists
-- currently disabled in the baseline trainer because the user wants a simpler baseline first
+- Observation/action mirroring mechanisms exist.
+- Both-mirror evaluation can train, but it roughly doubles evaluation cost.
+- Holdout-map evaluation did not yet prove better generalization, so this is diagnostic rather than a final improvement.
 
 ### 2. Multi-touch instead of instant crash
 
-Goal:
-
-- allow a few small contacts before terminating
-
-Implementation:
-
-- `max_touches`
-- touch debounce
-- wall-ride guard
+Goal: allow small contacts and inspect whether a non-binary crash model helps bridge TM2D and live Trackmania.
 
 Status:
 
-- still implemented
-- baseline currently uses `max_touches = 1`
+- `max_touches`, touch debounce, wall-hug diagnostics, and simple bounce behavior exist in TM2D.
+- Thesis training baseline still treats safety conservatively; max-touches experiments are diagnostic/mid rather than final improvements.
 
 ### 3. Target vs delta action
 
-This has been one of the biggest experimental branches.
-
 Observations:
 
-- delta mode historically felt more stable in some GA runs
-- target mode is more natural for supervised imitation learning
-- target mode initially failed badly due to action semantics inconsistencies and overly strong shortcuts
-
-Current status:
-
-- supervised path is target-mode oriented
-- baseline GA currently also defaults to target mode
-- this is still an area of uncertainty and comparison
+- `target` mode is now the practical default for supervised learning, Driver replay, and GA/TM2D thesis runs.
+- `delta` mode remains a historical/diagnostic branch. If revisited, it must be compared cleanly rather than mixed with other changes.
 
 ### 4. Previous action in the observation
 
-Originally added to provide temporal context.
-
 Result:
 
-- in supervised target training it became a harmful shortcut
-- the network learned to copy previous action instead of initiating correct start behavior
-- especially bad at race start: no gas/brake on first frame
+- Previous action caused label leakage in supervised target training.
+- The network learned to repeat earlier actions and could fail at race start.
+- Decision: removed from current observation.
 
-Decision:
+### 5. Physics timing feature
 
-- removed from the observation
-- observation dimension reduced to `29`
+History:
 
-### 5. dt_ratio input
-
-Added because Trackmania/OpenPlanet produces variable frame timing.
-
-Current belief:
-
-- keeping `dt_ratio` in the observation is reasonable
-- in delta mode it should scale the delta action
-- in target mode it is still useful context but not used to scale outputs
+- Older code exposed `dt_ratio` and continuous FPS-style variability.
+- Current public observation uses `physics_delay_norm` from quantized physics ticks.
+- Current TM2D variability uses `physics_tick_profile`, not `fps_min/fps_max`.
 
 ### 6. Supervised validation split
 
-A validation split existed previously.
+Observation:
 
-Issues encountered:
+- Validation loss is useful for architecture/capacity selection, but closed-loop driving is what matters for final behavior.
+- Supervised map specialists and path plots are useful to demonstrate representation ability and covariate shift, not as final autonomous optimization.
 
-- validation could become misleading
-- real usefulness is determined by Driver replay in Trackmania, not by abstract validation loss
-- map/run-based splitting created confusion in interpreting generalization
+### 7. Architecture size experiments
 
-Current state:
+Current conclusion:
 
-- validation split was removed
-- training uses all pooled frames
+- `32x16 relu,tanh` is the cheap baseline for broad GA experiments.
+- `48x24 relu,tanh` is the stronger longer-run candidate.
+- Larger networks are references; hidden sigmoid is mainly a negative/control activation.
 
-### 7. Large supervised model vs small supervised model
+### 8. Behavior cloning and supervised-seeded GA
 
-A larger model was tried first.
+Current conclusion:
 
-Current simplification:
+- Pure behavior cloning can drive in familiar states but is brittle under covariate shift.
+- Sparse BC-seeded GA was too conservative.
+- Dense weight-noise BC seeding plus GA fine-tuning is a positive hybrid result and should be presented as using extra human demonstration data.
 
-- reduced to a much smaller MLP: one hidden layer, `16` neurons
+### 9. Pareto / NSGA-II MOO
 
-Reason:
+Current conclusion:
 
-- simplify the hypothesis space
-- test whether the pipeline works before increasing model capacity
+- MOO is useful to explain conflicting objectives and Pareto-front selection.
+- Current MOO variants did not beat the crash-aware lexicographic baseline.
+- `trackmania_racing` has signal but remains a comparison branch.
 
-### 8. Mini 2D pretraining project
+### 10. Mini 2D pretraining project
 
-Historically, a separate lightweight mini project existed and was used heavily for:
+Historical only:
 
-- cheap pretraining
-- mirror experiments
-- exporting TM-compatible checkpoints
-
-Current repo state:
-
-- the mini-project source is not present in the current top-level tracked files
-- references to mini-project population checkpoints still exist in loaders and historical workflow discussions
-
-Important:
-
-- treat mini-project pretraining as a historical branch of experimentation, not as the current core runtime in this checkout
+- A separate mini project was once used for cheap pretraining and mirror experiments.
+- It is not the current core runtime in this checkout.
 
 
 ## Current Known Problems / Open Questions
 
-These are active research/debug topics, not solved truths.
+These are active research/writing caveats, not solved truths.
 
-- The user reports difficulty training a reliable finisher despite adding many improvements.
-- The simpler historical trainer sometimes seemed to work better.
-- It is unclear whether target mode is truly better for GA than delta mode in Trackmania runtime.
-- Supervised policies have sometimes:
-  - failed to start properly
-  - turned too weakly
-  - behaved conservatively
-- The exact amount of steer needed in Trackmania relative to the learned policy remains a practical issue.
-- The influence of observation design vs policy architecture is still unresolved.
-- The project has accumulated many safety/guard mechanisms; some may help, some may distort selection pressure.
-- The steering cue in `Car.py` now uses signed current/next segment heading errors instead of a pure dot-product alignment scalar.
-  This should preserve left/right information, but it is still worth verifying on live maps that the sign convention matches intuitive steering direction.
-- A previous bug came from `path_instructions` being stored at block granularity while `path_tile_index` advanced at tile granularity.
-  `Map.py` now expands instructions to tile-aligned entries so the lookahead slice in `Car.py` stays synchronized through multi-tile corners.
+- Most strong experiment results are single-seed. Use them as evidence-backed thesis conclusions, but avoid claiming statistical optimality.
+- TM2D is a useful reward/selection sandbox, not a high-fidelity Trackmania physics clone. It still lacks an explicit drift/slip regime.
+- Live Trackmania timing can drop below 100 Hz when the window is unfocused/covered; the project now logs physics tick delay instead of pretending render FPS is the true signal.
+- Supervised policies demonstrate representation capacity but remain vulnerable to covariate shift and butterfly-effect failures.
+- Height and surface support exists, but final thesis claims should separate base 2D/asphalt evidence from full 3D/surface extensions.
+- Pareto/MOO and RL are valuable comparison branches, but current evidence does not make either the main method.
+- Supervised-seeded GA with dense noise is promising, but it uses extra human demonstration data and should be presented as a hybrid, not a pure GA improvement.
 
+## Current Recommended Debugging / Writing Order
 
-## Current Recommended Debugging Order
-
-If continuing experimentation, do not start by adding more complexity.
+For future work, do not start by adding more complexity.
 
 Recommended order:
 
-1. Verify raw runtime data is sane:
-   - plugin packets
-   - `Car.py` derived values
-   - observation ranges
-2. Verify `Driver.py` behavior of the latest supervised model.
-3. Verify action semantics end to end:
-   - policy output
-   - environment thresholding/clipping
-   - vgamepad behavior in Trackmania
-4. Only after runtime sanity is confirmed, launch GA runs.
-5. Compare baseline `target` vs `delta` mode cleanly rather than mixing many new features at once.
+1. Read `CODEX_PROJECT_CONTEXT.md`, then `Diplomová práca/Experiments/EXPERIMENTS.md`, then the relevant curated package.
+2. Verify implementation truth in the source file before making a technical claim.
+3. For thesis claims, prefer curated reports/plots over raw run folders.
+4. For runtime debugging, verify raw packets, `Car.py` derived values, observation ranges, Driver replay, and action semantics before launching training.
+5. For new experiments, compare one change against the current baseline rather than stacking many changes at once.
 
 
 ## Current Practical Entry Points
 
-### GA baseline
-
-Run:
+### Live GA baseline
 
 ```powershell
 python GeneticTrainer.py
 ```
 
-This currently uses the baseline config from `GeneticTrainer.py`.
+Uses the current live GA configuration in `GeneticTrainer.py`. Check the file before long runs because overnight settings are often edited directly.
 
 ### Driver replay
-
-Run:
 
 ```powershell
 python Driver.py
 ```
 
-By default, this auto-loads the latest supervised model.
+Loads and replays saved policies/supervised models. Always verify model metadata matches observation mode and action layout.
 
 ### Supervised data collection
-
-Run:
 
 ```powershell
 python Actor.py
 ```
 
-### Supervised training
+Collects human driving attempts with current observation metadata, including `physics_delay_norm` and AABB lidar fields.
 
-Run:
+### Supervised training
 
 ```powershell
 python SupervisedTraining.py
 ```
 
-### Interactive imitation training
+Trains `NeuralPolicy` from recorded attempts. Use explicit `vertical_mode`, `multi_surface_mode`, hidden dims, activations, and mirror settings.
 
-Run:
+### Interactive imitation training
 
 ```powershell
 python ImitationTrainer.py
 ```
 
-This is a custom DAgger-style loop built from our own components, not a black-box imitation-learning library:
+Custom DAgger-style workflow: human corrections are labels, executed actions are tracked separately, and the current policy can gradually take more control.
 
-- `Actor.py` provides human controller labels and dataset writing.
-- `Driver.py`-style policy inference provides the current agent action.
-- `SupervisedTraining.py` preprocessing/training utilities update the same `NeuralPolicy`.
-- `vgamepad` sends the selected action to Trackmania.
+### Local TM2D GA / MOO / RL
 
-Important semantics:
+```powershell
+python Experiments\train_ga.py ...
+python Experiments\train_ga_moo.py ...
+python Experiments\train_sac.py ...
+```
 
-- `actions` / `human_actions` are the human correction labels used for supervised learning.
-- `executed_actions` are the actions actually applied to Trackmania.
-- `num_attempts` defines the curriculum horizon.
-- Agent control probability increases linearly from `initial_agent_probability` to `max_agent_probability` across accepted attempts.
-- After each accepted attempt (`A` after finish), the policy is fine-tuned and saved to `latest_model.pt`.
-- This mode is intended to collect recovery states without teaching the network that injected mistakes were the correct action.
-
+Prefer existing run scripts under `Experiments/` for reproduced thesis experiments.
 
 ## Current Logs/Artifacts Layout
 
-- `logs/ga_runs/...`
-  - GA runs
-  - summaries
-  - population checkpoints
-- `logs/supervised_data/...`
-  - recorded human driving attempts
-- `logs/supervised_runs/...`
-  - trained supervised torch models
-- `Backup/numpy_logic_20260317_133951/...`
-  - backup of pre-torch numpy logic
-
+- `Diplomová práca/Experiments/`: curated thesis packages and `EXPERIMENTS.md`.
+- `Experiments/analysis/`: generated analysis reports and plots.
+- `Experiments/runs_ga_training_improvements/`, `Experiments/runs_rl/`, `Experiments/runs_ga_moo/`: working/raw local run outputs when retained.
+- `logs/ga_runs/`: live Trackmania GA runs and trajectories.
+- `logs/supervised_data/`: recorded human driving attempts.
+- `logs/supervised_runs*/`: trained supervised torch models.
+- `Experiments/_discarded/`: soft-deleted smoke/debug/superseded artifacts.
+- `Backup/numpy_logic_20260317_133951/`: historical backup of pre-torch numpy logic.
 
 ## Environment / Dependencies
 
@@ -3396,20 +2603,22 @@ Important runtime dependencies:
 - ViGEmBus driver for virtual gamepad
 
 
+
 ## Guidance For Another Codex Instance
 
 When opening this project on another machine:
 
 1. Read this file first.
-2. Index the files listed in the "Core Files To Index First" section.
-3. Assume the current priority is baseline reliability, not novelty.
-4. Do not remove existing experimental features unless explicitly asked.
-5. Treat supervised and GA as two connected but not yet fully stabilized pipelines.
-6. Prefer simple A/B experiments over stacking multiple new ideas at once.
-
+2. Read `Diplomová práca/Experiments/EXPERIMENTS.md` before writing thesis conclusions.
+3. Index the files listed in the "Core Files To Index First" section.
+4. Treat the top `Current Thesis Snapshot - 2026-05-06` section as the current truth.
+5. Treat dated sections, old reward notes, `RL_test`, raw lidar thresholding, `dt_ratio`, and continuous FPS variability as historical unless a new task explicitly revives them.
+6. Do not remove existing experimental mechanisms unless explicitly asked.
+7. Prefer curated thesis packages and latest analysis reports over raw run folders.
+8. Preserve the distinction between thesis-grade evidence, useful negative controls, diagnostics, and historical context.
 
 ## Suggested Handoff Prompt
 
-If another Codex/GPT-5.4 instance needs a starting prompt, use something like:
+If another Codex/GPT instance needs a starting prompt, use something like:
 
-> Read `CODEX_PROJECT_CONTEXT.md` first, then index `ObservationEncoder.py`, `Car.py`, `Map.py`, `Enviroment.py`, `NeuralPolicy.py`, `Individual.py`, `GeneticTrainer.py`, `Driver.py`, `Actor.py`, and `SupervisedTraining.py`. This repository is a Trackmania autonomous driving project with a live GA/neuroevolution pipeline and a newer supervised-learning pipeline. The current priority is to restore a reliable baseline training workflow, not to add new complex features. Preserve existing experimental mechanisms, but reason from the current baseline defaults and from the historical experiments summarized in `CODEX_PROJECT_CONTEXT.md`.
+> Read `CODEX_PROJECT_CONTEXT.md` first, especially `Current Thesis Snapshot - 2026-05-06`. Then read `Diplomová práca/Experiments/EXPERIMENTS.md` and the relevant curated experiment package before making thesis-final claims. This repository is a Trackmania autonomous-driving project whose current main method is lexicographic GA/neuroevolution with AABB-clearance lidar, continuous progress, binary gas/brake, and ranking `(finished, progress, -time, -crashes)`. Treat RL/PPO/SAC/TD3 and Pareto/MOO as comparison branches unless new evidence beats the GA baseline. For implementation details, verify source files rather than relying on memory.

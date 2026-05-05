@@ -1291,12 +1291,16 @@ class GeneticTrainer:
         self,
         model_path: str,
         exact_copies: int = 1,
+        noise_mode: str = "sparse",
         mutation_probs: Sequence[float] = (0.02, 0.05, 0.08),
         mutation_sigmas: Sequence[float] = (0.01, 0.03, 0.05),
         tier_counts: Optional[Sequence[int]] = None,
     ) -> Dict[str, object]:
         if len(mutation_probs) != len(mutation_sigmas):
             raise ValueError("mutation_probs and mutation_sigmas must have the same length.")
+        noise_mode = str(noise_mode).strip().lower()
+        if noise_mode not in {"sparse", "dense"}:
+            raise ValueError("noise_mode must be 'sparse' or 'dense'.")
 
         loaded_policy, extra = NeuralPolicy.load(model_path, map_location="cpu")
         loaded_hidden_dims = tuple(int(dim) for dim in loaded_policy.hidden_dims)
@@ -1371,11 +1375,20 @@ class GeneticTrainer:
                 continue
             for _ in range(count):
                 child = base_individual.copy()
-                child.mutate(mutation_prob=float(prob), sigma=float(sigma))
+                if noise_mode == "dense":
+                    noisy_genome = child.genome.copy()
+                    noisy_genome += (
+                        np.random.randn(noisy_genome.size).astype(np.float32)
+                        * float(sigma)
+                    )
+                    child.genome = noisy_genome
+                else:
+                    child.mutate(mutation_prob=float(prob), sigma=float(sigma))
                 seeded_population.append(child)
             tier_summaries.append(
                 dict(
                     count=count,
+                    noise_mode=noise_mode,
                     mutation_prob=float(prob),
                     mutation_sigma=float(sigma),
                 )
@@ -1395,6 +1408,7 @@ class GeneticTrainer:
         return dict(
             source_model=model_path,
             exact_copies=exact_copies,
+            noise_mode=noise_mode,
             tiers=tier_summaries,
             model_extra=extra,
             hidden_dims=list(self.hidden_dims),
@@ -2296,16 +2310,16 @@ if __name__ == "__main__":
     env_max_time = 30
     
     # neural network architecture
-    hidden_dim = [32, 16]
+    hidden_dim = [48, 24]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
     vertical_mode = False
     multi_surface_mode = False
 
-    # Safe real-TM lexicographic GA baseline.
-    pop_size = 32
+    # Best-supported real-TM 2D asphalt lexicographic GA profile.
+    pop_size = 48
     elite_count = 2
-    parent_count = 10
+    parent_count = 14
     generations_to_run = 300
     checkpoint_every = 10
 
@@ -2347,7 +2361,7 @@ if __name__ == "__main__":
     reuse_elite_evaluations = True
     trajectory_log_mode = "top"  # off / top / top-finishers-final / all
     trajectory_top_k = 1
-    trajectory_log_actions = False
+    trajectory_log_actions = True
     target_steer_deadzone = 0.00
     max_touches = 1
     
@@ -2371,17 +2385,23 @@ if __name__ == "__main__":
     Individual.RANKING_KEY = ranking_key
     Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
     
-    # Train from checkpoint or supervised predtrainded model
+    # Train from checkpoint or supervised pretrained model.
+    #
+    # For the strongest hybrid run, set this to a compatible 2D-asphalt
+    # 48x24 relu,tanh target-action BC model. The current local AI Training #5
+    # BC model is 32x16, so it is intentionally not enabled here.
     initial_population_source: Optional[str] = None
     # Old v2d population checkpoints are intentionally not used as the default
     # source anymore because the canonical training observation is now v3d.
     # initial_population_source = (
     #     r"logs/ga_runs\20260409_081105_map_AI_Training__5_v2d_h32x16_p32\checkpoints\population_gen_0190.npz"
     # )
-    # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
-    seed_model_exact_copies = 2
-    seed_model_mutation_probs = (0.015, 0.04, 0.08)
-    seed_model_mutation_sigmas = (0.008, 0.02, 0.04)
+    # initial_population_source = r"logs/supervised_runs_ai5_pretrain_48x24\...\best_model.pt"
+    seed_model_exact_copies = 1
+    seed_model_noise_mode = "dense"
+    seed_model_mutation_probs = (0.02, 0.05, 0.10)
+    seed_model_mutation_sigmas = (0.01, 0.025, 0.05)
+    seed_model_tier_counts = (16, 16, 15)
     
     # True = TM checkpoint already evaluated in TM -> continue from next generation.
     # False = mini pretrain checkpoint -> evaluate loaded population in TM first.
@@ -2509,8 +2529,10 @@ if __name__ == "__main__":
             seed_summary = trainer.seed_population_from_model(
                 model_path=seed_model_path,
                 exact_copies=seed_model_exact_copies,
+                noise_mode=seed_model_noise_mode,
                 mutation_probs=seed_model_mutation_probs,
                 mutation_sigmas=seed_model_mutation_sigmas,
+                tier_counts=seed_model_tier_counts,
             )
             print(f"Seeded population from model: {seed_model_path}")
             print(f"Seed summary: {seed_summary}")
@@ -2561,8 +2583,10 @@ if __name__ == "__main__":
                 initial_population_source_kind=initial_population_source_kind,
                 seed_model_path=seed_model_path,
                 seed_model_exact_copies=seed_model_exact_copies,
+                seed_model_noise_mode=seed_model_noise_mode,
                 seed_model_mutation_probs=list(seed_model_mutation_probs),
                 seed_model_mutation_sigmas=list(seed_model_mutation_sigmas),
+                seed_model_tier_counts=list(seed_model_tier_counts),
                 mirror_episode_prob=mirror_episode_prob,
                 max_touches=max_touches,
                 start_idle_max_time=start_idle_max_time,

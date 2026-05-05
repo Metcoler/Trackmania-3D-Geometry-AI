@@ -1,0 +1,7 @@
+run_short,run_label,algorithm,physics_tick_profile,first_ge_5,first_ge_10,first_ge_25,first_ge_50,first_ge_75,first_ge_90,first_ge_100
+ppo_fixed100,PPO | fixed100 | delta_finished_progress_time_crashes | gas_brake_steer,PPO,fixed100,56,171,590,635,744,804,849
+ppo_supervised_v2d,PPO | supervised_v2d | delta_finished_progress_time_crashes | gas_brake_steer,PPO,supervised_v2d,88,251,645,645,751,751,759
+sac_fixed100,SAC | fixed100 | delta_finished_progress_time_crashes | gas_brake_steer,SAC,fixed100,6,-1,-1,-1,-1,-1,-1
+sac_supervised_v2d,SAC | supervised_v2d | delta_finished_progress_time_crashes | gas_brake_steer,SAC,supervised_v2d,179,-1,-1,-1,-1,-1,-1
+td3_fixed100,TD3 | fixed100 | delta_finished_progress_time_crashes | gas_brake_steer,TD3,fixed100,3,-1,-1,-1,-1,-1,-1
+td3_supervised_v2d,TD3 | supervised_v2d | delta_finished_progress_time_crashes | gas_brake_steer,TD3,supervised_v2d,3,-1,-1,-1,-1,-1,-1

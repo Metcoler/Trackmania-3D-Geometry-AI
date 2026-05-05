@@ -1,0 +1,7 @@
+run_short,finished,crashed,timeout,other
+ppo_fixed100,43,880,77,0
+ppo_supervised_v2d,33,964,3,0
+sac_fixed100,0,1000,0,0
+sac_supervised_v2d,0,1000,0,0
+td3_fixed100,0,1000,0,0
+td3_supervised_v2d,0,1000,0,0

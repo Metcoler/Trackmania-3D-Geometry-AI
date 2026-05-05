@@ -1,0 +1,31 @@
+{
+  "experiment_id": "training_improvements_20260505",
+  "title": "TM2D training improvements comparison",
+  "category": "thesis_grade_and_diagnostic",
+  "status": "mixed_single_seed_results",
+  "thesis_relevance": "Comparison of selected GA training improvements after the reward and hyperparameter sweeps: mutation decay, mirror evaluation, multi-touch, variable tick, elite cache, MOO variants, and live TM overnight run.",
+  "interpretation": "Variable physics tick with elite cache is the strongest positive result. First-finish decay is a useful tradeoff; mirror holdout and max-touches remain diagnostic rather than final improvements.",
+  "keywords": [
+    "training_improvements",
+    "elite_cache",
+    "variable_tick",
+    "mutation_decay",
+    "moo"
+  ],
+  "analysis_sources": [
+    "Experiments/analysis/latest_training_results_20260505"
+  ],
+  "run_sources": [],
+  "script_sources": [
+    "Experiments/run_ga_training_improvements_sweep_20260504.ps1",
+    "Experiments/analyze_latest_training_results.py"
+  ],
+  "curated_at": "2026-05-05T23:09:45",
+  "copy_policy": {
+    "skipped_file_names": [
+      "combined_individual_metrics.csv"
+    ],
+    "max_copy_size_bytes": 99614720
+  },
+  "skipped_files": []
+}

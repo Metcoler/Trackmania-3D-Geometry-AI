@@ -69,9 +69,9 @@ def discover_runs(roots: list[Path]) -> list[Path]:
 
 def infer_grid(run_dir: Path) -> str:
     parts = [part.lower() for part in run_dir.parts]
-    if any("mutation_grid" in part for part in parts):
+    if any("mutation_grid" in part or "mutation_refinement" in part for part in parts):
         return "mutation"
-    if any("selection_grid" in part for part in parts):
+    if any("selection_grid" in part or "selection_refinement" in part for part in parts):
         return "selection"
     return "unknown"
 
@@ -89,15 +89,9 @@ def infer_grid_coordinates(run_dir: Path, config: dict) -> tuple[float, float]:
     if grid == "mutation":
         return float(config.get("mutation_prob", np.nan)), float(config.get("mutation_sigma", np.nan))
     if grid == "selection":
-        parent_ratio = parse_ratio_tag(path_text, "parents_ratio")
-        elite_ratio = parse_ratio_tag(path_text, "elites_ratio")
-        population_size = max(1, int(config.get("population_size", 1)))
         parent_count = max(1, int(config.get("parent_count", 1)))
-        if parent_ratio is None:
-            parent_ratio = parent_count / population_size
-        if elite_ratio is None:
-            elite_ratio = int(config.get("elite_count", 0)) / parent_count
-        return float(parent_ratio), float(elite_ratio)
+        elite_count = max(0, int(config.get("elite_count", 0)))
+        return float(parent_count), float(elite_count)
     return np.nan, np.nan
 
 
@@ -357,8 +351,8 @@ def plot_heatmap(summary: pd.DataFrame, grid: str, metric: str, title: str, dire
         plt.xlabel("mutation_prob")
         plt.ylabel("mutation_sigma")
     else:
-        plt.xlabel("parents / population target ratio")
-        plt.ylabel("elites / parents target ratio")
+        plt.xlabel("parent_count")
+        plt.ylabel("elite_count")
     plt.title(f"{grid.title()} grid: {title} ({direction} is better)")
     for row_idx in range(values.shape[0]):
         for col_idx in range(values.shape[1]):

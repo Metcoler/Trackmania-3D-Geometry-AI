@@ -1,0 +1,33 @@
+{
+  "experiment_id": "rl_reward_equivalent_sweep_20260505",
+  "title": "RL reward-equivalent PPO/SAC/TD3 sweep",
+  "category": "comparison_branch",
+  "status": "single_seed_screening",
+  "thesis_relevance": "Stable-Baselines3 PPO, SAC, and TD3 comparison using the same TM2D environment, AABB lidar, strict gas/brake/steer actions, and a scalarized equivalent of the GA tuple.",
+  "interpretation": "Only PPO learned to finish in this screening. SAC and TD3 were useful negative comparisons under the tested setup; GA remains the stronger practical baseline.",
+  "keywords": [
+    "rl",
+    "ppo",
+    "sac",
+    "td3",
+    "stable_baselines3",
+    "reward_equivalent"
+  ],
+  "analysis_sources": [
+    "Experiments/analysis/rl_reward_equivalent_sweep_20260505"
+  ],
+  "run_sources": [],
+  "script_sources": [
+    "Experiments/run_rl_reward_equivalent_sweep_20260505.ps1",
+    "Experiments/train_sac.py",
+    "Experiments/analyze_rl_runs.py"
+  ],
+  "curated_at": "2026-05-05T23:09:45",
+  "copy_policy": {
+    "skipped_file_names": [
+      "combined_individual_metrics.csv"
+    ],
+    "max_copy_size_bytes": 99614720
+  },
+  "skipped_files": []
+}

@@ -1,0 +1,7 @@
+run_short,finish_count,first_finish_episode,best_finish_episode,best_finish_time
+ppo_fixed100,43,849,925,26.910000000001407
+ppo_supervised_v2d,33,759,999,25.040000000000965
+sac_fixed100,0,-1,-1,
+sac_supervised_v2d,0,-1,-1,
+td3_fixed100,0,-1,-1,
+td3_supervised_v2d,0,-1,-1,

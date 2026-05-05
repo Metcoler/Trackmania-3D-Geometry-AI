@@ -1,0 +1,31 @@
+{
+  "experiment_id": "ga_supervised_seeded_20260505",
+  "title": "Supervised-seeded GA initialization",
+  "category": "thesis_grade_hybrid",
+  "status": "single_seed_positive_with_negative_control",
+  "thesis_relevance": "Hybrid behavior-cloning initialization plus GA fine-tuning experiment, compared against the random initial population baseline.",
+  "interpretation": "Dense weight-noise seeding produced a strong positive result and the best time in the comparison. Sparse supervised seeding is a useful negative control showing that naive BC seeding is too conservative.",
+  "keywords": [
+    "supervised_seed",
+    "behavior_cloning",
+    "hybrid_ga",
+    "dense_noise"
+  ],
+  "analysis_sources": [
+    "Experiments/analysis/ga_supervised_seeded_20260505"
+  ],
+  "run_sources": [],
+  "script_sources": [
+    "Experiments/run_ga_supervised_seeded_pretrain_20260505.ps1",
+    "Experiments/run_ga_supervised_seeded_dense_pretrain_20260505.ps1",
+    "Experiments/analyze_ga_supervised_seeded.py"
+  ],
+  "curated_at": "2026-05-05T23:09:45",
+  "copy_policy": {
+    "skipped_file_names": [
+      "combined_individual_metrics.csv"
+    ],
+    "max_copy_size_bytes": 99614720
+  },
+  "skipped_files": []
+}

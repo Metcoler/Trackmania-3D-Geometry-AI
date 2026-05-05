@@ -7,6 +7,7 @@ import multiprocessing as mp
 import random
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from NeuralPolicy import normalize_hidden_activations, normalize_hidden_dims
+from NeuralPolicy import NeuralPolicy, normalize_hidden_activations, normalize_hidden_dims
 from Individual import Individual
 from RankingKey import canonical_ranking_key_expression
 from TrajectoryLogger import TrajectoryLogger, should_log_trajectory
@@ -75,26 +76,153 @@ def parse_list(value: str, cast):
     return [cast(part.strip()) for part in str(value).split(",") if part.strip()]
 
 
+def json_safe(value):
+    if isinstance(value, dict):
+        return {str(key): json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return json_safe(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def parse_physics_tick_probs(value: str | None) -> tuple[tuple[int, ...], tuple[float, ...]] | tuple[None, None]:
+    if value is None or str(value).strip() == "":
+        return None, None
+    tick_values: list[int] = []
+    tick_probs: list[float] = []
+    for item in str(value).split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if ":" not in item:
+            raise ValueError("Physics tick probabilities must use 'ticks:prob' items.")
+        tick_text, prob_text = item.split(":", 1)
+        tick_values.append(max(1, int(tick_text.strip())))
+        tick_probs.append(float(prob_text.strip()))
+    return tuple(tick_values), tuple(tick_probs)
+
+
 def make_physics_config(
-    fixed_fps: float | None,
-    fps_min: float | None,
-    fps_max: float | None,
+    physics_tick_profile: str,
+    physics_tick_probs: str | None,
+    fixed_fps: float | None = None,
 ) -> TM2DPhysicsConfig:
     base = TM2DPhysicsConfig()
     if fixed_fps is not None and float(fixed_fps) > 0.0:
-        return base.with_fixed_fps(fixed_fps)
-    return base.with_fps_range(fps_min, fps_max)
+        if abs(float(fixed_fps) - 100.0) > 1e-6:
+            raise ValueError("Legacy --fixed-fps is only supported for 100 Hz after the tick-profile migration.")
+        return base.with_tick_profile("fixed100")
+    tick_values, tick_probabilities = parse_physics_tick_probs(physics_tick_probs)
+    return base.with_tick_profile(
+        physics_tick_profile,
+        tick_values=tick_values,
+        tick_probabilities=tick_probabilities,
+    )
 
 
-def evaluate_individual(env: TM2DSimEnv, individual: Individual, fitness_mode: str) -> dict:
-    metrics = env.rollout_policy(NumpyPolicyView(individual.policy))
-    apply_metrics_to_individual(individual, metrics, fitness_mode)
+def evaluation_context_key(*, mirrored: bool, evaluate_both_mirrors: bool) -> str:
+    return f"both={int(bool(evaluate_both_mirrors))};mirror={int(bool(mirrored))}"
+
+
+def aggregate_mirror_metrics(normal: dict, mirrored: dict) -> dict:
+    rollout_metrics = [normal, mirrored]
+    finished = int(min(int(metric.get("finished", 0)) for metric in rollout_metrics))
+    crashes = int(max(int(metric.get("crashes", 0)) for metric in rollout_metrics))
+    progress_values = [
+        float(metric.get("progress", metric.get("dense_progress", metric.get("block_progress", 0.0))))
+        for metric in rollout_metrics
+    ]
+    block_progress_values = [
+        float(metric.get("block_progress", metric.get("discrete_progress", metric.get("progress", 0.0))))
+        for metric in rollout_metrics
+    ]
+    metrics = {
+        "progress": float(np.mean(progress_values)),
+        "block_progress": float(np.mean(block_progress_values)),
+        "dense_progress": float(np.mean(progress_values)),
+        "discrete_progress": float(np.mean(block_progress_values)),
+        "time": float(np.mean([float(metric["time"]) for metric in rollout_metrics])),
+        "distance": float(np.mean([float(metric["distance"]) for metric in rollout_metrics])),
+        "reward": float(np.mean([float(metric["reward"]) for metric in rollout_metrics])),
+        "fitness": float(np.mean([float(metric["fitness"]) for metric in rollout_metrics])),
+        "steps": int(round(float(np.mean([int(metric.get("steps", 0)) for metric in rollout_metrics])))),
+        "finished": finished,
+        "crashes": crashes,
+        "timeout": int(finished <= 0 and crashes <= 0),
+        "terminated": bool(any(bool(metric.get("terminated", False)) for metric in rollout_metrics)),
+        "truncated": bool(any(bool(metric.get("truncated", False)) for metric in rollout_metrics)),
+        "mirrored": 0,
+        "evaluate_both_mirrors": 1,
+        "rollout_count": 2,
+        "mirror_rollout_count": 1,
+        "normal_progress": float(normal.get("progress", normal.get("dense_progress", 0.0))),
+        "mirrored_progress": float(mirrored.get("progress", mirrored.get("dense_progress", 0.0))),
+    }
+    for key in ("physics_tick_mean", "physics_hz_mean", "physics_delay_norm_mean"):
+        metrics[key] = float(np.mean([float(metric.get(key, 0.0)) for metric in rollout_metrics]))
     return metrics
 
 
-def apply_metrics_to_individual(individual: Individual, metrics: dict, fitness_mode: str) -> None:
-    individual.discrete_progress = float(metrics["progress"])
-    individual.dense_progress = float(metrics.get("dense_progress", metrics["progress"]))
+def evaluate_policy_with_context(
+    env: TM2DSimEnv,
+    policy,
+    *,
+    mirrored: bool = False,
+    evaluate_both_mirrors: bool = False,
+) -> dict:
+    if evaluate_both_mirrors:
+        normal_metrics = env.rollout_policy(policy, mirrored=False)
+        mirrored_metrics = env.rollout_policy(policy, mirrored=True)
+        return aggregate_mirror_metrics(normal_metrics, mirrored_metrics)
+    metrics = env.rollout_policy(policy, mirrored=bool(mirrored))
+    metrics["mirrored"] = int(bool(mirrored))
+    metrics["evaluate_both_mirrors"] = 0
+    metrics["rollout_count"] = 1
+    metrics["mirror_rollout_count"] = int(bool(mirrored))
+    return metrics
+
+
+def evaluate_individual(
+    env: TM2DSimEnv,
+    individual: Individual,
+    fitness_mode: str,
+    *,
+    mirrored: bool = False,
+    evaluate_both_mirrors: bool = False,
+) -> dict:
+    metrics = evaluate_policy_with_context(
+        env,
+        NumpyPolicyView(individual.policy),
+        mirrored=mirrored,
+        evaluate_both_mirrors=evaluate_both_mirrors,
+    )
+    apply_metrics_to_individual(
+        individual,
+        metrics,
+        fitness_mode,
+        evaluation_context=evaluation_context_key(
+            mirrored=mirrored,
+            evaluate_both_mirrors=evaluate_both_mirrors,
+        ),
+    )
+    return metrics
+
+
+def apply_metrics_to_individual(
+    individual: Individual,
+    metrics: dict,
+    fitness_mode: str,
+    evaluation_context: str = "",
+) -> None:
+    block_progress = float(metrics.get("block_progress", metrics.get("discrete_progress", metrics["progress"])))
+    progress = float(metrics.get("progress", metrics.get("dense_progress", block_progress)))
+    individual.discrete_progress = block_progress
+    individual.dense_progress = progress
     individual.time = float(metrics["time"])
     individual.finished = int(metrics.get("finished", 0))
     individual.crashes = int(metrics.get("crashes", 0))
@@ -103,6 +231,10 @@ def apply_metrics_to_individual(individual: Individual, metrics: dict, fitness_m
     individual.evaluation_steps = int(metrics.get("steps", 0))
     individual.evaluation_terminated = bool(metrics.get("terminated", False))
     individual.evaluation_truncated = bool(metrics.get("truncated", False))
+    individual.evaluation_context = str(evaluation_context)
+    individual.physics_tick_mean = float(metrics.get("physics_tick_mean", 0.0))
+    individual.physics_hz_mean = float(metrics.get("physics_hz_mean", 0.0))
+    individual.physics_delay_norm_mean = float(metrics.get("physics_delay_norm_mean", 0.0))
     if fitness_mode == "reward":
         individual.fitness = float(metrics["reward"])
     elif fitness_mode == "scalar":
@@ -117,14 +249,19 @@ def apply_metrics_to_individual(individual: Individual, metrics: dict, fitness_m
 
 
 def cached_metrics_from_individual(individual: Individual) -> dict:
+    context = str(getattr(individual, "evaluation_context", ""))
+    evaluate_both_mirrors = "both=1" in context
+    mirrored = "mirror=1" in context
     fitness = (
         float(individual.fitness)
         if individual.fitness is not None and np.isfinite(float(individual.fitness))
         else float(individual.compute_scalar_fitness())
     )
     return {
-        "progress": float(individual.discrete_progress),
+        "progress": float(individual.dense_progress),
+        "block_progress": float(individual.discrete_progress),
         "dense_progress": float(individual.dense_progress),
+        "discrete_progress": float(individual.discrete_progress),
         "time": float(individual.time),
         "finished": int(individual.finished),
         "crashes": int(individual.crashes),
@@ -135,6 +272,14 @@ def cached_metrics_from_individual(individual: Individual) -> dict:
         "steps": int(getattr(individual, "evaluation_steps", 0)),
         "terminated": bool(getattr(individual, "evaluation_terminated", False)),
         "truncated": bool(getattr(individual, "evaluation_truncated", False)),
+        "evaluation_context": context,
+        "mirrored": int(mirrored),
+        "evaluate_both_mirrors": int(evaluate_both_mirrors),
+        "rollout_count": 2 if evaluate_both_mirrors else 1,
+        "mirror_rollout_count": 1 if (evaluate_both_mirrors or mirrored) else 0,
+        "physics_tick_mean": float(getattr(individual, "physics_tick_mean", 0.0)),
+        "physics_hz_mean": float(getattr(individual, "physics_hz_mean", 0.0)),
+        "physics_delay_norm_mean": float(getattr(individual, "physics_delay_norm_mean", 0.0)),
     }
 
 
@@ -150,6 +295,11 @@ def make_tm2d_env_from_args(args, reward_config, physics_config, seed: int) -> T
         vertical_mode=args.vertical_mode,
         multi_surface_mode=args.multi_surface_mode,
         binary_gas_brake=not args.continuous_gas_brake,
+        max_touches=args.max_touches,
+        collision_bounce_speed_retention=args.collision_bounce_speed_retention,
+        collision_bounce_backoff=args.collision_bounce_backoff,
+        touch_release_clearance_threshold=args.touch_release_clearance_threshold,
+        mask_physics_delay_observation=args.mask_physics_delay_observation,
     )
 
 
@@ -170,12 +320,24 @@ def metric_stats(prefix: str, values) -> dict[str, float]:
     }
 
 
+def finish_triggered_decay_factor(current_value: float, target_value: float, remaining_generations: int) -> float:
+    if remaining_generations <= 0:
+        return 1.0
+    current = float(current_value)
+    target = float(target_value)
+    if current <= target or current <= 0.0:
+        return 1.0
+    if target <= 0.0:
+        return 0.0
+    return float((target / current) ** (1.0 / float(remaining_generations)))
+
+
 def generation_metric_fieldnames() -> list[str]:
     base_fields = [
         "generation",
         "best_fitness",
         "best_progress",
-        "best_dense_progress",
+        "best_block_progress",
         "best_ranking_progress",
         "best_time",
         "best_finished",
@@ -184,8 +346,18 @@ def generation_metric_fieldnames() -> list[str]:
         "best_steps",
         "best_reward",
         "best_ranking_key",
+        "current_mutation_prob",
+        "current_mutation_sigma",
+        "mutation_decay_trigger",
+        "mutation_decay_active",
+        "mutation_decay_trigger_generation",
+        "effective_mutation_prob_decay",
+        "effective_mutation_sigma_decay",
         "cached_evaluations",
         "evaluated_count",
+        "rollout_count",
+        "mirror_rollout_count",
+        "mirror_individual_count",
         "population_size",
         "finish_count",
         "crash_count",
@@ -199,21 +371,34 @@ def generation_metric_fieldnames() -> list[str]:
         "generation_wall_seconds",
         "cumulative_wall_seconds",
         "mean_progress",
-        "mean_dense_progress",
+        "mean_block_progress",
         "mean_ranking_progress",
         "mean_reward",
         "mean_time",
+        "mean_physics_tick_count",
+        "mean_physics_hz",
+        "mean_physics_delay_norm",
+        "generalization_test_map",
+        "generalization_best_finished",
+        "generalization_best_crashes",
+        "generalization_best_progress",
+        "generalization_best_block_progress",
+        "generalization_best_time",
+        "generalization_best_distance",
     ]
     stat_fields: list[str] = []
     for prefix in (
         "progress",
-        "dense_progress",
+        "block_progress",
         "ranking_progress",
         "time",
         "distance",
         "reward",
         "fitness",
         "steps",
+        "physics_tick",
+        "physics_hz",
+        "physics_delay_norm",
     ):
         stat_fields.extend(metric_stats(prefix, [0.0]).keys())
     return base_fields + [field for field in stat_fields if field not in base_fields]
@@ -225,13 +410,16 @@ def individual_metric_fieldnames() -> list[str]:
         "rank",
         "original_index",
         "cached",
+        "evaluation_context",
+        "mirrored",
+        "evaluate_both_mirrors",
         "is_elite",
         "is_parent",
         "fitness",
         "ranking_key",
         "ranking_progress",
         "progress",
-        "dense_progress",
+        "block_progress",
         "time",
         "finished",
         "crashes",
@@ -239,8 +427,41 @@ def individual_metric_fieldnames() -> list[str]:
         "distance",
         "reward",
         "steps",
+        "physics_tick_mean",
+        "physics_hz_mean",
+        "physics_delay_norm_mean",
         "terminated",
         "truncated",
+    ]
+
+
+def generalization_metric_fieldnames() -> list[str]:
+    return [
+        "generation",
+        "train_rank",
+        "original_index",
+        "test_map",
+        "train_finished",
+        "train_crashes",
+        "train_time",
+        "train_progress",
+        "train_block_progress",
+        "train_distance",
+        "test_finished",
+        "test_crashes",
+        "test_timeout",
+        "test_time",
+        "test_progress",
+        "test_block_progress",
+        "test_distance",
+        "test_steps",
+        "test_reward",
+        "test_fitness",
+        "test_physics_tick_mean",
+        "test_physics_hz_mean",
+        "test_physics_delay_norm_mean",
+        "test_terminated",
+        "test_truncated",
     ]
 
 
@@ -257,9 +478,9 @@ def _init_worker(config: dict) -> None:
         max_time=float(config["max_time"]),
         reward_config=reward_config,
         physics_config=make_physics_config(
+            physics_tick_profile=str(config.get("physics_tick_profile", "supervised_v2d")),
+            physics_tick_probs=config.get("physics_tick_probs"),
             fixed_fps=config.get("fixed_fps"),
-            fps_min=config.get("fps_min"),
-            fps_max=config.get("fps_max"),
         ),
         seed=int(config["seed"]),
         collision_mode=str(config["collision_mode"]),
@@ -267,13 +488,18 @@ def _init_worker(config: dict) -> None:
         vertical_mode=bool(config.get("vertical_mode", False)),
         multi_surface_mode=bool(config.get("multi_surface_mode", False)),
         binary_gas_brake=bool(config.get("binary_gas_brake", True)),
+        max_touches=int(config.get("max_touches", 1)),
+        collision_bounce_speed_retention=float(config.get("collision_bounce_speed_retention", 0.40)),
+        collision_bounce_backoff=float(config.get("collision_bounce_backoff", 0.05)),
+        touch_release_clearance_threshold=float(config.get("touch_release_clearance_threshold", 0.50)),
+        mask_physics_delay_observation=bool(config.get("mask_physics_delay_observation", False)),
     )
 
 
-def _evaluate_genome_worker(payload: tuple[int, np.ndarray]) -> tuple[int, dict]:
+def _evaluate_genome_worker(payload: tuple[int, np.ndarray, bool, bool]) -> tuple[int, dict]:
     if _WORKER_ENV is None or _WORKER_CONFIG is None:
         raise RuntimeError("Worker environment was not initialized.")
-    index, genome = payload
+    index, genome, mirrored, evaluate_both_mirrors = payload
     policy = NumpyGenomePolicyView(
         genome=np.asarray(genome, dtype=np.float32),
         obs_dim=int(_WORKER_CONFIG["obs_dim"]),
@@ -283,7 +509,12 @@ def _evaluate_genome_worker(payload: tuple[int, np.ndarray]) -> tuple[int, dict]
         action_mode=str(_WORKER_CONFIG["action_mode"]),
         action_scale=np.asarray(_WORKER_CONFIG["action_scale"], dtype=np.float32),
     )
-    metrics = _WORKER_ENV.rollout_policy(policy)
+    metrics = evaluate_policy_with_context(
+        _WORKER_ENV,
+        policy,
+        mirrored=bool(mirrored),
+        evaluate_both_mirrors=bool(evaluate_both_mirrors),
+    )
     return int(index), metrics
 
 
@@ -362,6 +593,122 @@ def make_child_pool(parents: list[Individual], child_count: int) -> list[Individ
     return children
 
 
+def seed_population_from_model(
+    model_path: str | Path,
+    *,
+    population_size: int,
+    obs_dim: int,
+    act_dim: int,
+    hidden_dim: tuple[int, ...],
+    hidden_activation: tuple[str, ...],
+    exact_copies: int,
+    noise_mode: str,
+    mutation_probs: list[float],
+    mutation_sigmas: list[float],
+    tier_counts: list[int] | None,
+) -> tuple[list[Individual], dict]:
+    if len(mutation_probs) != len(mutation_sigmas):
+        raise ValueError("--initial-model-mutation-probs and --initial-model-mutation-sigmas must have the same length.")
+    if not mutation_probs:
+        raise ValueError("At least one initial model mutation tier is required.")
+    noise_mode = str(noise_mode).strip().lower()
+    if noise_mode not in {"sparse", "dense"}:
+        raise ValueError("--initial-model-noise-mode must be either sparse or dense.")
+
+    model_path = Path(model_path)
+    loaded_policy, model_extra = NeuralPolicy.load(str(model_path), map_location="cpu")
+    loaded_hidden_dim = tuple(int(dim) for dim in loaded_policy.hidden_dims)
+    loaded_hidden_activation = tuple(str(value) for value in loaded_policy.hidden_activations)
+
+    if int(loaded_policy.obs_dim) != int(obs_dim):
+        raise ValueError(f"Initial model obs_dim={loaded_policy.obs_dim} does not match TM2D obs_dim={obs_dim}.")
+    if int(loaded_policy.act_dim) != int(act_dim):
+        raise ValueError(f"Initial model act_dim={loaded_policy.act_dim} does not match TM2D act_dim={act_dim}.")
+    if loaded_hidden_dim != tuple(hidden_dim):
+        raise ValueError(f"Initial model hidden_dim={loaded_hidden_dim} does not match requested hidden_dim={hidden_dim}.")
+    if loaded_hidden_activation != tuple(hidden_activation):
+        raise ValueError(
+            f"Initial model hidden_activation={list(loaded_hidden_activation)} "
+            f"does not match requested hidden_activation={list(hidden_activation)}."
+        )
+    if str(loaded_policy.action_mode).strip().lower() != "target":
+        raise ValueError(f"Initial model action_mode={loaded_policy.action_mode!r}; expected 'target'.")
+
+    exact_copies = int(exact_copies)
+    population_size = int(population_size)
+    if exact_copies < 0:
+        raise ValueError("--initial-model-exact-copies must be non-negative.")
+    if exact_copies > population_size:
+        raise ValueError("--initial-model-exact-copies must not exceed --population-size.")
+
+    remaining = population_size - exact_copies
+    if tier_counts is None:
+        tier_counts = [remaining // len(mutation_probs) for _ in mutation_probs]
+        for index in range(remaining % len(mutation_probs)):
+            tier_counts[index] += 1
+    else:
+        tier_counts = [int(value) for value in tier_counts]
+        if len(tier_counts) != len(mutation_probs):
+            raise ValueError("--initial-model-tier-counts length must match mutation tier count.")
+        if sum(tier_counts) != remaining:
+            raise ValueError(
+                f"--initial-model-tier-counts sum to {sum(tier_counts)}, expected remaining population {remaining}."
+            )
+
+    action_scale = loaded_policy.action_scale.detach().cpu().numpy().astype(np.float32)
+    base = Individual(
+        obs_dim=obs_dim,
+        hidden_dim=hidden_dim,
+        act_dim=act_dim,
+        genome=loaded_policy.genome.copy(),
+        action_scale=action_scale,
+        action_mode="target",
+        hidden_activation=hidden_activation,
+    )
+
+    population = [base.copy() for _ in range(exact_copies)]
+    tiers: list[dict] = []
+    for count, prob, sigma in zip(tier_counts, mutation_probs, mutation_sigmas):
+        count = int(count)
+        if count <= 0:
+            continue
+        for _ in range(count):
+            child = base.copy()
+            if noise_mode == "dense":
+                noisy_genome = child.genome.copy()
+                noisy_genome += np.random.randn(noisy_genome.size).astype(np.float32) * float(sigma)
+                child.genome = noisy_genome
+            else:
+                child.mutate(mutation_prob=float(prob), sigma=float(sigma))
+            population.append(child)
+        tiers.append(
+            {
+                "count": count,
+                "noise_mode": noise_mode,
+                "mutation_prob": float(prob),
+                "mutation_sigma": float(sigma),
+            }
+        )
+
+    if len(population) != population_size:
+        raise RuntimeError(f"Seeded population has {len(population)} individuals, expected {population_size}.")
+
+    unique_genomes = {
+        individual.genome.astype(np.float32, copy=False).tobytes()
+        for individual in population
+    }
+    summary = {
+        "source_model": str(model_path),
+        "exact_copies": int(exact_copies),
+        "noise_mode": noise_mode,
+        "tiers": tiers,
+        "unique_genomes": int(len(unique_genomes)),
+        "model_config": json_safe(loaded_policy.get_config()),
+        "model_extra": json_safe(model_extra),
+    }
+    return population, summary
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fast 2D Trackmania-like GA experiments.")
     parser.add_argument("--map-name", default="AI Training #5")
@@ -375,23 +722,58 @@ def main() -> None:
     parser.add_argument("--mutation-prob", type=float, default=0.18)
     parser.add_argument("--mutation-sigma", type=float, default=0.22)
     parser.add_argument(
-        "--fixed-fps",
+        "--mutation-prob-decay",
         type=float,
-        default=None,
-        help="Use deterministic fixed simulation FPS by setting min_dt=max_dt=1/fps.",
+        default=1.0,
+        help="Multiplicative mutation probability decay applied after each generation.",
     )
     parser.add_argument(
-        "--fps-min",
+        "--mutation-prob-min",
         type=float,
         default=None,
-        help="Minimum random simulation FPS. Ignored when --fixed-fps is provided.",
+        help="Lower bound for mutation probability decay. Defaults to --mutation-prob.",
     )
     parser.add_argument(
-        "--fps-max",
+        "--mutation-sigma-decay",
+        type=float,
+        default=1.0,
+        help="Multiplicative mutation sigma decay applied after each generation.",
+    )
+    parser.add_argument(
+        "--mutation-sigma-min",
         type=float,
         default=None,
-        help="Maximum random simulation FPS. Ignored when --fixed-fps is provided.",
+        help="Lower bound for mutation sigma decay. Defaults to --mutation-sigma.",
     )
+    parser.add_argument(
+        "--mutation-decay-trigger",
+        choices=["immediate", "first_finish"],
+        default="immediate",
+        help=(
+            "When to start applying mutation decay. immediate preserves the legacy "
+            "behavior; first_finish keeps exploration values until the first finisher "
+            "and then computes a decay that reaches the min values by the final generation."
+        ),
+    )
+    parser.add_argument(
+        "--physics-tick-profile",
+        choices=["fixed100", "supervised_v2d", "custom"],
+        default="supervised_v2d",
+        help="Discrete physics tick profile used by TM2D. fixed100 keeps 100 Hz; supervised_v2d mimics measured live tick skips.",
+    )
+    parser.add_argument(
+        "--physics-tick-probs",
+        default=None,
+        help="Custom tick distribution as '1:0.938,2:0.060,3:0.001,4:0.001'. Requires --physics-tick-profile custom.",
+    )
+    parser.add_argument(
+        "--mask-physics-delay-observation",
+        action="store_true",
+        help="Keep variable physics ticks but force the observation physics_delay_norm feature to zero.",
+    )
+    parser.add_argument("--fixed-fps", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--fps-min", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--fps-max", type=float, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--fitness-mode", choices=["scalar", "reward", "ranking"], default="scalar")
     parser.add_argument(
         "--ranking-mode",
@@ -404,14 +786,14 @@ def main() -> None:
         default="(finished, progress, -time, -crashes, -distance)",
         help=(
             "Lexicographic tuple expression, e.g. "
-            "'(dense_progress, finished, -time, -crashes, -distance)'. "
+            "'(progress, finished, -time, -crashes, -distance)'. "
         ),
     )
     parser.add_argument(
         "--ranking-progress-source",
         choices=list(Individual.RANKING_PROGRESS_SOURCES),
-        default="dense_progress",
-        help="Progress value used inside ranking tuples: discrete checkpoints or dense geometry.",
+        default="progress",
+        help="Progress value used inside ranking tuples: progress=dense geometry, block_progress=discrete checkpoints.",
     )
     parser.add_argument("--collision-mode", choices=["center", "corners", "laser", "lidar"], default="laser")
     parser.add_argument(
@@ -442,6 +824,30 @@ def main() -> None:
         help="Disable live-TM-style gas/brake binarization in TM2D diagnostics.",
     )
     parser.add_argument(
+        "--max-touches",
+        type=int,
+        default=1,
+        help="Number of AABB-lidar touches allowed before terminating the TM2D episode.",
+    )
+    parser.add_argument(
+        "--collision-bounce-speed-retention",
+        type=float,
+        default=0.40,
+        help="Velocity multiplier after a non-terminal TM2D lidar touch when --max-touches > 1.",
+    )
+    parser.add_argument(
+        "--collision-bounce-backoff",
+        type=float,
+        default=0.05,
+        help="Small push away from the wall after a non-terminal TM2D lidar touch.",
+    )
+    parser.add_argument(
+        "--touch-release-clearance-threshold",
+        type=float,
+        default=0.50,
+        help="Required lidar clearance before another TM2D touch can be counted.",
+    )
+    parser.add_argument(
         "--reward-mode",
         choices=[
             "progress_delta",
@@ -456,6 +862,14 @@ def main() -> None:
             "delta_lexicographic_terminal",
             "terminal_progress_time_efficiency",
             "delta_progress_time_efficiency",
+            "terminal_finished_progress_time",
+            "delta_finished_progress_time",
+            "terminal_finished_progress_time_crashes",
+            "delta_finished_progress_time_crashes",
+            "terminal_progress_time_safety",
+            "delta_progress_time_safety",
+            "terminal_progress_time_block_penalty",
+            "delta_progress_time_block_penalty",
             "progress_rate",
         ],
         default="progress_primary_delta",
@@ -486,6 +900,17 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--evaluate-both-mirrors",
+        action="store_true",
+        help="Evaluate every individual on normal and mirrored observations/actions, then aggregate metrics.",
+    )
+    parser.add_argument(
+        "--mirror-episode-prob",
+        type=float,
+        default=0.0,
+        help="Probability that an individual is evaluated in mirrored mode instead of normal mode.",
+    )
+    parser.add_argument(
         "--trajectory-log-mode",
         choices=["off", "top", "top-finishers-final", "all"],
         default="off",
@@ -502,6 +927,64 @@ def main() -> None:
         action="store_true",
         help="Also store gas/brake/steer arrays in trajectory NPZ files.",
     )
+    parser.add_argument(
+        "--generalization-test-map",
+        default="",
+        help="Optional holdout map for post-generation top-K evaluation. Does not affect training fitness.",
+    )
+    parser.add_argument(
+        "--generalization-test-top-k",
+        type=int,
+        default=1,
+        help="Number of top-ranked individuals to evaluate on the holdout map.",
+    )
+    parser.add_argument(
+        "--generalization-test-every",
+        type=int,
+        default=1,
+        help="Run holdout-map evaluation every N generations.",
+    )
+    parser.add_argument(
+        "--generalization-test-max-time",
+        type=float,
+        default=None,
+        help="Max episode time for holdout-map evaluation. Defaults to --max-time.",
+    )
+    parser.add_argument(
+        "--initial-population-model",
+        default="",
+        help="Optional NeuralPolicy best_model.pt used to seed the first TM2D GA population.",
+    )
+    parser.add_argument(
+        "--initial-model-exact-copies",
+        type=int,
+        default=1,
+        help="Number of exact supervised-model copies in the initial population.",
+    )
+    parser.add_argument(
+        "--initial-model-noise-mode",
+        choices=["sparse", "dense"],
+        default="sparse",
+        help=(
+            "How to perturb supervised-seeded tiers. sparse uses GA mutation_prob masks; "
+            "dense adds Gaussian noise to every genome value in the tier."
+        ),
+    )
+    parser.add_argument(
+        "--initial-model-mutation-probs",
+        default="0.02,0.05,0.10",
+        help="Comma-separated mutation probabilities for supervised-seeded population tiers.",
+    )
+    parser.add_argument(
+        "--initial-model-mutation-sigmas",
+        default="0.01,0.025,0.05",
+        help="Comma-separated mutation sigmas for supervised-seeded population tiers.",
+    )
+    parser.add_argument(
+        "--initial-model-tier-counts",
+        default="",
+        help="Optional comma-separated tier counts. Sum must be population minus exact copies.",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -509,15 +992,41 @@ def main() -> None:
     ranking_key = str(args.ranking_key)
     ranking_key_expression = canonical_ranking_key_expression(ranking_key)
     ranking_progress_source = str(args.ranking_progress_source)
+    if ranking_progress_source == "dense_progress":
+        ranking_progress_source = "progress"
+    elif ranking_progress_source == "discrete_progress":
+        ranking_progress_source = "block_progress"
     if (
         args.ranking_key is not None
         and "dense_progress" in ranking_key_expression
-        and ranking_progress_source != "dense_progress"
+        and ranking_progress_source != "progress"
     ):
-        ranking_progress_source = "dense_progress"
+        ranking_progress_source = "progress"
+    if (
+        args.ranking_key is not None
+        and ("block_progress" in ranking_key_expression or "discrete_progress" in ranking_key_expression)
+    ):
+        ranking_progress_source = "block_progress"
     Individual.RANKING_KEY = ranking_key
     Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
     elite_cache_enabled = bool(args.enable_elite_cache and not args.disable_elite_cache)
+    mutation_prob_min = float(args.mutation_prob if args.mutation_prob_min is None else args.mutation_prob_min)
+    mutation_sigma_min = float(args.mutation_sigma if args.mutation_sigma_min is None else args.mutation_sigma_min)
+    if float(args.mutation_prob_decay) <= 0.0 or float(args.mutation_sigma_decay) <= 0.0:
+        raise ValueError("Mutation decay factors must be positive.")
+    if mutation_prob_min < 0.0 or mutation_sigma_min < 0.0:
+        raise ValueError("Mutation minimum values must be non-negative.")
+    mirror_episode_prob = float(np.clip(float(args.mirror_episode_prob), 0.0, 1.0))
+    evaluate_both_mirrors = bool(args.evaluate_both_mirrors)
+    if evaluate_both_mirrors:
+        mirror_episode_prob = 0.0
+    generalization_test_map = str(args.generalization_test_map).strip()
+    generalization_test_enabled = bool(generalization_test_map)
+    generalization_test_top_k = max(1, int(args.generalization_test_top_k))
+    generalization_test_every = max(1, int(args.generalization_test_every))
+    generalization_test_max_time = float(
+        args.max_time if args.generalization_test_max_time is None else args.generalization_test_max_time
+    )
 
     hidden_dim = tuple(parse_list(args.hidden_dim, int))
     hidden_activation = tuple(parse_list(args.hidden_activation, str))
@@ -525,24 +1034,61 @@ def main() -> None:
     hidden_activation = normalize_hidden_activations(hidden_activation, len(hidden_dim))
 
     reward_config = TM2DRewardConfig(mode=args.reward_mode)
+    if args.fps_min is not None or args.fps_max is not None:
+        raise ValueError(
+            "--fps-min/--fps-max were removed. Use --physics-tick-profile supervised_v2d "
+            "or --physics-tick-profile custom --physics-tick-probs instead."
+        )
     physics_config = make_physics_config(
+        physics_tick_profile=args.physics_tick_profile,
+        physics_tick_probs=args.physics_tick_probs,
         fixed_fps=args.fixed_fps,
-        fps_min=args.fps_min,
-        fps_max=args.fps_max,
+    )
+    effective_physics_tick_profile = (
+        "fixed100"
+        if args.fixed_fps is not None and float(args.fixed_fps) > 0.0
+        else str(args.physics_tick_profile)
     )
     env = make_tm2d_env_from_args(args, reward_config, physics_config, seed=args.seed)
     action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
-    population = [
-        Individual(
-            obs_dim=env.obs_dim,
-            hidden_dim=hidden_dim,
-            act_dim=env.act_dim,
-            action_scale=action_scale,
-            action_mode="target",
-            hidden_activation=hidden_activation,
+    initial_population_model = str(args.initial_population_model).strip()
+    initial_population_summary: dict | None = None
+    if initial_population_model:
+        tier_counts = (
+            parse_list(args.initial_model_tier_counts, int)
+            if str(args.initial_model_tier_counts).strip()
+            else None
         )
-        for _ in range(args.population_size)
-    ]
+        population, initial_population_summary = seed_population_from_model(
+            initial_population_model,
+            population_size=int(args.population_size),
+            obs_dim=int(env.obs_dim),
+            act_dim=int(env.act_dim),
+            hidden_dim=hidden_dim,
+            hidden_activation=hidden_activation,
+            exact_copies=int(args.initial_model_exact_copies),
+            noise_mode=str(args.initial_model_noise_mode),
+            mutation_probs=parse_list(args.initial_model_mutation_probs, float),
+            mutation_sigmas=parse_list(args.initial_model_mutation_sigmas, float),
+            tier_counts=tier_counts,
+        )
+        print(
+            "Seeded initial population from supervised model: "
+            f"{initial_population_model} | unique_genomes={initial_population_summary['unique_genomes']}/"
+            f"{args.population_size}"
+        )
+    else:
+        population = [
+            Individual(
+                obs_dim=env.obs_dim,
+                hidden_dim=hidden_dim,
+                act_dim=env.act_dim,
+                action_scale=action_scale,
+                action_mode="target",
+                hidden_activation=hidden_activation,
+            )
+            for _ in range(args.population_size)
+        ]
 
     run_name = time.strftime("%Y%m%d_%H%M%S") + f"_tm2d_ga_{args.map_name.replace(' ', '_').replace('#', '')}"
     run_dir = Path(args.log_dir) / run_name
@@ -558,9 +1104,15 @@ def main() -> None:
         "hidden_activation": list(hidden_activation),
         "mutation_prob": args.mutation_prob,
         "mutation_sigma": args.mutation_sigma,
-        "fixed_fps": args.fixed_fps,
-        "fps_min": args.fps_min,
-        "fps_max": args.fps_max,
+        "mutation_prob_decay": float(args.mutation_prob_decay),
+        "mutation_prob_min": float(mutation_prob_min),
+        "mutation_sigma_decay": float(args.mutation_sigma_decay),
+        "mutation_sigma_min": float(mutation_sigma_min),
+        "mutation_decay_trigger": str(args.mutation_decay_trigger),
+        "physics_tick_profile": effective_physics_tick_profile,
+        "physics_tick_probs": args.physics_tick_probs,
+        "mask_physics_delay_observation": bool(args.mask_physics_delay_observation),
+        "legacy_fixed_fps": args.fixed_fps,
         "fitness_mode": args.fitness_mode,
         "ranking_mode": args.ranking_mode,
         "ranking_key": ranking_key,
@@ -575,7 +1127,13 @@ def main() -> None:
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),
+        "max_touches": int(args.max_touches),
+        "collision_bounce_speed_retention": float(args.collision_bounce_speed_retention),
+        "collision_bounce_backoff": float(args.collision_bounce_backoff),
+        "touch_release_clearance_threshold": float(args.touch_release_clearance_threshold),
         "elite_cache_enabled": bool(elite_cache_enabled),
+        "evaluate_both_mirrors": bool(evaluate_both_mirrors),
+        "mirror_episode_prob": float(mirror_episode_prob),
         "obs_dim": env.obs_dim,
         "act_dim": env.act_dim,
         "progress_bucket": env.progress_bucket,
@@ -584,6 +1142,26 @@ def main() -> None:
         "trajectory_log_mode": str(args.trajectory_log_mode),
         "trajectory_top_k": int(args.trajectory_top_k),
         "trajectory_log_actions": bool(args.trajectory_log_actions),
+        "generalization_test_map": generalization_test_map,
+        "generalization_test_top_k": int(generalization_test_top_k),
+        "generalization_test_every": int(generalization_test_every),
+        "generalization_test_max_time": float(generalization_test_max_time),
+        "generalization_test_note": (
+            "Holdout-map rollouts are diagnostic only and never affect ranking, "
+            "selection, elite cache, mutation, or best policy selection."
+        ),
+        "initial_population_source": "supervised_model" if initial_population_model else "random",
+        "initial_population_model": initial_population_model,
+        "initial_model_exact_copies": int(args.initial_model_exact_copies),
+        "initial_model_noise_mode": str(args.initial_model_noise_mode),
+        "initial_model_mutation_probs": parse_list(args.initial_model_mutation_probs, float),
+        "initial_model_mutation_sigmas": parse_list(args.initial_model_mutation_sigmas, float),
+        "initial_model_tier_counts": (
+            parse_list(args.initial_model_tier_counts, int)
+            if str(args.initial_model_tier_counts).strip()
+            else None
+        ),
+        "initial_population_summary": initial_population_summary,
         "trajectory_logging_note": (
             "TM2D trajectories are replayed after selection to avoid worker IPC. "
             "With stochastic FPS they are diagnostic replays of the same genome, "
@@ -601,26 +1179,68 @@ def main() -> None:
         if trajectory_logger is not None
         else None
     )
+    generalization_reward_config = TM2DRewardConfig(mode=args.reward_mode)
+    generalization_env = (
+        TM2DSimEnv(
+            map_name=generalization_test_map,
+            max_time=generalization_test_max_time,
+            reward_config=generalization_reward_config,
+            physics_config=physics_config,
+            seed=args.seed + 2_000_000,
+            collision_mode=args.collision_mode,
+            collision_distance_threshold=args.collision_distance_threshold,
+            vertical_mode=args.vertical_mode,
+            multi_surface_mode=args.multi_surface_mode,
+            binary_gas_brake=bool(not args.continuous_gas_brake),
+            max_touches=int(args.max_touches),
+            collision_bounce_speed_retention=float(args.collision_bounce_speed_retention),
+            collision_bounce_backoff=float(args.collision_bounce_backoff),
+            touch_release_clearance_threshold=float(args.touch_release_clearance_threshold),
+            mask_physics_delay_observation=bool(args.mask_physics_delay_observation),
+        )
+        if generalization_test_enabled
+        else None
+    )
 
     csv_path = run_dir / "generation_metrics.csv"
     individual_csv_path = run_dir / "individual_metrics.csv"
+    generalization_csv_path = run_dir / "generalization_metrics.csv"
     with (
         csv_path.open("w", newline="", encoding="utf-8") as handle,
         individual_csv_path.open("w", newline="", encoding="utf-8") as individual_handle,
+        (
+            generalization_csv_path.open("w", newline="", encoding="utf-8")
+            if generalization_test_enabled
+            else nullcontext()
+        ) as generalization_handle,
     ):
         writer = csv.DictWriter(handle, fieldnames=generation_metric_fieldnames())
         individual_writer = csv.DictWriter(
             individual_handle,
             fieldnames=individual_metric_fieldnames(),
         )
+        generalization_writer = (
+            csv.DictWriter(generalization_handle, fieldnames=generalization_metric_fieldnames())
+            if generalization_test_enabled
+            else None
+        )
         writer.writeheader()
         individual_writer.writeheader()
+        if generalization_writer is not None:
+            generalization_writer.writeheader()
 
         worker_pool = None
         best_overall: Individual | None = None
         training_wall_start = time.perf_counter()
         cumulative_virtual_time = 0.0
         cumulative_virtual_steps = 0
+        current_mutation_prob = float(args.mutation_prob)
+        current_mutation_sigma = float(args.mutation_sigma)
+        mutation_decay_trigger = str(args.mutation_decay_trigger)
+        mutation_decay_active = mutation_decay_trigger == "immediate"
+        mutation_decay_trigger_generation = 0 if mutation_decay_active else None
+        effective_mutation_prob_decay = float(args.mutation_prob_decay)
+        effective_mutation_sigma_decay = float(args.mutation_sigma_decay)
         if int(args.num_workers) > 1:
             worker_config = {
                 "map_name": args.map_name,
@@ -633,10 +1253,15 @@ def main() -> None:
                 "vertical_mode": bool(args.vertical_mode),
                 "multi_surface_mode": bool(args.multi_surface_mode),
                 "binary_gas_brake": bool(not args.continuous_gas_brake),
+                "max_touches": int(args.max_touches),
+                "collision_bounce_speed_retention": float(args.collision_bounce_speed_retention),
+                "collision_bounce_backoff": float(args.collision_bounce_backoff),
+                "touch_release_clearance_threshold": float(args.touch_release_clearance_threshold),
                 "seed": args.seed,
+                "physics_tick_profile": effective_physics_tick_profile,
+                "physics_tick_probs": args.physics_tick_probs,
+                "mask_physics_delay_observation": bool(args.mask_physics_delay_observation),
                 "fixed_fps": args.fixed_fps,
-                "fps_min": args.fps_min,
-                "fps_max": args.fps_max,
                 "obs_dim": env.obs_dim,
                 "hidden_dim": list(hidden_dim),
                 "hidden_activation": list(hidden_activation),
@@ -658,22 +1283,53 @@ def main() -> None:
                 original_index_by_id: dict[int, int] = {
                     id(individual): idx for idx, individual in enumerate(population)
                 }
+                if evaluate_both_mirrors:
+                    mirror_flags = np.zeros(len(population), dtype=bool)
+                elif mirror_episode_prob > 0.0:
+                    mirror_flags = np.random.rand(len(population)) < mirror_episode_prob
+                else:
+                    mirror_flags = np.zeros(len(population), dtype=bool)
+                requested_context_by_id: dict[int, str] = {
+                    id(individual): evaluation_context_key(
+                        mirrored=bool(mirror_flags[idx]),
+                        evaluate_both_mirrors=evaluate_both_mirrors,
+                    )
+                    for idx, individual in enumerate(population)
+                }
                 if worker_pool is None:
                     metrics = []
-                    for individual in population:
-                        if elite_cache_enabled and bool(getattr(individual, "evaluation_valid", False)):
+                    for idx, individual in enumerate(population):
+                        # Elite cache is intentionally elite-safe: a valid cached elite
+                        # is not re-evaluated just because mirror_probability sampled
+                        # the opposite context in this generation.
+                        can_use_cache = (
+                            elite_cache_enabled
+                            and bool(getattr(individual, "evaluation_valid", False))
+                        )
+                        if can_use_cache:
                             cached_evaluations += 1
                             cached_by_id[id(individual)] = True
                             metrics.append(cached_metrics_from_individual(individual))
                         else:
                             cached_by_id[id(individual)] = False
                             metrics.append(
-                                evaluate_individual(env, individual, args.fitness_mode)
+                                evaluate_individual(
+                                    env,
+                                    individual,
+                                    args.fitness_mode,
+                                    mirrored=bool(mirror_flags[idx]),
+                                    evaluate_both_mirrors=evaluate_both_mirrors,
+                                )
                             )
                 else:
                     metrics = [None for _ in population]
                     for idx, individual in enumerate(population):
-                        if elite_cache_enabled and bool(getattr(individual, "evaluation_valid", False)):
+                        # Elite cache is intentionally elite-safe; see sequential branch.
+                        can_use_cache = (
+                            elite_cache_enabled
+                            and bool(getattr(individual, "evaluation_valid", False))
+                        )
+                        if can_use_cache:
                             cached_evaluations += 1
                             cached_by_id[id(individual)] = True
                             metrics[idx] = cached_metrics_from_individual(individual)
@@ -681,14 +1337,24 @@ def main() -> None:
                             cached_by_id[id(individual)] = False
 
                     payloads = [
-                        (idx, individual.genome.copy())
+                        (
+                            idx,
+                            individual.genome.copy(),
+                            bool(mirror_flags[idx]),
+                            bool(evaluate_both_mirrors),
+                        )
                         for idx, individual in enumerate(population)
                         if metrics[idx] is None
                     ]
                     if payloads:
                         for idx, metric in worker_pool.map(_evaluate_genome_worker, payloads):
                             metrics[idx] = metric
-                            apply_metrics_to_individual(population[idx], metric, args.fitness_mode)
+                            apply_metrics_to_individual(
+                                population[idx],
+                                metric,
+                                args.fitness_mode,
+                                evaluation_context=requested_context_by_id[id(population[idx])],
+                            )
                     metrics = [metric for metric in metrics if metric is not None]
 
                 population.sort(reverse=True)
@@ -700,16 +1366,25 @@ def main() -> None:
                     if best.fitness is not None and np.isfinite(best.fitness)
                         else float(best.compute_scalar_fitness())
                 )
-                progress_values = np.asarray([float(metric["progress"]) for metric in metrics], dtype=np.float64)
-                dense_progress_values = np.asarray(
-                    [float(metric["dense_progress"]) for metric in metrics],
+                progress_values = np.asarray(
+                    [
+                        float(metric.get("progress", metric.get("dense_progress", metric.get("block_progress", 0.0))))
+                        for metric in metrics
+                    ],
+                    dtype=np.float64,
+                )
+                block_progress_values = np.asarray(
+                    [
+                        float(metric.get("block_progress", metric.get("discrete_progress", metric.get("progress", 0.0))))
+                        for metric in metrics
+                    ],
                     dtype=np.float64,
                 )
                 ranking_progress_values = np.asarray(
                     [
-                        float(metric["dense_progress"])
-                        if ranking_progress_source == "dense_progress"
-                        else float(metric["progress"])
+                        float(metric.get("block_progress", metric.get("discrete_progress", metric.get("progress", 0.0))))
+                        if ranking_progress_source in {"block_progress", "discrete_progress"}
+                        else float(metric.get("progress", metric.get("dense_progress", 0.0)))
                         for metric in metrics
                     ],
                     dtype=np.float64,
@@ -719,6 +1394,18 @@ def main() -> None:
                 time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
                 distance_values = np.asarray([float(metric["distance"]) for metric in metrics], dtype=np.float64)
                 step_values = np.asarray([int(metric.get("steps", 0)) for metric in metrics], dtype=np.float64)
+                physics_tick_values = np.asarray(
+                    [float(metric.get("physics_tick_mean", 1.0)) for metric in metrics],
+                    dtype=np.float64,
+                )
+                physics_hz_values = np.asarray(
+                    [float(metric.get("physics_hz_mean", 100.0)) for metric in metrics],
+                    dtype=np.float64,
+                )
+                physics_delay_values = np.asarray(
+                    [float(metric.get("physics_delay_norm_mean", 0.0)) for metric in metrics],
+                    dtype=np.float64,
+                )
                 finished_values = np.asarray([int(metric.get("finished", 0)) for metric in metrics], dtype=np.int32)
                 crash_values = np.asarray([int(metric.get("crashes", 0)) for metric in metrics], dtype=np.int32)
                 timeout_values = np.asarray(
@@ -728,6 +1415,105 @@ def main() -> None:
                     ],
                     dtype=np.int32,
                 )
+                rollout_count_sum = int(sum(int(metric.get("rollout_count", 1)) for metric in metrics))
+                mirror_rollout_count = int(sum(int(metric.get("mirror_rollout_count", 0)) for metric in metrics))
+                mirror_individual_count = int(
+                    sum(
+                        int(bool(metric.get("mirrored", 0)) or bool(metric.get("evaluate_both_mirrors", 0)))
+                        for metric in metrics
+                    )
+                )
+                finish_count = int(np.sum(finished_values > 0))
+                crash_count = int(np.sum(crash_values > 0))
+                timeout_count = int(np.sum(timeout_values > 0))
+                if (
+                    mutation_decay_trigger == "first_finish"
+                    and not mutation_decay_active
+                    and finish_count > 0
+                ):
+                    mutation_decay_active = True
+                    mutation_decay_trigger_generation = int(generation)
+                    remaining_decay_generations = max(0, int(args.generations) - int(generation))
+                    effective_mutation_prob_decay = finish_triggered_decay_factor(
+                        current_mutation_prob,
+                        mutation_prob_min,
+                        remaining_decay_generations,
+                    )
+                    effective_mutation_sigma_decay = finish_triggered_decay_factor(
+                        current_mutation_sigma,
+                        mutation_sigma_min,
+                        remaining_decay_generations,
+                    )
+                generalization_summary = {
+                    "generalization_test_map": generalization_test_map if generalization_test_enabled else "",
+                    "generalization_best_finished": "",
+                    "generalization_best_crashes": "",
+                    "generalization_best_progress": "",
+                    "generalization_best_block_progress": "",
+                    "generalization_best_time": "",
+                    "generalization_best_distance": "",
+                }
+                if (
+                    generalization_env is not None
+                    and generalization_writer is not None
+                    and generation % generalization_test_every == 0
+                ):
+                    top_k = min(generalization_test_top_k, len(population))
+                    for train_rank, individual in enumerate(population[:top_k], start=1):
+                        original_index = int(original_index_by_id.get(id(individual), -1))
+                        test_seed = int(args.seed) + 2_000_000 + generation * 10_000 + train_rank
+                        test_metrics = generalization_env.rollout_policy(
+                            NumpyPolicyView(individual.policy),
+                            reset_seed=test_seed,
+                            mirrored=False,
+                        )
+                        generalization_writer.writerow(
+                            {
+                                "generation": int(generation),
+                                "train_rank": int(train_rank),
+                                "original_index": original_index,
+                                "test_map": generalization_test_map,
+                                "train_finished": int(individual.finished),
+                                "train_crashes": int(individual.crashes),
+                                "train_time": float(individual.time),
+                                "train_progress": float(individual.dense_progress),
+                                "train_block_progress": float(individual.discrete_progress),
+                                "train_distance": float(individual.distance),
+                                "test_finished": int(test_metrics.get("finished", 0)),
+                                "test_crashes": int(test_metrics.get("crashes", 0)),
+                                "test_timeout": int(test_metrics.get("timeout", 0)),
+                                "test_time": float(test_metrics.get("time", 0.0)),
+                                "test_progress": float(test_metrics.get("progress", 0.0)),
+                                "test_block_progress": float(
+                                    test_metrics.get("block_progress", test_metrics.get("discrete_progress", 0.0))
+                                ),
+                                "test_distance": float(test_metrics.get("distance", 0.0)),
+                                "test_steps": int(test_metrics.get("steps", 0)),
+                                "test_reward": float(test_metrics.get("reward", 0.0)),
+                                "test_fitness": float(test_metrics.get("fitness", 0.0)),
+                                "test_physics_tick_mean": float(test_metrics.get("physics_tick_mean", 1.0)),
+                                "test_physics_hz_mean": float(test_metrics.get("physics_hz_mean", 100.0)),
+                                "test_physics_delay_norm_mean": float(
+                                    test_metrics.get("physics_delay_norm_mean", 0.0)
+                                ),
+                                "test_terminated": int(bool(test_metrics.get("terminated", False))),
+                                "test_truncated": int(bool(test_metrics.get("truncated", False))),
+                            }
+                        )
+                        if train_rank == 1:
+                            generalization_summary.update(
+                                {
+                                    "generalization_best_finished": int(test_metrics.get("finished", 0)),
+                                    "generalization_best_crashes": int(test_metrics.get("crashes", 0)),
+                                    "generalization_best_progress": float(test_metrics.get("progress", 0.0)),
+                                    "generalization_best_block_progress": float(
+                                        test_metrics.get("block_progress", test_metrics.get("discrete_progress", 0.0))
+                                    ),
+                                    "generalization_best_time": float(test_metrics.get("time", 0.0)),
+                                    "generalization_best_distance": float(test_metrics.get("distance", 0.0)),
+                                }
+                            )
+                    generalization_handle.flush()
                 virtual_time_sum = float(np.sum(time_values))
                 virtual_steps_sum = int(np.sum(step_values))
                 cumulative_virtual_time += virtual_time_sum
@@ -737,8 +1523,8 @@ def main() -> None:
                 row = {
                     "generation": generation,
                     "best_fitness": best_fitness_for_plot,
-                    "best_progress": float(best.discrete_progress),
-                    "best_dense_progress": float(np.max(dense_progress_values)),
+                    "best_progress": float(np.max(progress_values)),
+                    "best_block_progress": float(best.discrete_progress),
                     "best_ranking_progress": float(best.ranking_progress()),
                     "best_time": float(best.time),
                     "best_finished": int(best.finished),
@@ -747,12 +1533,24 @@ def main() -> None:
                     "best_steps": int(getattr(best, "evaluation_steps", 0)),
                     "best_reward": float(np.max(reward_values)),
                     "best_ranking_key": json.dumps([float(value) for value in best.ranking_key()]),
+                    "current_mutation_prob": float(current_mutation_prob),
+                    "current_mutation_sigma": float(current_mutation_sigma),
+                    "mutation_decay_trigger": mutation_decay_trigger,
+                    "mutation_decay_active": int(bool(mutation_decay_active)),
+                    "mutation_decay_trigger_generation": (
+                        "" if mutation_decay_trigger_generation is None else int(mutation_decay_trigger_generation)
+                    ),
+                    "effective_mutation_prob_decay": float(effective_mutation_prob_decay),
+                    "effective_mutation_sigma_decay": float(effective_mutation_sigma_decay),
                     "cached_evaluations": int(cached_evaluations),
                     "evaluated_count": int(len(population) - cached_evaluations),
+                    "rollout_count": int(rollout_count_sum),
+                    "mirror_rollout_count": int(mirror_rollout_count),
+                    "mirror_individual_count": int(mirror_individual_count),
                     "population_size": int(len(population)),
-                    "finish_count": int(np.sum(finished_values > 0)),
-                    "crash_count": int(np.sum(crash_values > 0)),
-                    "timeout_count": int(np.sum(timeout_values > 0)),
+                    "finish_count": finish_count,
+                    "crash_count": crash_count,
+                    "timeout_count": timeout_count,
                     "terminated_count": int(sum(bool(metric.get("terminated", False)) for metric in metrics)),
                     "truncated_count": int(sum(bool(metric.get("truncated", False)) for metric in metrics)),
                     "virtual_time_sum": virtual_time_sum,
@@ -762,19 +1560,26 @@ def main() -> None:
                     "generation_wall_seconds": generation_wall_seconds,
                     "cumulative_wall_seconds": cumulative_wall_seconds,
                     "mean_progress": float(np.mean(progress_values)),
-                    "mean_dense_progress": float(np.mean(dense_progress_values)),
+                    "mean_block_progress": float(np.mean(block_progress_values)),
                     "mean_ranking_progress": float(np.mean(ranking_progress_values)),
                     "mean_reward": float(np.mean(reward_values)),
                     "mean_time": float(np.mean(time_values)),
+                    "mean_physics_tick_count": float(np.mean(physics_tick_values)),
+                    "mean_physics_hz": float(np.mean(physics_hz_values)),
+                    "mean_physics_delay_norm": float(np.mean(physics_delay_values)),
                 }
+                row.update(generalization_summary)
                 row.update(metric_stats("progress", progress_values))
-                row.update(metric_stats("dense_progress", dense_progress_values))
+                row.update(metric_stats("block_progress", block_progress_values))
                 row.update(metric_stats("ranking_progress", ranking_progress_values))
                 row.update(metric_stats("time", time_values))
                 row.update(metric_stats("distance", distance_values))
                 row.update(metric_stats("reward", reward_values))
                 row.update(metric_stats("fitness", fitness_values))
                 row.update(metric_stats("steps", step_values))
+                row.update(metric_stats("physics_tick", physics_tick_values))
+                row.update(metric_stats("physics_hz", physics_hz_values))
+                row.update(metric_stats("physics_delay_norm", physics_delay_values))
                 writer.writerow(row)
                 handle.flush()
 
@@ -791,13 +1596,16 @@ def main() -> None:
                             "rank": rank,
                             "original_index": int(original_index_by_id.get(id(individual), -1)),
                             "cached": int(bool(cached_by_id.get(id(individual), False))),
+                            "evaluation_context": str(getattr(individual, "evaluation_context", "")),
+                            "mirrored": int("mirror=1" in str(getattr(individual, "evaluation_context", ""))),
+                            "evaluate_both_mirrors": int("both=1" in str(getattr(individual, "evaluation_context", ""))),
                             "is_elite": int(rank <= int(args.elite_count)),
                             "is_parent": int(rank <= int(args.parent_count)),
                             "fitness": fitness_for_plot,
                             "ranking_key": json.dumps([float(value) for value in individual.ranking_key()]),
                             "ranking_progress": float(individual.ranking_progress()),
-                            "progress": float(individual.discrete_progress),
-                            "dense_progress": float(individual.dense_progress),
+                            "progress": float(individual.dense_progress),
+                            "block_progress": float(individual.discrete_progress),
                             "time": float(individual.time),
                             "finished": int(individual.finished),
                             "crashes": int(individual.crashes),
@@ -805,6 +1613,9 @@ def main() -> None:
                             "distance": float(individual.distance),
                             "reward": float(individual.reward),
                             "steps": int(getattr(individual, "evaluation_steps", 0)),
+                            "physics_tick_mean": float(getattr(individual, "physics_tick_mean", 0.0)),
+                            "physics_hz_mean": float(getattr(individual, "physics_hz_mean", 0.0)),
+                            "physics_delay_norm_mean": float(getattr(individual, "physics_delay_norm_mean", 0.0)),
                             "terminated": int(bool(getattr(individual, "evaluation_terminated", False))),
                             "truncated": int(bool(getattr(individual, "evaluation_truncated", False))),
                         }
@@ -829,6 +1640,10 @@ def main() -> None:
                             collect_trajectory=True,
                             trajectory_log_actions=bool(args.trajectory_log_actions),
                             reset_seed=replay_seed,
+                            mirrored=(
+                                "mirror=1" in str(getattr(individual, "evaluation_context", ""))
+                                and "both=1" not in str(getattr(individual, "evaluation_context", ""))
+                            ),
                         )
                         trajectory_logger.save(
                             generation=generation,
@@ -844,10 +1659,12 @@ def main() -> None:
                 print(
                     f"gen={generation:04d} best_fit={row['best_fitness']:.2f} "
                     f"best_prog={row['best_progress']:.2f}% "
-                    f"best_dense={row['best_dense_progress']:.2f}% "
+                    f"block={row['best_block_progress']:.2f}% "
                     f"best_rank={row['best_ranking_progress']:.2f}% "
                     f"best_time={row['best_time']:.2f}s mean_prog={row['mean_progress']:.2f}% "
-                    f"cached={cached_evaluations}"
+                    f"mut_p={current_mutation_prob:.4f} sigma={current_mutation_sigma:.4f} "
+                    f"decay={'active' if mutation_decay_active else 'waiting'} "
+                    f"mirror_rollouts={mirror_rollout_count} cached={cached_evaluations}"
                 )
 
                 if generation < args.generations:
@@ -858,8 +1675,17 @@ def main() -> None:
                     parents = [individual.copy() for individual in population[: args.parent_count]]
                     children = make_child_pool(parents, args.population_size - len(elites))
                     for child in children:
-                        child.mutate(args.mutation_prob, args.mutation_sigma)
+                        child.mutate(current_mutation_prob, current_mutation_sigma)
                     population = elites + children
+                    if mutation_decay_active:
+                        current_mutation_prob = max(
+                            float(mutation_prob_min),
+                            float(current_mutation_prob) * float(effective_mutation_prob_decay),
+                        )
+                        current_mutation_sigma = max(
+                            float(mutation_sigma_min),
+                            float(current_mutation_sigma) * float(effective_mutation_sigma_decay),
+                        )
         finally:
             if worker_pool is not None:
                 worker_pool.close()
@@ -888,6 +1714,11 @@ def main() -> None:
             vertical_mode=args.vertical_mode,
             multi_surface_mode=args.multi_surface_mode,
             binary_gas_brake=not args.continuous_gas_brake,
+            max_touches=args.max_touches,
+            collision_bounce_speed_retention=args.collision_bounce_speed_retention,
+            collision_bounce_backoff=args.collision_bounce_backoff,
+            touch_release_clearance_threshold=args.touch_release_clearance_threshold,
+            mask_physics_delay_observation=args.mask_physics_delay_observation,
         )
         viewer = TM2DViewer(viewer_env)
         obs, info = viewer_env.reset()

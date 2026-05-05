@@ -1,3 +1,4 @@
+import argparse
 import csv
 import json
 import os
@@ -16,6 +17,17 @@ from Car import Car
 from Map import Map
 from ObservationEncoder import ObservationEncoder
 from XboxController import XboxControllerReader, XboxControllerState
+
+
+def parse_bool(value: str | bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Expected boolean value, got {value!r}.")
 
 
 @dataclass
@@ -362,16 +374,59 @@ def rising_edge(current: int, previous: int) -> bool:
     return bool(current) and not bool(previous)
 
 
+def detect_lidar_crash(info: Dict[str, float], laser_clearances: np.ndarray) -> tuple[bool, float, int]:
+    clearances = np.asarray(laser_clearances, dtype=np.float32).reshape(-1)
+    if clearances.size == 0:
+        return False, float("inf"), -1
+    fallback_index = int(np.argmin(clearances))
+    min_clearance = float(info.get("min_laser_clearance", clearances[fallback_index]))
+    min_index = int(info.get("min_laser_clearance_index", fallback_index))
+    crash_now = bool(np.isfinite(min_clearance) and min_clearance <= 0.0)
+    return crash_now, min_clearance, min_index
+
+
 if __name__ == "__main__":
-    map_name = "AI Training #5"
-    #map_name = "small_map"
-    #map_name = "AI Training #4"
-    vertical_mode = False
-    multi_surface_mode = False
-    base_dir = "logs/supervised_data"
+    parser = argparse.ArgumentParser(description="Record supervised human driving attempts from live Trackmania.")
+    parser.add_argument("--map-name", default="AI Training #5")
+    parser.add_argument(
+        "--vertical-mode",
+        "--height-mode",
+        dest="vertical_mode",
+        type=parse_bool,
+        default=False,
+        help="Record height/vertical observation features. Alias: --height-mode.",
+    )
+    parser.add_argument(
+        "--multi-surface-mode",
+        type=parse_bool,
+        default=False,
+        help="Record surface instruction observation features.",
+    )
+    parser.add_argument("--data-root", "--base-dir", dest="base_dir", default="logs/supervised_data")
+    parser.add_argument(
+        "--max-saved-attempts",
+        type=int,
+        default=0,
+        help="Stop after this many accepted/saved attempts. Use 0 for unlimited.",
+    )
+    parser.add_argument("--random-seed", type=int, default=20260502)
+    parser.add_argument("--enable-perturbation", action="store_true")
+    parser.add_argument(
+        "--apply-perturbed-action-to-virtual-gamepad",
+        type=parse_bool,
+        default=True,
+        help="When perturbation is enabled, apply the perturbed action to vgamepad.",
+    )
+    args = parser.parse_args()
+
+    map_name = args.map_name
+    vertical_mode = bool(args.vertical_mode)
+    multi_surface_mode = bool(args.multi_surface_mode)
+    base_dir = args.base_dir
+    max_saved_attempts = max(0, int(args.max_saved_attempts))
     perturbation_config = ActionPerturbationConfig(
-        enabled=False,
-        random_seed=20260502,
+        enabled=bool(args.enable_perturbation),
+        random_seed=int(args.random_seed),
         steer_sigma=0.18,
         steer_bias_decay=0.96,
         gas_flip_rate_per_second=0.20,
@@ -379,7 +434,7 @@ if __name__ == "__main__":
         min_flip_hold_seconds=0.08,
         max_flip_hold_seconds=0.20,
     )
-    apply_perturbed_action_to_virtual_gamepad = True
+    apply_perturbed_action_to_virtual_gamepad = bool(args.apply_perturbed_action_to_virtual_gamepad)
     encoder = ObservationEncoder(
         dt_ref=1.0 / 100.0,
         action_dt_ratio_clip=3.0,
@@ -395,6 +450,12 @@ if __name__ == "__main__":
     )
 
     print(f"Saving supervised attempts into: {writer.run_dir}")
+    print(
+        f"Map={map_name} | vertical/height={vertical_mode} | "
+        f"multi_surface={multi_surface_mode} | obs_dim={encoder.obs_dim}"
+    )
+    if max_saved_attempts > 0:
+        print(f"Will stop after {max_saved_attempts} saved attempts.")
     print("Workflow:")
     print("- recording starts when game time becomes > 0")
     print("- press B during an attempt to discard it")
@@ -423,10 +484,13 @@ if __name__ == "__main__":
     )
 
     attempt_index = 1
+    saved_attempts = 0
     state = "waiting_for_start"
     attempt_samples: List[AttemptSample] = []
     last_buttons = {"a": 0, "b": 0}
     finish_info: Dict[str, float] = {}
+    crash_warning_printed = False
+    attempt_crashed = False
 
     try:
         while True:
@@ -449,10 +513,21 @@ if __name__ == "__main__":
 
             if state == "waiting_for_start":
                 if game_time > 0.0:
+                    attempt_index = saved_attempts + 1
                     encoder.reset()
                     attempt_samples = []
+                    crash_warning_printed = False
+                    attempt_crashed = False
                     state = "recording"
-                    print(f"Attempt {attempt_index:04d} started.")
+                    saved_total_text = (
+                        f"{saved_attempts}/{max_saved_attempts}"
+                        if max_saved_attempts > 0
+                        else str(saved_attempts)
+                    )
+                    print(
+                        f"Saved attempts: {saved_total_text} | "
+                        f"recording candidate attempt_{attempt_index:04d}."
+                    )
 
             if state == "recording":
                 observation = encoder.build_observation(
@@ -473,8 +548,23 @@ if __name__ == "__main__":
                     dtype=np.float32,
                 ).reshape(-1)
                 finished_int = int(finished)
-                crashes = int(info.get("crashes", 0))
+                lidar_crash_now, min_clearance, min_clearance_index = detect_lidar_crash(
+                    info,
+                    laser_clearances,
+                )
+                info_crashes = int(info.get("crashes", 0))
+                if lidar_crash_now or info_crashes > 0:
+                    attempt_crashed = True
+                crashes = max(info_crashes, 1 if attempt_crashed else 0)
                 timeout = int(info.get("timeout", 0))
+                if attempt_crashed and not crash_warning_printed:
+                    print(
+                        "\n!!! CRASH !!! "
+                        f"lidar_clearance={min_clearance:+.2f}m "
+                        f"laser={min_clearance_index}. "
+                        "Reset and discard this attempt for clean supervised data."
+                    )
+                    crash_warning_printed = True
                 attempt_samples.append(
                     AttemptSample(
                         observation=observation,
@@ -508,7 +598,10 @@ if __name__ == "__main__":
                 )
 
                 if b_pressed:
-                    print(f"Attempt {attempt_index:04d} discarded by B restart.")
+                    print(
+                        f"Candidate attempt_{attempt_index:04d} discarded by B restart. "
+                        f"Saved attempts remain {saved_attempts}."
+                    )
                     writer.log_discard(attempt_index, attempt_samples, dict(
                         time=game_time,
                         discrete_progress=discrete_progress,
@@ -518,7 +611,6 @@ if __name__ == "__main__":
                         crashes=crashes,
                         timeout=timeout,
                     ))
-                    attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_reset"
                 elif finished:
@@ -528,40 +620,59 @@ if __name__ == "__main__":
                         dense_progress=float(info.get("dense_progress", dense_progress)),
                         distance=total_distance,
                         finished=1,
-                        crashes=0,
+                        crashes=crashes,
                         timeout=0,
                     )
                     print(
-                        f"Attempt {attempt_index:04d} finished in {game_time:.2f}s. "
+                        f"Candidate attempt_{attempt_index:04d} finished in {game_time:.2f}s. "
                         "Press A to save or B to discard."
                     )
                     state = "await_finish_confirmation"
                 elif game_time <= 0.0:
-                    print(f"Attempt {attempt_index:04d} reset before finish. Discarded.")
+                    print(
+                        f"Candidate attempt_{attempt_index:04d} reset before finish. "
+                        f"Discarded; saved attempts remain {saved_attempts}."
+                    )
                     writer.log_discard(attempt_index, attempt_samples, dict(
                         time=game_time,
                         discrete_progress=discrete_progress,
                         dense_progress=float(info.get("dense_progress", dense_progress)),
                         distance=total_distance,
                         finished=0,
-                        crashes=0,
-                        timeout=0,
+                        crashes=crashes,
+                        timeout=timeout,
                     ))
-                    attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_start"
 
             elif state == "await_finish_confirmation":
                 if a_pressed:
                     output_path = writer.save_attempt(attempt_index, attempt_samples, finish_info)
-                    print(f"Attempt {attempt_index:04d} saved: {output_path}")
-                    attempt_index += 1
+                    saved_attempts += 1
+                    saved_total_text = (
+                        f"{saved_attempts}/{max_saved_attempts}"
+                        if max_saved_attempts > 0
+                        else str(saved_attempts)
+                    )
+                    print(
+                        f"Saved attempts: {saved_total_text} | "
+                        f"attempt_{attempt_index:04d} saved: {output_path}"
+                    )
+                    if max_saved_attempts > 0 and saved_attempts >= max_saved_attempts:
+                        print(
+                            f"Reached max saved attempts: {saved_attempts}/{max_saved_attempts}. "
+                            "Stopping data collection."
+                        )
+                        break
+                    attempt_index = saved_attempts + 1
                     attempt_samples = []
                     state = "waiting_for_reset"
                 elif b_pressed:
-                    print(f"Attempt {attempt_index:04d} discarded after finish.")
+                    print(
+                        f"Candidate attempt_{attempt_index:04d} discarded after finish. "
+                        f"Saved attempts remain {saved_attempts}."
+                    )
                     writer.log_discard(attempt_index, attempt_samples, finish_info)
-                    attempt_index += 1
                     attempt_samples = []
                     state = "waiting_for_reset"
 

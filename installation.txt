@@ -157,3 +157,6 @@ python Experiments\train_sac.py --import-check
 
 
 python -m pip install tensorboard
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_map_specialists_20260505.ps1

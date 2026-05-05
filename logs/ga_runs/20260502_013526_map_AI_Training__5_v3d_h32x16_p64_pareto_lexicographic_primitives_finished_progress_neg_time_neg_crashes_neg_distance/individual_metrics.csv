@@ -1,1 +1,0 @@
-timestamp_utc,generation,individual_index,finished,crashes,timeout,progress,discrete_progress,dense_progress,ranking_progress,distance,time,reward,fitness,ranking_key,selection_mode,selection_rank,selection_crowding,selection_objectives,selection_objective_names,evaluation_steps,evaluation_terminated,evaluation_truncated,evaluation_valid

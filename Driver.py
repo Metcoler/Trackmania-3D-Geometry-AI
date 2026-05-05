@@ -318,6 +318,15 @@ def _apply_target_steer_deadzone(action: np.ndarray, steer_deadzone: float) -> n
     return adjusted
 
 
+def _maybe_invert_steer(action: np.ndarray, invert_steer: bool) -> np.ndarray:
+    if not invert_steer:
+        return action
+    adjusted = np.asarray(action, dtype=np.float32).copy()
+    if adjusted.ndim == 1 and adjusted.shape[0] >= 3:
+        adjusted[2] = -adjusted[2]
+    return adjusted
+
+
 def replay_population(
     map_name: str = "small_map",
     population_file: Optional[str] = None,
@@ -335,6 +344,7 @@ def replay_population(
     rank_end: Optional[int] = None,
     exact_indices: Optional[List[int]] = None,
     target_steer_deadzone: float = 0.0,
+    invert_steer: bool = False,
 ) -> None:
     """
     Replay a whole population or selected subset in Trackmania.
@@ -424,6 +434,7 @@ def replay_population(
             f"Architecture: obs_dim={obs_dim}, hidden_dim={hidden_dim}, "
             f"hidden_activation={hidden_activation}, act_dim={act_dim}"
         )
+        print(f"Replay steer inversion: {bool(invert_steer)}")
 
         indices = _build_replay_indices(
             pop_size=pop_size,
@@ -498,6 +509,7 @@ def replay_population(
                     action = individual.act(obs)
                     if str(action_mode).strip().lower() == "target":
                         action = _apply_target_steer_deadzone(action, target_steer_deadzone)
+                    action = _maybe_invert_steer(action, invert_steer)
                     obs, reward, done, truncated, info = env.step(action)
                     total_reward += float(reward)
                     step_count += 1
@@ -537,6 +549,9 @@ def drive_model(
     vertical_mode: Optional[bool] = None,
     multi_surface_mode: Optional[bool] = None,
     target_steer_deadzone: float = 0.0,
+    invert_steer: Optional[bool] = None,
+    wait_for_positive_time: bool = False,
+    debug_actions: int = 0,
 ) -> None:
     policy, extra = NeuralPolicy.load(model_file, map_location="cpu")
     if map_name is None or str(map_name).strip().lower() == "auto":
@@ -555,12 +570,15 @@ def drive_model(
             multi_surface_mode = bool(extra["multi_surface_mode"])
         else:
             multi_surface_mode = int(policy.obs_dim) >= 39
+    if invert_steer is None:
+        invert_steer = False
 
     print(f"Loaded model from: {model_file}")
     print(f"Replay map: {map_name}")
     print(
         f"Replay config: action_mode={action_mode}, vertical_mode={vertical_mode}, "
-        f"multi_surface_mode={multi_surface_mode}, max_touches={max_touches}"
+        f"multi_surface_mode={multi_surface_mode}, max_touches={max_touches}, "
+        f"invert_steer={bool(invert_steer)}, wait_for_positive_time={bool(wait_for_positive_time)}"
     )
     print(f"Model config: {policy.get_config()}")
     if extra:
@@ -586,7 +604,7 @@ def drive_model(
         max_touches=max_touches,
     )
     obs, info = env.reset()
-    if str(action_mode).strip().lower() == "target":
+    if str(action_mode).strip().lower() == "target" and bool(wait_for_positive_time):
         obs, info = _wait_for_positive_game_time(env)
     if obs.shape[0] != policy.obs_dim:
         raise ValueError(
@@ -598,9 +616,23 @@ def drive_model(
         while True:
             if max_steps is not None and step_count >= max_steps:
                 break
-            action = policy.act(obs)
+            raw_action = policy.act(obs)
+            action = raw_action
             if str(action_mode).strip().lower() == "target":
                 action = _apply_target_steer_deadzone(action, target_steer_deadzone)
+            action = _maybe_invert_steer(action, bool(invert_steer))
+            if int(debug_actions) > 0 and step_count < int(debug_actions):
+                print(
+                    "\n"
+                    f"debug step={step_count} "
+                    f"time={float(info.get('time', 0.0)):.3f} "
+                    f"speed={float(info.get('speed', 0.0)):.2f} "
+                    f"progress={float(info.get('dense_progress', info.get('progress', 0.0))):.2f} "
+                    f"seg_err={float(info.get('segment_heading_error', 0.0)):.3f} "
+                    f"next_err={float(info.get('next_segment_heading_error', 0.0)):.3f} "
+                    f"raw_action=[{raw_action[0]:.3f},{raw_action[1]:.3f},{raw_action[2]:.3f}] "
+                    f"sent_action=[{action[0]:.3f},{action[1]:.3f},{action[2]:.3f}]"
+                )
             obs, reward, done, truncated, info = env.step(action)
             total_reward += float(reward)
             step_count += 1
@@ -646,7 +678,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-mode", choices=("auto", "target", "delta"), default="auto")
     parser.add_argument("--vertical-mode", default="auto", help="auto|true|false")
     parser.add_argument("--multi-surface-mode", default="auto", help="auto|true|false")
+    parser.add_argument(
+        "--invert-steer",
+        default="false",
+        help=(
+            "auto|true|false. Default false. Use true only for legacy/debug replays that were trained "
+            "with an old mirrored observation convention."
+        ),
+    )
     parser.add_argument("--target-steer-deadzone", type=float, default=0.05)
+    parser.add_argument(
+        "--wait-for-positive-time",
+        type=parse_bool,
+        default=False,
+        help="Wait for Trackmania game time > 0 before first target action. Usually false because the timer starts after input.",
+    )
+    parser.add_argument(
+        "--debug-actions",
+        type=int,
+        default=0,
+        help="Print the first N live observations/actions before sending them to the gamepad.",
+    )
     parser.add_argument("--pause-between-maps", type=parse_bool, default=True)
 
     parser.add_argument("--episodes-per-individual", type=int, default=1)
@@ -669,6 +721,7 @@ def main() -> None:
     args = build_arg_parser().parse_args()
     vertical_mode = parse_auto_bool_arg(args.vertical_mode)
     multi_surface_mode = parse_auto_bool_arg(args.multi_surface_mode)
+    invert_steer = parse_auto_bool_arg(args.invert_steer)
     action_mode = None if args.action_mode == "auto" else args.action_mode
 
     if args.population_file:
@@ -691,6 +744,7 @@ def main() -> None:
             rank_end=args.rank_end,
             exact_indices=parse_exact_indices(args.exact_indices),
             target_steer_deadzone=args.target_steer_deadzone,
+            invert_steer=False if invert_steer is None else bool(invert_steer),
         )
         return
 
@@ -720,6 +774,9 @@ def main() -> None:
             vertical_mode=vertical_mode,
             multi_surface_mode=multi_surface_mode,
             target_steer_deadzone=args.target_steer_deadzone,
+            invert_steer=invert_steer,
+            wait_for_positive_time=bool(args.wait_for_positive_time),
+            debug_actions=int(args.debug_actions),
         )
 
 

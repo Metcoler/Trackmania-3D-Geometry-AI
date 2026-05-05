@@ -319,6 +319,8 @@ class TM2DSimEnv:
         finished = 0
         touch_reason = ""
         wall_hug_active = False
+        collision_event = False
+        collision_position = np.asarray(self.position, dtype=np.float32).copy()
         contact = self._laser_contact_state(raycast=raycast)
         footprint_on_road = self.geometry.car_on_road(
             self.position,
@@ -332,14 +334,17 @@ class TM2DSimEnv:
 
         in_contact = bool(self._crash_detected_from_contact(contact) or off_road_contact)
         if in_contact:
+            collision_position = np.asarray(self.position, dtype=np.float32).copy()
             if self.max_touches <= 1:
                 self.touch_count = max(1, self.touch_count + 1)
+                collision_event = True
                 terminated = True
                 touch_reason = "off_road" if off_road_contact else "laser"
             else:
                 if not self._laser_touch_latched:
                     self.touch_count += 1
                     self._laser_touch_latched = True
+                    collision_event = True
                     touch_reason = "off_road" if off_road_contact else "laser"
                     if self.touch_count >= self.max_touches:
                         terminated = True
@@ -425,6 +430,10 @@ class TM2DSimEnv:
                 "max_touches": int(self.max_touches),
                 "touch_reason": touch_reason,
                 "footprint_on_road": int(bool(footprint_on_road)),
+                "collision_event": int(bool(collision_event)),
+                "collision_x": float(collision_position[0]),
+                "collision_y": 0.0,
+                "collision_z": float(collision_position[1]),
                 "wall_hug_active": int(bool(wall_hug_active)),
                 "wall_hug_frames": int(self.wall_hug_frames),
                 "bounce_recovered": int(self.last_bounce_recovered),
@@ -587,6 +596,11 @@ class TM2DSimEnv:
             if float(np.dot(tangent, incoming_velocity)) < 0.0:
                 tangent = -tangent
             reflected_dir = _normalize_2d(reflected_velocity, fallback=tangent)
+            wall_blend = self._dynamic_wall_tangent_blend(
+                incoming_velocity=incoming_velocity,
+                tangent=tangent,
+                base_blend=wall_blend,
+            )
             target_dir = _normalize_2d(
                 (1.0 - wall_blend) * reflected_dir + wall_blend * tangent,
                 fallback=reflected_dir,
@@ -600,6 +614,38 @@ class TM2DSimEnv:
                 - normal * normal_speed * self.collision_bounce_normal_restitution
             ).astype(np.float32, copy=False)
         return reflected_velocity.astype(np.float32, copy=False)
+
+    def _dynamic_wall_tangent_blend(
+        self,
+        *,
+        incoming_velocity: np.ndarray,
+        tangent: np.ndarray,
+        base_blend: float,
+    ) -> float:
+        """Increase tangent alignment for near-perpendicular wall impacts.
+
+        A fixed blend works well for shallow or roughly 45 degree touches, but a
+        near-head-on wall hit should be straightened more strongly; otherwise the
+        replay bounces into a sharp zig-zag that is less Trackmania-like.
+        """
+
+        base_blend = float(np.clip(base_blend, 0.0, 1.0))
+        incoming_dir = _normalize_2d(incoming_velocity)
+        tangent = _normalize_2d(tangent)
+        tangent_alignment = abs(float(np.dot(incoming_dir, tangent)))
+        normal_alignment = float(math.sqrt(max(0.0, 1.0 - tangent_alignment * tangent_alignment)))
+
+        # 45 degrees to the wall keeps the configured blend. More perpendicular
+        # impacts ramp smoothly toward a stronger wall-following correction.
+        reference = float(math.sqrt(0.5))
+        if normal_alignment <= reference:
+            return base_blend
+
+        perpendicular_blend = max(base_blend, 0.75)
+        ramp = (normal_alignment - reference) / max(1e-6, 1.0 - reference)
+        ramp = float(np.clip(ramp, 0.0, 1.0))
+        ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+        return float((1.0 - ramp) * base_blend + ramp * perpendicular_blend)
 
     def _record_bounce_reference_state(self) -> None:
         velocity = np.asarray(self.velocity, dtype=np.float32)

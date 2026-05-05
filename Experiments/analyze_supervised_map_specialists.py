@@ -223,6 +223,10 @@ def rollout_agent(
                     "min_laser_clearance": float(info.get("min_laser_clearance", float("inf"))),
                     "crashes": float(info.get("crashes", 0.0)),
                     "touch_count": float(info.get("touch_count", info.get("crashes", 0.0))),
+                    "collision_event": float(info.get("collision_event", 0.0)),
+                    "collision_x": float(info.get("collision_x", info.get("x", env.position[0]))),
+                    "collision_y": float(info.get("collision_y", 0.0)),
+                    "collision_z": float(info.get("collision_z", info.get("z", env.position[1]))),
                     "wall_hug_active": float(info.get("wall_hug_active", 0.0)),
                     "wall_hug_frames": float(info.get("wall_hug_frames", 0.0)),
                     "bounce_recovered": float(info.get("bounce_recovered", 0.0)),
@@ -336,11 +340,21 @@ def plot_speed_gradient(
     alpha: float = 0.96,
     zorder: int = 100,
     norm: mcolors.Normalize | None = None,
+    segment_mask: np.ndarray | None = None,
 ) -> None:
     if projected_points.shape[0] < 2:
         return None
     segments = np.stack([projected_points[:-1], projected_points[1:]], axis=1)
     segment_speed = np.asarray(speed[: max(0, projected_points.shape[0] - 1)], dtype=np.float32)
+    if segment_mask is not None:
+        mask = np.asarray(segment_mask, dtype=bool).reshape(-1)
+        mask = mask[: segments.shape[0]]
+        if mask.size < segments.shape[0]:
+            mask = np.pad(mask, (0, segments.shape[0] - mask.size), constant_values=True)
+        segments = segments[mask]
+        segment_speed = segment_speed[mask]
+        if segments.shape[0] <= 0:
+            return None
     collection = LineCollection(
         segments,
         cmap=SPEED_CMAP,
@@ -366,8 +380,28 @@ def plot_path_outline(
     linewidth: float,
     alpha: float,
     zorder: int,
+    segment_mask: np.ndarray | None = None,
 ) -> None:
     if projected_points.shape[0] < 2:
+        return
+    if segment_mask is not None:
+        segments = np.stack([projected_points[:-1], projected_points[1:]], axis=1)
+        mask = np.asarray(segment_mask, dtype=bool).reshape(-1)
+        mask = mask[: segments.shape[0]]
+        if mask.size < segments.shape[0]:
+            mask = np.pad(mask, (0, segments.shape[0] - mask.size), constant_values=True)
+        segments = segments[mask]
+        if segments.shape[0] <= 0:
+            return
+        ax.add_collection(LineCollection(
+            segments,
+            colors="#111827",
+            linewidths=linewidth,
+            alpha=alpha,
+            zorder=zorder,
+            capstyle="round",
+            joinstyle="round",
+        ))
         return
     ax.plot(
         projected_points[:, 0],
@@ -479,12 +513,23 @@ def plot_paths(
         plot_until = max(2, min(plot_until, int(projected_agent.shape[0])))
         projected_agent_plot = projected_agent[:plot_until]
         speed = np.asarray(agent_trajectory.get("speed", np.zeros(agent_xz.shape[0])), dtype=np.float32)
+        collision_event = np.asarray(
+            agent_trajectory.get("collision_event", np.zeros(agent_xz.shape[0], dtype=np.float32)),
+            dtype=np.float32,
+        )
+        draw_segment_mask = np.ones(max(0, plot_until - 1), dtype=bool)
+        if collision_event.size:
+            # The sample at a collision event is already the recovered pose after
+            # bounce correction.  Do not draw the artificial pre-crash -> recovered
+            # connector as part of the driven path.
+            draw_segment_mask &= collision_event[1:plot_until] <= 0.0
         plot_path_outline(
             ax,
             projected_agent_plot,
             linewidth=6.2,
             alpha=0.42,
             zorder=99,
+            segment_mask=draw_segment_mask,
         )
         speed_mappable = plot_speed_gradient(
             ax,
@@ -494,6 +539,7 @@ def plot_paths(
             alpha=0.98,
             zorder=100,
             norm=speed_norm,
+            segment_mask=draw_segment_mask,
         )
         min_clearance = np.asarray(
             agent_trajectory.get("min_laser_clearance", np.full(agent_xz.shape[0], np.inf)),
@@ -513,9 +559,19 @@ def plot_paths(
         if crash_indices.size:
             crash_indices = crash_indices[crash_indices < plot_until]
         if crash_indices.size:
+            collision_x = np.asarray(
+                agent_trajectory.get("collision_x", agent_trajectory["x"]),
+                dtype=np.float32,
+            )
+            collision_z = np.asarray(
+                agent_trajectory.get("collision_z", agent_trajectory["z"]),
+                dtype=np.float32,
+            )
+            collision_xz = np.stack([collision_x, collision_z], axis=1)
+            projected_crashes = projection.points(collision_xz)
             ax.scatter(
-                projected_agent[crash_indices, 0],
-                projected_agent[crash_indices, 1],
+                projected_crashes[crash_indices, 0],
+                projected_crashes[crash_indices, 1],
                 s=48,
                 facecolors=CRASH_COLOR,
                 edgecolors=CRASH_COLOR,

@@ -1,2 +1,2 @@
 finished,crashes,timeout,progress,block_progress,time,distance,reward,steps,terminated,truncated,max_touches,collision_slowdown,collision_bounce_speed_retention,collision_bounce_path_axis_bias,collision_bounce_normal_restitution,collision_bounce_wall_tangent_blend,collision_bounce_reference_window,collision_bounce_skip_recent,never_stop,left_map_bounds,left_map_bounds_index,left_map_bounds_time,left_road_surface,left_road_surface_index,left_road_surface_time
-1,19,0,100.0,100.0,33.850000000001835,1434.817281536758,1075.3583333333331,3385,1,0,1000000,0.3,0.7,0.0,1.0,0.3,4,1,1,0,-1,-1.0,0,-1,-1.0
+1,14,0,100.0,100.0,30.90000000000203,1408.4960373193026,1080.8499999999997,3090,1,0,1000000,0.3,0.7,0.0,1.0,0.3,4,1,1,0,-1,-1.0,0,-1,-1.0

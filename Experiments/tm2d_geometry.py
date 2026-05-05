@@ -452,7 +452,11 @@ class TM2DGeometry:
 
     def cast_lasers(self, center: np.ndarray, heading: float) -> RaycastResult:
         center = np.asarray(center, dtype=np.float32)
-        angles = float(heading) + self._laser_offsets_radians
+        # Match Car.generate_laser_directions(): Trackmania live rotates the
+        # forward vector around +Y using axis x front, which is equivalent to
+        # subtracting the relative offset in our X/Z 2D plane.  Keeping the same
+        # laser index order is critical for policies transferred to live TM.
+        angles = float(heading) - self._laser_offsets_radians
         directions = np.column_stack([np.cos(angles), np.sin(angles)]).astype(np.float32)
         distances = np.full(self.num_lasers, self.laser_max_distance, dtype=np.float32)
 

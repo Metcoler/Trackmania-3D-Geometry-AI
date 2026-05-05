@@ -233,6 +233,8 @@ def parse_args() -> argparse.Namespace:
             "terminal_lexicographic_no_distance",
             "terminal_lexicographic_progress20",
             "terminal_fitness",
+            "terminal_finished_progress_time_crashes",
+            "delta_finished_progress_time_crashes",
         ],
         default="terminal_progress_time_efficiency",
         help="Only used for reward logging; Pareto selection uses --objective-mode.",

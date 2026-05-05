@@ -578,6 +578,28 @@ class TM2DSimEnv:
                 path_tile_count=len(self.geometry.path_tiles_xz),
                 progress_bucket=self.geometry.progress_bucket,
             )
+        if mode == "terminal_finished_progress_time_crashes":
+            return Individual.compute_terminal_finished_progress_time_crashes_score_for(
+                finished=finished,
+                crashes=crashes,
+                progress=progress,
+                time_value=time_value,
+                distance=distance,
+                max_time=self.max_time,
+                path_tile_count=len(self.geometry.path_tiles_xz),
+                progress_bucket=self.geometry.progress_bucket,
+            )
+        if mode == "delta_finished_progress_time_crashes":
+            return Individual.compute_delta_finished_progress_time_crashes_score_for(
+                finished=finished,
+                crashes=crashes,
+                progress=progress,
+                time_value=time_value,
+                distance=distance,
+                max_time=self.max_time,
+                path_tile_count=len(self.geometry.path_tiles_xz),
+                progress_bucket=self.geometry.progress_bucket,
+            )
         if mode == "terminal_progress_time_safety":
             return Individual.compute_terminal_progress_time_safety_score_for(
                 finished=finished,
@@ -635,6 +657,7 @@ class TM2DSimEnv:
             "delta_lexicographic, delta_lexicographic_terminal, "
             "terminal_progress_time_efficiency, delta_progress_time_efficiency, "
             "terminal_finished_progress_time, delta_finished_progress_time, "
+            "terminal_finished_progress_time_crashes, delta_finished_progress_time_crashes, "
             "terminal_progress_time_safety, delta_progress_time_safety, "
             "terminal_progress_time_block_penalty, delta_progress_time_block_penalty, "
             "or progress_rate."

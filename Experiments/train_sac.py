@@ -24,9 +24,9 @@ from Experiments.tm2d_env import TM2DPhysicsConfig, TM2DRewardConfig, TM2DSimEnv
 
 
 DEFAULT_MAP_NAME = "AI Training #5"
-DEFAULT_REWARD_MODE = "delta_finished_progress_time"
-DEFAULT_ACTION_LAYOUT = "gas_steer"
-DEFAULT_NET_ARCH = [32, 32]
+DEFAULT_REWARD_MODE = "delta_finished_progress_time_crashes"
+DEFAULT_ACTION_LAYOUT = "gas_brake_steer"
+DEFAULT_NET_ARCH = [32, 16]
 DEFAULT_LOG_DIR = "Experiments/runs_rl"
 
 
@@ -41,6 +41,40 @@ def sanitize_name(value: str) -> str:
 
 def parse_int_list(value: str) -> list[int]:
     return [int(part.strip()) for part in str(value).split(",") if part.strip()]
+
+
+def parse_physics_tick_probs(value: str | None) -> tuple[tuple[int, ...] | None, tuple[float, ...] | None]:
+    if value is None or not str(value).strip():
+        return None, None
+    tick_values: list[int] = []
+    tick_probs: list[float] = []
+    for raw_part in str(value).split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        if ":" not in part:
+            raise ValueError("physics tick probabilities must use 'ticks:prob' entries.")
+        tick_text, prob_text = part.split(":", 1)
+        tick_values.append(max(1, int(tick_text.strip())))
+        tick_probs.append(float(prob_text.strip()))
+    return tuple(tick_values), tuple(tick_probs)
+
+
+def make_physics_config(
+    physics_tick_profile: str,
+    physics_tick_probs: str | None,
+    fixed_fps: float | None = None,
+) -> TM2DPhysicsConfig:
+    if fixed_fps is not None and float(fixed_fps) > 0.0:
+        if abs(float(fixed_fps) - 100.0) > 1e-6:
+            raise ValueError("Legacy --fixed-fps is only supported for 100 Hz.")
+        return TM2DPhysicsConfig().with_tick_profile("fixed100")
+    tick_values, tick_probabilities = parse_physics_tick_probs(physics_tick_probs)
+    return TM2DPhysicsConfig().with_tick_profile(
+        physics_tick_profile,
+        tick_values=tick_values,
+        tick_probabilities=tick_probabilities,
+    )
 
 
 def activation_fn_from_name(name: str):
@@ -69,13 +103,14 @@ class TM2DSB3Env(gym.Env):
         reward_mode: str,
         env_max_time: float,
         action_layout: str = DEFAULT_ACTION_LAYOUT,
-        collision_mode: str = "laser",
+        collision_mode: str = "lidar",
         collision_distance_threshold: float = 2.0,
         seed: int | None = None,
         terminal_fitness_scale: float = 1_000_000.0,
         pace_target_time: float | None = None,
         fixed_fps: float | None = None,
         physics_tick_profile: str = "supervised_v2d",
+        physics_tick_probs: str | None = None,
         vertical_mode: bool = False,
         multi_surface_mode: bool = False,
         binary_gas_brake: bool = True,
@@ -90,8 +125,10 @@ class TM2DSB3Env(gym.Env):
             map_name=map_name,
             max_time=float(env_max_time),
             reward_config=self.reward_config,
-            physics_config=TM2DPhysicsConfig().with_tick_profile(
-                "fixed100" if fixed_fps is not None else physics_tick_profile
+            physics_config=make_physics_config(
+                physics_tick_profile=physics_tick_profile,
+                physics_tick_probs=physics_tick_probs,
+                fixed_fps=fixed_fps,
             ),
             seed=seed,
             collision_mode=collision_mode,
@@ -150,13 +187,13 @@ class TM2DSB3Env(gym.Env):
     def _episode_metrics(self, info: dict[str, Any]) -> dict[str, float]:
         finished = int(info.get("finished", 0))
         crashes = int(info.get("crashes", 0))
-        progress = float(info.get("discrete_progress", 0.0))
-        dense_progress = float(info.get("dense_progress", progress))
+        block_progress = float(info.get("block_progress", info.get("discrete_progress", 0.0)))
+        progress = float(info.get("progress", info.get("dense_progress", block_progress)))
         time_value = float(info.get("time", 0.0))
         distance = float(info.get("distance", 0.0))
         fitness_progress = (
-            dense_progress
-            if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
+            block_progress
+            if Individual.RANKING_PROGRESS_SOURCE in {"block_progress", "discrete_progress"}
             else progress
         )
         fitness = Individual.compute_scalar_fitness_for(finished, crashes, fitness_progress, time_value, distance)
@@ -165,7 +202,7 @@ class TM2DSB3Env(gym.Env):
             "crashes": float(crashes),
             "timeout": float(int(finished <= 0 and crashes <= 0)),
             "progress": progress,
-            "dense_progress": dense_progress,
+            "block_progress": block_progress,
             "time": time_value,
             "distance": distance,
             "reward": float(info.get("reward", 0.0)),
@@ -226,7 +263,6 @@ class EpisodeMetricsCallback:
         self.algorithm = str(algorithm).upper()
         self.episode = 0
         self.best_progress = -float("inf")
-        self.best_dense_progress = -float("inf")
         self.best_reward = -float("inf")
         self.model = None
         self.callback = _Callback(self)
@@ -243,7 +279,7 @@ class EpisodeMetricsCallback:
             "crashes",
             "timeout",
             "progress",
-            "dense_progress",
+            "block_progress",
             "time",
             "distance",
             "fitness",
@@ -258,7 +294,7 @@ class EpisodeMetricsCallback:
         monitor_episode = info.get("episode", {})
         episode_reward = float(monitor_episode.get("r", metrics.get("reward", 0.0)))
         progress = float(metrics.get("progress", 0.0))
-        dense_progress = float(metrics.get("dense_progress", progress))
+        block_progress = float(metrics.get("block_progress", metrics.get("discrete_progress", progress)))
         row = {
             "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "episode": self.episode,
@@ -266,7 +302,7 @@ class EpisodeMetricsCallback:
             "crashes": int(metrics.get("crashes", 0)),
             "timeout": int(metrics.get("timeout", 0)),
             "progress": progress,
-            "dense_progress": dense_progress,
+            "block_progress": block_progress,
             "time": float(metrics.get("time", 0.0)),
             "distance": float(metrics.get("distance", 0.0)),
             "fitness": float(metrics.get("fitness", 0.0)),
@@ -280,13 +316,12 @@ class EpisodeMetricsCallback:
 
         if self.model is not None:
             self.model.save(self.run_dir / "latest_model")
-            improved = dense_progress > self.best_dense_progress or (
-                np.isclose(dense_progress, self.best_dense_progress)
+            improved = progress > self.best_progress or (
+                np.isclose(progress, self.best_progress)
                 and episode_reward > self.best_reward
             )
             if improved:
                 self.best_progress = progress
-                self.best_dense_progress = dense_progress
                 self.best_reward = episode_reward
                 self.model.save(self.run_dir / "best_model")
             if self.episode % self.checkpoint_every_episodes == 0:
@@ -294,8 +329,8 @@ class EpisodeMetricsCallback:
 
         if self.verbose:
             print(
-                f"[TM2D {self.algorithm}] ep={self.episode} dense={dense_progress:.2f}% "
-                f"progress={progress:.2f}% reward={episode_reward:.3f} "
+                f"[TM2D {self.algorithm}] ep={self.episode} progress={progress:.2f}% "
+                f"block={block_progress:.2f}% reward={episode_reward:.3f} "
                 f"fin={int(row['finished'])} crashes={int(row['crashes'])} "
                 f"time={row['time']:.2f}s"
             )
@@ -345,7 +380,7 @@ def build_run_dir(base_dir: str, algorithm: str, map_name: str, reward_mode: str
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Stable-Baselines3 RL over the fast TM2D simulator.")
+    parser = argparse.ArgumentParser(description="Stable-Baselines3 local RL entrypoint over the fast TM2D simulator.")
     parser.add_argument("--algorithm", default="SAC", choices=["SAC", "PPO", "TD3"])
     parser.add_argument("--map-name", default=DEFAULT_MAP_NAME)
     parser.add_argument(
@@ -366,6 +401,8 @@ def parse_args() -> argparse.Namespace:
             "delta_progress_time_efficiency",
             "terminal_finished_progress_time",
             "delta_finished_progress_time",
+            "terminal_finished_progress_time_crashes",
+            "delta_finished_progress_time_crashes",
             "terminal_progress_time_safety",
             "delta_progress_time_safety",
             "terminal_progress_time_block_penalty",
@@ -378,12 +415,17 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_ACTION_LAYOUT,
         choices=["gas_brake_steer", "gas_steer", "throttle_steer"],
     )
+    parser.add_argument(
+        "--strict-full-action-layout",
+        action="store_true",
+        help="Require the full gas/brake/steer action layout and reject simplified action spaces.",
+    )
     parser.add_argument("--env-max-time", type=float, default=30.0)
     parser.add_argument("--episodes", type=int, default=200)
     parser.add_argument("--total-timesteps", type=int, default=300_000)
     parser.add_argument("--max-runtime-minutes", type=float, default=30.0)
     parser.add_argument("--checkpoint-every-episodes", type=int, default=50)
-    parser.add_argument("--collision-mode", choices=["center", "corners", "laser", "lidar"], default="laser")
+    parser.add_argument("--collision-mode", choices=["center", "corners", "laser", "lidar"], default="lidar")
     parser.add_argument(
         "--collision-distance-threshold",
         type=float,
@@ -413,6 +455,17 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=None,
         help="Legacy alias for deterministic 100 Hz TM2D physics when set to 100.",
+    )
+    parser.add_argument(
+        "--physics-tick-profile",
+        choices=["fixed100", "supervised_v2d", "custom"],
+        default="supervised_v2d",
+        help="Discrete TM2D physics tick profile.",
+    )
+    parser.add_argument(
+        "--physics-tick-probs",
+        default=None,
+        help="Custom tick distribution as '1:0.938,2:0.060,3:0.001,4:0.001'. Requires --physics-tick-profile custom.",
     )
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
@@ -453,11 +506,19 @@ def main() -> None:
         print("Stable-Baselines3 import check OK.")
         return
 
+    if args.strict_full_action_layout:
+        if str(args.action_layout).strip().lower() != "gas_brake_steer":
+            raise ValueError("--strict-full-action-layout requires --action-layout gas_brake_steer.")
+        if bool(args.continuous_gas_brake):
+            raise ValueError("--strict-full-action-layout requires binary gas/brake, so do not pass --continuous-gas-brake.")
+
+    effective_physics_tick_profile = "fixed100" if args.fixed_fps is not None else str(args.physics_tick_profile)
     run_dir = (
         Path(args.run_dir)
         if args.run_dir
         else build_run_dir(args.log_dir, args.algorithm, args.map_name, args.reward_mode, args.action_layout)
     )
+    run_dir.mkdir(parents=True, exist_ok=True)
     raw_env = TM2DSB3Env(
         map_name=args.map_name,
         reward_mode=args.reward_mode,
@@ -469,6 +530,8 @@ def main() -> None:
         terminal_fitness_scale=args.terminal_fitness_scale,
         pace_target_time=args.pace_target_time,
         fixed_fps=args.fixed_fps,
+        physics_tick_profile=args.physics_tick_profile,
+        physics_tick_probs=args.physics_tick_probs,
         vertical_mode=args.vertical_mode,
         multi_surface_mode=args.multi_surface_mode,
         binary_gas_brake=not args.continuous_gas_brake,
@@ -480,7 +543,15 @@ def main() -> None:
         "algorithm": args.algorithm,
         "map_name": args.map_name,
         "reward_mode": args.reward_mode,
+        "reward_scalar_formula": "1000*finished + 100*progress_norm - 10*time_norm - 1*crashes",
+        "reward_is_delta_potential": args.reward_mode == "delta_finished_progress_time_crashes",
         "action_layout": args.action_layout,
+        "strict_full_action_layout": bool(args.strict_full_action_layout),
+        "action_layout_policy": (
+            "strict_full_control_no_simplified_action_space"
+            if args.strict_full_action_layout
+            else "configurable_action_space"
+        ),
         "env_max_time": float(args.env_max_time),
         "episodes": int(args.episodes),
         "total_timesteps": int(args.total_timesteps),
@@ -492,7 +563,11 @@ def main() -> None:
         "vertical_mode": bool(args.vertical_mode),
         "multi_surface_mode": bool(args.multi_surface_mode),
         "binary_gas_brake": bool(not args.continuous_gas_brake),
-        "fixed_fps": args.fixed_fps,
+        "physics_tick_profile": effective_physics_tick_profile,
+        "physics_tick_probs": args.physics_tick_probs,
+        "legacy_fixed_fps": args.fixed_fps,
+        "progress_metric_version": "progress_is_continuous_v20260505",
+        "sb3_entrypoint": "PPO, SAC and TD3 from Stable-Baselines3 over local TM2D",
         "seed": int(args.seed),
         "learning_rate": float(args.learning_rate),
         "buffer_size": int(args.buffer_size),

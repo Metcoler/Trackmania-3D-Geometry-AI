@@ -1,0 +1,11 @@
+attempt_file,frames,finished,finish_time,progress,distance,min_clearance,crash_index
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0001.npz,2698,1,24.649999618530273,100.0,1374.62158203125,0.9795272350311279,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0002.npz,2594,1,24.049999237060547,100.0,1338.4908447265625,0.6023359298706055,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0003.npz,2646,1,24.3700008392334,100.0,1373.850341796875,-0.05319547653198242,2142
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0004.npz,2567,1,23.809999465942383,100.0,1327.18115234375,0.8468554019927979,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0005.npz,2617,1,24.079999923706055,100.0,1351.9969482421875,0.6435604095458984,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0006.npz,2564,1,23.81999969482422,100.0,1328.22314453125,0.8423054218292236,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0007.npz,2675,1,24.56999969482422,100.0,1363.0111083984375,0.3620584011077881,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0008.npz,2649,1,24.459999084472656,100.0,1346.609130859375,0.5512945652008057,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0009.npz,2604,1,24.06999969482422,100.0,1348.8055419921875,0.5891761779785156,-1
+logs\supervised_data\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset\attempts\attempt_0010.npz,2590,1,23.979999542236328,100.0,1324.779052734375,1.2044010162353516,-1

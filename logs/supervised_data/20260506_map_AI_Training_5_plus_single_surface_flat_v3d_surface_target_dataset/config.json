@@ -1,0 +1,29 @@
+﻿{
+    "created_by":  "Experiments/run_supervised_pretrain_ai5_single_flat_48x24_20260506.ps1",
+    "purpose":  "Combined behavior-cloning pretrain for real TM 2D asphalt GA dense-noise seeding.",
+    "sources":  [
+                    {
+                        "label":  "ai5",
+                        "path":  "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\logs\\supervised_data\\20260505_195744_map_AI Training #5_v3d_surface_target_dataset"
+                    },
+                    {
+                        "label":  "flat",
+                        "path":  "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\logs\\supervised_data\\20260505_132438_map_single_surface_flat_v3d_surface_target_dataset"
+                    }
+                ],
+    "target_vertical_mode":  false,
+    "target_multi_surface_mode":  false,
+    "target_observation_dim":  34,
+    "hidden_dim":  [
+                       48,
+                       24
+                   ],
+    "hidden_activation":  [
+                              "relu",
+                              "tanh"
+                          ],
+    "epochs":  250,
+    "mirror_augmentation":  true,
+    "boring_filter":  false,
+    "attempt_count":  20
+}

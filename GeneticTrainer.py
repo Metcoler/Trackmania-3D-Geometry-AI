@@ -2360,7 +2360,7 @@ if __name__ == "__main__":
     evaluate_both_mirrors = False
     reuse_elite_evaluations = True
     trajectory_log_mode = "top"  # off / top / top-finishers-final / all
-    trajectory_top_k = 1
+    trajectory_top_k = 2
     trajectory_log_actions = True
     target_steer_deadzone = 0.00
     max_touches = 1

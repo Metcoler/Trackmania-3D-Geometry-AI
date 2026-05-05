@@ -2387,16 +2387,17 @@ if __name__ == "__main__":
     
     # Train from checkpoint or supervised pretrained model.
     #
-    # For the strongest hybrid run, set this to a compatible 2D-asphalt
-    # 48x24 relu,tanh target-action BC model. The current local AI Training #5
-    # BC model is 32x16, so it is intentionally not enabled here.
-    initial_population_source: Optional[str] = None
+    # Hybrid BC initialization: AI Training #5 + single_surface_flat pretrain,
+    # converted to the live 2D asphalt observation layout.
+    initial_population_source: Optional[str] = (
+        r"logs\supervised_runs_ai5_single_flat_pretrain_48x24_20260506"
+        r"\20260506_003103_v2d_asphalt_target_supervised\best_model.pt"
+    )
     # Old v2d population checkpoints are intentionally not used as the default
     # source anymore because the canonical training observation is now v3d.
     # initial_population_source = (
     #     r"logs/ga_runs\20260409_081105_map_AI_Training__5_v2d_h32x16_p32\checkpoints\population_gen_0190.npz"
     # )
-    # initial_population_source = r"logs/supervised_runs_ai5_pretrain_48x24\...\best_model.pt"
     seed_model_exact_copies = 1
     seed_model_noise_mode = "dense"
     seed_model_mutation_probs = (0.02, 0.05, 0.10)

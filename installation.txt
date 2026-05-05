@@ -154,3 +154,51 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_rl_reward_equivalent_
 
 python -m pip install stable-baselines3 gymnasium torch numpy pandas matplotlib
 python Experiments\train_sac.py --import-check
+
+
+Traceback (most recent call last):
+  File "C:\Users\sampu\Desktop\Trackmania-AI\Experiments\train_sac.py", line 723, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\sampu\Desktop\Trackmania-AI\Experiments\train_sac.py", line 709, in main
+    model.learn(
+    ~~~~~~~~~~~^
+        total_timesteps=int(args.total_timesteps),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        progress_bar=False,
+        ^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\sampu\AppData\Roaming\Python\Python313\site-packages\stable_baselines3\ppo\ppo.py", line 311, in learn
+    return super().learn(
+           ~~~~~~~~~~~~~^
+        total_timesteps=total_timesteps,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+        progress_bar=progress_bar,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\sampu\AppData\Roaming\Python\Python313\site-packages\stable_baselines3\common\on_policy_algorithm.py", line 311, in learn
+    total_timesteps, callback = self._setup_learn(
+                                ~~~~~~~~~~~~~~~~~^
+        total_timesteps,
+        ^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        progress_bar,
+        ^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\sampu\AppData\Roaming\Python\Python313\site-packages\stable_baselines3\common\base_class.py", line 431, in _setup_learn
+    self._logger = utils.configure_logger(self.verbose, self.tensorboard_log, tb_log_name, reset_num_timesteps)
+                   ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sampu\AppData\Roaming\Python\Python313\site-packages\stable_baselines3\common\utils.py", line 285, in configure_logger
+    raise ImportError("Trying to log data to tensorboard but tensorboard is not installed.")
+ImportError: Trying to log data to tensorboard but tensorboard is not installed.
+Run ppo_fixed100 failed with exit code 1
+At C:\Users\sampu\Desktop\Trackmania-AI\Experiments\run_rl_reward_equivalent_sweep_20260505.ps1:41 char:9
++         throw "Run $Name failed with exit code $LASTEXITCODE"
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Run ppo_fixed100 failed with exit code 1:String) [], RuntimeException
+    + FullyQualifiedErrorId : Run ppo_fixed100 failed with exit code 1

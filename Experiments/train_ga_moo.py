@@ -50,8 +50,10 @@ def evaluate_individual(env: TM2DSimEnv, individual: Individual) -> dict:
 
 def apply_metrics_to_individual(individual: Individual, metrics: dict, selection_score: float) -> None:
     individual.fitness = float(selection_score)
-    individual.discrete_progress = float(metrics["progress"])
-    individual.dense_progress = float(metrics.get("dense_progress", metrics["progress"]))
+    block_progress = float(metrics.get("block_progress", metrics.get("discrete_progress", metrics["progress"])))
+    progress = float(metrics.get("progress", metrics.get("dense_progress", block_progress)))
+    individual.discrete_progress = block_progress
+    individual.dense_progress = progress
     individual.time = float(metrics["time"])
     individual.finished = int(metrics.get("finished", 0))
     individual.crashes = int(metrics.get("crashes", 0))
@@ -402,7 +404,7 @@ def main() -> None:
     ]
     for prefix in (
         "progress",
-        "dense_progress",
+        "block_progress",
         "ranking_progress",
         "time",
         "distance",
@@ -554,13 +556,22 @@ def main() -> None:
                     best_overall_key = best_key
                     best_overall = best.copy()
 
-                progress_values = np.asarray([float(metric["progress"]) for metric in metrics], dtype=np.float64)
-                dense_progress_values = np.asarray(
-                    [float(metric["dense_progress"]) for metric in metrics],
+                progress_values = np.asarray(
+                    [
+                        float(metric.get("progress", metric.get("dense_progress", metric.get("block_progress", 0.0))))
+                        for metric in metrics
+                    ],
+                    dtype=np.float64,
+                )
+                block_progress_values = np.asarray(
+                    [
+                        float(metric.get("block_progress", metric.get("discrete_progress", metric.get("progress", 0.0))))
+                        for metric in metrics
+                    ],
                     dtype=np.float64,
                 )
                 # MOO uses dense progress as the common analysis progress source.
-                ranking_progress_values = dense_progress_values.copy()
+                ranking_progress_values = progress_values.copy()
                 reward_values = np.asarray([float(metric["reward"]) for metric in metrics], dtype=np.float64)
                 fitness_values = np.asarray([float(metric["fitness"]) for metric in metrics], dtype=np.float64)
                 time_values = np.asarray([float(metric["time"]) for metric in metrics], dtype=np.float64)
@@ -597,8 +608,10 @@ def main() -> None:
                     "generation": generation,
                     "best_fitness": float(best.fitness),
                     "best_progress": float(best_metric["progress"]),
-                    "best_dense_progress": float(best_metric["dense_progress"]),
-                    "best_ranking_progress": float(best_metric["dense_progress"]),
+                    "best_block_progress": float(
+                        best_metric.get("block_progress", best_metric.get("discrete_progress", best_metric["progress"]))
+                    ),
+                    "best_ranking_progress": float(best_metric["progress"]),
                     "best_time": float(best_metric["time"]),
                     "best_finished": int(best_metric.get("finished", 0)),
                     "best_crashes": int(best_metric.get("crashes", 0)),
@@ -626,7 +639,7 @@ def main() -> None:
                     "generation_wall_seconds": generation_wall_seconds,
                     "cumulative_wall_seconds": cumulative_wall_seconds,
                     "mean_progress": float(np.mean(progress_values)),
-                    "mean_dense_progress": float(np.mean(dense_progress_values)),
+                    "mean_block_progress": float(np.mean(block_progress_values)),
                     "mean_ranking_progress": float(np.mean(ranking_progress_values)),
                     "mean_reward": float(np.mean(reward_values)),
                     "mean_time": float(np.mean(time_values)),
@@ -643,7 +656,7 @@ def main() -> None:
                     row[f"best_obj_{name}"] = float(best_objectives[objective_idx])
                     row[f"mean_obj_{name}"] = float(np.mean(ordered_objectives[:, objective_idx]))
                 row.update(metric_stats("progress", progress_values))
-                row.update(metric_stats("dense_progress", dense_progress_values))
+                row.update(metric_stats("block_progress", block_progress_values))
                 row.update(metric_stats("ranking_progress", ranking_progress_values))
                 row.update(metric_stats("time", time_values))
                 row.update(metric_stats("distance", distance_values))
@@ -674,9 +687,11 @@ def main() -> None:
                         "is_parent": int(rank <= int(args.parent_count)),
                         "fitness": float(metric["fitness"]),
                         "ranking_key": json.dumps([float(value) for value in objective_row]),
-                        "ranking_progress": float(metric["dense_progress"]),
+                        "ranking_progress": float(metric["progress"]),
                         "progress": float(metric["progress"]),
-                        "dense_progress": float(metric["dense_progress"]),
+                        "block_progress": float(
+                            metric.get("block_progress", metric.get("discrete_progress", metric["progress"]))
+                        ),
                         "time": float(metric["time"]),
                         "finished": int(metric.get("finished", 0)),
                         "crashes": int(metric.get("crashes", 0)),
@@ -708,7 +723,7 @@ def main() -> None:
                 )
                 print(
                     f"gen={generation:04d} front0={row['front0_size']:02d} "
-                    f"best_dense={row['best_dense_progress']:.2f}% "
+                    f"best_progress={row['best_progress']:.2f}% "
                     f"best_time={row['best_time']:.2f}s "
                     f"fin={row['best_finished']} crashes={row['best_crashes']} "
                     f"{objective_summary}"

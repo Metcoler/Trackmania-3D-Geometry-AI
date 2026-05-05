@@ -119,9 +119,19 @@ def aggregate_mirror_metrics(normal: dict, mirrored: dict) -> dict:
     rollout_metrics = [normal, mirrored]
     finished = int(min(int(metric.get("finished", 0)) for metric in rollout_metrics))
     crashes = int(max(int(metric.get("crashes", 0)) for metric in rollout_metrics))
+    progress_values = [
+        float(metric.get("progress", metric.get("dense_progress", metric.get("block_progress", 0.0))))
+        for metric in rollout_metrics
+    ]
+    block_progress_values = [
+        float(metric.get("block_progress", metric.get("discrete_progress", metric.get("progress", 0.0))))
+        for metric in rollout_metrics
+    ]
     metrics = {
-        "progress": float(np.mean([float(metric["progress"]) for metric in rollout_metrics])),
-        "dense_progress": float(np.mean([float(metric["dense_progress"]) for metric in rollout_metrics])),
+        "progress": float(np.mean(progress_values)),
+        "block_progress": float(np.mean(block_progress_values)),
+        "dense_progress": float(np.mean(progress_values)),
+        "discrete_progress": float(np.mean(block_progress_values)),
         "time": float(np.mean([float(metric["time"]) for metric in rollout_metrics])),
         "distance": float(np.mean([float(metric["distance"]) for metric in rollout_metrics])),
         "reward": float(np.mean([float(metric["reward"]) for metric in rollout_metrics])),
@@ -136,8 +146,8 @@ def aggregate_mirror_metrics(normal: dict, mirrored: dict) -> dict:
         "evaluate_both_mirrors": 1,
         "rollout_count": 2,
         "mirror_rollout_count": 1,
-        "normal_progress": float(normal.get("dense_progress", normal.get("progress", 0.0))),
-        "mirrored_progress": float(mirrored.get("dense_progress", mirrored.get("progress", 0.0))),
+        "normal_progress": float(normal.get("progress", normal.get("dense_progress", 0.0))),
+        "mirrored_progress": float(mirrored.get("progress", mirrored.get("dense_progress", 0.0))),
     }
     for key in ("physics_tick_mean", "physics_hz_mean", "physics_delay_norm_mean"):
         metrics[key] = float(np.mean([float(metric.get(key, 0.0)) for metric in rollout_metrics]))
@@ -195,8 +205,10 @@ def apply_metrics_to_individual(
     fitness_mode: str,
     evaluation_context: str = "",
 ) -> None:
-    individual.discrete_progress = float(metrics["progress"])
-    individual.dense_progress = float(metrics.get("dense_progress", metrics["progress"]))
+    block_progress = float(metrics.get("block_progress", metrics.get("discrete_progress", metrics["progress"])))
+    progress = float(metrics.get("progress", metrics.get("dense_progress", block_progress)))
+    individual.discrete_progress = block_progress
+    individual.dense_progress = progress
     individual.time = float(metrics["time"])
     individual.finished = int(metrics.get("finished", 0))
     individual.crashes = int(metrics.get("crashes", 0))
@@ -232,8 +244,10 @@ def cached_metrics_from_individual(individual: Individual) -> dict:
         else float(individual.compute_scalar_fitness())
     )
     return {
-        "progress": float(individual.discrete_progress),
+        "progress": float(individual.dense_progress),
+        "block_progress": float(individual.discrete_progress),
         "dense_progress": float(individual.dense_progress),
+        "discrete_progress": float(individual.discrete_progress),
         "time": float(individual.time),
         "finished": int(individual.finished),
         "crashes": int(individual.crashes),
@@ -309,7 +323,7 @@ def generation_metric_fieldnames() -> list[str]:
         "generation",
         "best_fitness",
         "best_progress",
-        "best_dense_progress",
+        "best_block_progress",
         "best_ranking_progress",
         "best_time",
         "best_finished",
@@ -343,7 +357,7 @@ def generation_metric_fieldnames() -> list[str]:
         "generation_wall_seconds",
         "cumulative_wall_seconds",
         "mean_progress",
-        "mean_dense_progress",
+        "mean_block_progress",
         "mean_ranking_progress",
         "mean_reward",
         "mean_time",
@@ -354,14 +368,14 @@ def generation_metric_fieldnames() -> list[str]:
         "generalization_best_finished",
         "generalization_best_crashes",
         "generalization_best_progress",
-        "generalization_best_dense_progress",
+        "generalization_best_block_progress",
         "generalization_best_time",
         "generalization_best_distance",
     ]
     stat_fields: list[str] = []
     for prefix in (
         "progress",
-        "dense_progress",
+        "block_progress",
         "ranking_progress",
         "time",
         "distance",
@@ -391,7 +405,7 @@ def individual_metric_fieldnames() -> list[str]:
         "ranking_key",
         "ranking_progress",
         "progress",
-        "dense_progress",
+        "block_progress",
         "time",
         "finished",
         "crashes",
@@ -417,14 +431,14 @@ def generalization_metric_fieldnames() -> list[str]:
         "train_crashes",
         "train_time",
         "train_progress",
-        "train_dense_progress",
+        "train_block_progress",
         "train_distance",
         "test_finished",
         "test_crashes",
         "test_timeout",
         "test_time",
         "test_progress",
-        "test_dense_progress",
+        "test_block_progress",
         "test_distance",
         "test_steps",
         "test_reward",
@@ -642,14 +656,14 @@ def main() -> None:
         default="(finished, progress, -time, -crashes, -distance)",
         help=(
             "Lexicographic tuple expression, e.g. "
-            "'(dense_progress, finished, -time, -crashes, -distance)'. "
+            "'(progress, finished, -time, -crashes, -distance)'. "
         ),
     )
     parser.add_argument(
         "--ranking-progress-source",
         choices=list(Individual.RANKING_PROGRESS_SOURCES),
-        default="dense_progress",
-        help="Progress value used inside ranking tuples: discrete checkpoints or dense geometry.",
+        default="progress",
+        help="Progress value used inside ranking tuples: progress=dense geometry, block_progress=discrete checkpoints.",
     )
     parser.add_argument("--collision-mode", choices=["center", "corners", "laser", "lidar"], default="laser")
     parser.add_argument(
@@ -805,12 +819,21 @@ def main() -> None:
     ranking_key = str(args.ranking_key)
     ranking_key_expression = canonical_ranking_key_expression(ranking_key)
     ranking_progress_source = str(args.ranking_progress_source)
+    if ranking_progress_source == "dense_progress":
+        ranking_progress_source = "progress"
+    elif ranking_progress_source == "discrete_progress":
+        ranking_progress_source = "block_progress"
     if (
         args.ranking_key is not None
         and "dense_progress" in ranking_key_expression
-        and ranking_progress_source != "dense_progress"
+        and ranking_progress_source != "progress"
     ):
-        ranking_progress_source = "dense_progress"
+        ranking_progress_source = "progress"
+    if (
+        args.ranking_key is not None
+        and ("block_progress" in ranking_key_expression or "discrete_progress" in ranking_key_expression)
+    ):
+        ranking_progress_source = "block_progress"
     Individual.RANKING_KEY = ranking_key
     Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
     elite_cache_enabled = bool(args.enable_elite_cache and not args.disable_elite_cache)
@@ -1131,16 +1154,25 @@ def main() -> None:
                     if best.fitness is not None and np.isfinite(best.fitness)
                         else float(best.compute_scalar_fitness())
                 )
-                progress_values = np.asarray([float(metric["progress"]) for metric in metrics], dtype=np.float64)
-                dense_progress_values = np.asarray(
-                    [float(metric["dense_progress"]) for metric in metrics],
+                progress_values = np.asarray(
+                    [
+                        float(metric.get("progress", metric.get("dense_progress", metric.get("block_progress", 0.0))))
+                        for metric in metrics
+                    ],
+                    dtype=np.float64,
+                )
+                block_progress_values = np.asarray(
+                    [
+                        float(metric.get("block_progress", metric.get("discrete_progress", metric.get("progress", 0.0))))
+                        for metric in metrics
+                    ],
                     dtype=np.float64,
                 )
                 ranking_progress_values = np.asarray(
                     [
-                        float(metric["dense_progress"])
-                        if ranking_progress_source == "dense_progress"
-                        else float(metric["progress"])
+                        float(metric.get("block_progress", metric.get("discrete_progress", metric.get("progress", 0.0))))
+                        if ranking_progress_source in {"block_progress", "discrete_progress"}
+                        else float(metric.get("progress", metric.get("dense_progress", 0.0)))
                         for metric in metrics
                     ],
                     dtype=np.float64,
@@ -1205,7 +1237,7 @@ def main() -> None:
                     "generalization_best_finished": "",
                     "generalization_best_crashes": "",
                     "generalization_best_progress": "",
-                    "generalization_best_dense_progress": "",
+                    "generalization_best_block_progress": "",
                     "generalization_best_time": "",
                     "generalization_best_distance": "",
                 }
@@ -1232,15 +1264,17 @@ def main() -> None:
                                 "train_finished": int(individual.finished),
                                 "train_crashes": int(individual.crashes),
                                 "train_time": float(individual.time),
-                                "train_progress": float(individual.discrete_progress),
-                                "train_dense_progress": float(individual.dense_progress),
+                                "train_progress": float(individual.dense_progress),
+                                "train_block_progress": float(individual.discrete_progress),
                                 "train_distance": float(individual.distance),
                                 "test_finished": int(test_metrics.get("finished", 0)),
                                 "test_crashes": int(test_metrics.get("crashes", 0)),
                                 "test_timeout": int(test_metrics.get("timeout", 0)),
                                 "test_time": float(test_metrics.get("time", 0.0)),
                                 "test_progress": float(test_metrics.get("progress", 0.0)),
-                                "test_dense_progress": float(test_metrics.get("dense_progress", 0.0)),
+                                "test_block_progress": float(
+                                    test_metrics.get("block_progress", test_metrics.get("discrete_progress", 0.0))
+                                ),
                                 "test_distance": float(test_metrics.get("distance", 0.0)),
                                 "test_steps": int(test_metrics.get("steps", 0)),
                                 "test_reward": float(test_metrics.get("reward", 0.0)),
@@ -1260,8 +1294,8 @@ def main() -> None:
                                     "generalization_best_finished": int(test_metrics.get("finished", 0)),
                                     "generalization_best_crashes": int(test_metrics.get("crashes", 0)),
                                     "generalization_best_progress": float(test_metrics.get("progress", 0.0)),
-                                    "generalization_best_dense_progress": float(
-                                        test_metrics.get("dense_progress", 0.0)
+                                    "generalization_best_block_progress": float(
+                                        test_metrics.get("block_progress", test_metrics.get("discrete_progress", 0.0))
                                     ),
                                     "generalization_best_time": float(test_metrics.get("time", 0.0)),
                                     "generalization_best_distance": float(test_metrics.get("distance", 0.0)),
@@ -1277,8 +1311,8 @@ def main() -> None:
                 row = {
                     "generation": generation,
                     "best_fitness": best_fitness_for_plot,
-                    "best_progress": float(best.discrete_progress),
-                    "best_dense_progress": float(np.max(dense_progress_values)),
+                    "best_progress": float(np.max(progress_values)),
+                    "best_block_progress": float(best.discrete_progress),
                     "best_ranking_progress": float(best.ranking_progress()),
                     "best_time": float(best.time),
                     "best_finished": int(best.finished),
@@ -1314,7 +1348,7 @@ def main() -> None:
                     "generation_wall_seconds": generation_wall_seconds,
                     "cumulative_wall_seconds": cumulative_wall_seconds,
                     "mean_progress": float(np.mean(progress_values)),
-                    "mean_dense_progress": float(np.mean(dense_progress_values)),
+                    "mean_block_progress": float(np.mean(block_progress_values)),
                     "mean_ranking_progress": float(np.mean(ranking_progress_values)),
                     "mean_reward": float(np.mean(reward_values)),
                     "mean_time": float(np.mean(time_values)),
@@ -1324,7 +1358,7 @@ def main() -> None:
                 }
                 row.update(generalization_summary)
                 row.update(metric_stats("progress", progress_values))
-                row.update(metric_stats("dense_progress", dense_progress_values))
+                row.update(metric_stats("block_progress", block_progress_values))
                 row.update(metric_stats("ranking_progress", ranking_progress_values))
                 row.update(metric_stats("time", time_values))
                 row.update(metric_stats("distance", distance_values))
@@ -1358,8 +1392,8 @@ def main() -> None:
                             "fitness": fitness_for_plot,
                             "ranking_key": json.dumps([float(value) for value in individual.ranking_key()]),
                             "ranking_progress": float(individual.ranking_progress()),
-                            "progress": float(individual.discrete_progress),
-                            "dense_progress": float(individual.dense_progress),
+                            "progress": float(individual.dense_progress),
+                            "block_progress": float(individual.discrete_progress),
                             "time": float(individual.time),
                             "finished": int(individual.finished),
                             "crashes": int(individual.crashes),
@@ -1413,7 +1447,7 @@ def main() -> None:
                 print(
                     f"gen={generation:04d} best_fit={row['best_fitness']:.2f} "
                     f"best_prog={row['best_progress']:.2f}% "
-                    f"best_dense={row['best_dense_progress']:.2f}% "
+                    f"block={row['best_block_progress']:.2f}% "
                     f"best_rank={row['best_ranking_progress']:.2f}% "
                     f"best_time={row['best_time']:.2f}s mean_prog={row['mean_progress']:.2f}% "
                     f"mut_p={current_mutation_prob:.4f} sigma={current_mutation_sigma:.4f} "

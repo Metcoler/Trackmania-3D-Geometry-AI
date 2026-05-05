@@ -138,8 +138,7 @@ class TrainingLogger:
         "crashes",
         "timeout",
         "progress",
-        "discrete_progress",
-        "dense_progress",
+        "block_progress",
         "ranking_progress",
         "distance",
         "time",
@@ -185,13 +184,13 @@ class TrainingLogger:
         "best_finished",
         "best_crashes",
         "best_progress",
-        "best_dense_progress",
+        "best_block_progress",
         "best_ranking_progress",
         "best_ranking_key",
-        "mean_discrete_progress",
-        "mean_dense_progress",
+        "mean_progress",
+        "mean_block_progress",
         "mean_ranking_progress",
-        "std_dense_progress",
+        "std_progress",
         "std_ranking_progress",
         "best_distance",
         "best_time",
@@ -844,9 +843,10 @@ class GeneticTrainer:
                 )
                 print(
                     f"{index + 1}/{total} "
-                    f"N:{normal_status} {normal_metrics['discrete_progress']:.1f}%/{normal_metrics['time']:.2f}s | "
-                    f"M:{mirrored_status} {mirrored_metrics['discrete_progress']:.1f}%/{mirrored_metrics['time']:.2f}s | "
-                    f"AVG progress={mean_discrete_progress:.1f}% | time={mean_time:.2f}s | score={mean_fitness:.2f}"
+                    f"N:{normal_status} {normal_metrics['progress']:.1f}%/{normal_metrics['time']:.2f}s | "
+                    f"M:{mirrored_status} {mirrored_metrics['progress']:.1f}%/{mirrored_metrics['time']:.2f}s | "
+                    f"AVG progress={mean_dense_progress:.1f}% | block={mean_discrete_progress:.1f}% | "
+                    f"time={mean_time:.2f}s | score={mean_fitness:.2f}"
                 )
             return mean_fitness
 
@@ -875,8 +875,8 @@ class GeneticTrainer:
             mirror_tag = " [MIRROR]" if mirrored else ""
             print(
                 f"{index + 1}/{total} "
-                f"{status} | progress={individual.discrete_progress:.1f}% | "
-                f"dense={individual.dense_progress:.1f}% | "
+                f"{status} | progress={individual.dense_progress:.1f}% | "
+                f"block={individual.discrete_progress:.1f}% | "
                 f"time={individual.time:.2f}s | score={individual.fitness:.2f}{mirror_tag}"
             )
 
@@ -921,7 +921,8 @@ class GeneticTrainer:
                     "y": float(info.get("y", 0.0)),
                     "z": float(info.get("z", 0.0)),
                     "speed": float(info.get("speed", 0.0)),
-                    "dense_progress": float(info.get("dense_progress", info.get("discrete_progress", 0.0))),
+                    "progress": float(info.get("progress", info.get("dense_progress", info.get("discrete_progress", 0.0)))),
+                    "dense_progress": float(info.get("progress", info.get("dense_progress", info.get("discrete_progress", 0.0)))),
                 }
                 if trajectory_log_actions:
                     record["action"] = np.asarray(action, dtype=np.float32).copy()
@@ -947,7 +948,8 @@ class GeneticTrainer:
             discrete_progress = float(last_info.get("discrete_progress", 0.0))
             dense_progress = float(last_info.get("dense_progress", discrete_progress))
             raw_metrics = dict(
-                progress=discrete_progress,
+                progress=dense_progress,
+                block_progress=discrete_progress,
                 discrete_progress=discrete_progress,
                 dense_progress=dense_progress,
                 time=float(last_info.get("time", 0.0)),
@@ -973,13 +975,17 @@ class GeneticTrainer:
         scalar = Individual.compute_scalar_fitness_for(
             finished=finished,
             crashes=crashes,
-            progress=dense_progress
-            if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
-            else discrete_progress,
+            progress=(
+                discrete_progress
+                if Individual.RANKING_PROGRESS_SOURCE in {"block_progress", "discrete_progress"}
+                else dense_progress
+            ),
             time_value=t,
             distance=distance,
         )
         result = dict(
+            progress=dense_progress,
+            block_progress=discrete_progress,
             discrete_progress=discrete_progress,
             dense_progress=dense_progress,
             time=t,
@@ -1064,8 +1070,8 @@ class GeneticTrainer:
                     status = self._outcome_status_text(ind.finished, ind.crashes)
                     print(
                         f"{i + 1}/{n} {status} | "
-                        f"progress={ind.discrete_progress:.1f}% | "
-                        f"dense={ind.dense_progress:.1f}% | "
+                        f"progress={ind.dense_progress:.1f}% | "
+                        f"block={ind.discrete_progress:.1f}% | "
                         f"time={ind.time:.2f}s | cached"
                     )
                 continue
@@ -1112,8 +1118,10 @@ class GeneticTrainer:
             crashes=int(individual.crashes),
             max_crashes=int(getattr(self.env, "max_touches", 1)),
             max_touches=int(getattr(self.env, "max_touches", 1)),
-            progress=float(individual.discrete_progress),
+            progress=float(individual.dense_progress),
+            block_progress=float(individual.discrete_progress),
             dense_progress=float(individual.dense_progress),
+            discrete_progress=float(individual.discrete_progress),
             time=float(individual.time),
             distance=float(individual.distance),
             reward=float(individual.reward),
@@ -1231,7 +1239,7 @@ class GeneticTrainer:
         parent_count: Optional[int] = None,
         mutation_prob: float = 0.1,
         mutation_sigma: float = 0.1,
-        cache_elite_evaluations: bool = True,
+        reuse_elite_evaluations: bool = True,
     ) -> None:
         self._order_population_for_selection()
 
@@ -1256,7 +1264,7 @@ class GeneticTrainer:
         new_population: List[Individual] = [
             ind.copy() for ind in self.population[:elite_count]
         ]
-        if not cache_elite_evaluations:
+        if not reuse_elite_evaluations:
             for elite in new_population:
                 elite.evaluation_valid = False
 
@@ -1424,9 +1432,8 @@ class GeneticTrainer:
                     finished=int(ind.finished),
                     crashes=int(ind.crashes),
                     timeout=int(int(ind.finished) <= 0 and int(ind.crashes) <= 0),
-                    progress=float(ind.discrete_progress),
-                    discrete_progress=float(ind.discrete_progress),
-                    dense_progress=float(ind.dense_progress),
+                    progress=float(ind.dense_progress),
+                    block_progress=float(ind.discrete_progress),
                     ranking_progress=float(ind.ranking_progress()),
                     distance=float(ind.distance),
                     time=float(ind.time),
@@ -1510,20 +1517,20 @@ class GeneticTrainer:
             timeout_rate=timeout_rate,
             best_finished=int(best_gen.finished),
             best_crashes=int(best_gen.crashes),
-            best_progress=float(best_gen.discrete_progress),
-            best_dense_progress=float(best_gen.dense_progress),
+            best_progress=float(best_gen.dense_progress),
+            best_block_progress=float(best_gen.discrete_progress),
             best_ranking_progress=float(best_gen.ranking_progress()),
             best_ranking_key=json.dumps([float(value) for value in best_gen.ranking_key()]),
-            mean_discrete_progress=(
-                float(discrete_progresses.mean()) if len(discrete_progresses) else 0.0
-            ),
-            mean_dense_progress=(
+            mean_progress=(
                 float(dense_progresses.mean()) if len(dense_progresses) else 0.0
+            ),
+            mean_block_progress=(
+                float(discrete_progresses.mean()) if len(discrete_progresses) else 0.0
             ),
             mean_ranking_progress=(
                 float(ranking_progresses.mean()) if len(ranking_progresses) else 0.0
             ),
-            std_dense_progress=(
+            std_progress=(
                 float(dense_progresses.std()) if len(dense_progresses) else 0.0
             ),
             std_ranking_progress=(
@@ -1571,7 +1578,7 @@ class GeneticTrainer:
         mutation_decay_trigger: str = "immediate",
         mirror_episode_prob: float = 0.0,
         evaluate_both_mirrors: bool = True,
-        cache_elite_evaluations: bool = True,
+        reuse_elite_evaluations: bool = True,
         verbose: bool = True,
         dnf_time_for_plot: float = 30.0,
         checkpoint_every: int = 10,
@@ -1643,7 +1650,7 @@ class GeneticTrainer:
                 mutation_decay_trigger=mutation_decay_trigger,
                 mirror_episode_prob=mirror_episode_prob,
                 evaluate_both_mirrors=bool(evaluate_both_mirrors),
-                cache_elite_evaluations=bool(cache_elite_evaluations),
+                reuse_elite_evaluations=bool(reuse_elite_evaluations),
                 checkpoint_every=checkpoint_every,
                 dnf_time_for_plot=dnf_time_for_plot,
                 trajectory_log_mode=str(trajectory_log_mode),
@@ -1717,7 +1724,7 @@ class GeneticTrainer:
                 parent_count=parent_pool_size,
                 mutation_prob=current_mutation_prob,
                 mutation_sigma=current_mutation_sigma,
-                cache_elite_evaluations=cache_elite_evaluations,
+                reuse_elite_evaluations=reuse_elite_evaluations,
             )
             self._loaded_checkpoint_evaluated = False
             self._checkpoint_current_mutation_prob = None
@@ -1770,8 +1777,8 @@ class GeneticTrainer:
                     )
                     print(
                         f"Screening best: {status} | "
-                        f"progress={screened_best.discrete_progress:.1f}% | "
-                        f"dense={screened_best.dense_progress:.1f}% | "
+                        f"progress={screened_best.dense_progress:.1f}% | "
+                        f"block={screened_best.discrete_progress:.1f}% | "
                         f"time={screened_best.time:.2f}s"
                     )
                     print(
@@ -1986,7 +1993,7 @@ class GeneticTrainer:
                     parent_count=parent_pool_size,
                     mutation_prob=current_mutation_prob,
                     mutation_sigma=current_mutation_sigma,
-                    cache_elite_evaluations=cache_elite_evaluations,
+                    reuse_elite_evaluations=reuse_elite_evaluations,
                 )
                 if mutation_decay_active:
                     current_mutation_prob = max(
@@ -2307,7 +2314,7 @@ if __name__ == "__main__":
     # With selection_fitness_mode="ranking", Individual.fitness remains a
     # log-friendly scalar, but population sorting uses Individual.ranking_key().
     # Proven TM2D baseline:
-    # (finished, progress, -time, -crashes), where progress resolves to dense_progress.
+    # (finished, progress, -time, -crashes), where progress is continuous projected progress.
     # This prioritizes finishing and dense progress, then improves pace while still
     # penalizing crashes as a final tie-breaker.
     #
@@ -2318,7 +2325,7 @@ if __name__ == "__main__":
     selection_fitness_mode = "ranking"  # scalar / ranking
     ranking_mode = "lexicographic"
     ranking_key = "(finished, progress, -time, -crashes)"
-    ranking_progress_source = "dense_progress"
+    ranking_progress_source = "progress"
     moo_objective_mode = "lexicographic_primitives"
     moo_objective_subset = "finished,progress,neg_time,neg_crashes,neg_distance"
     moo_objective_priority = "finished,progress,neg_time,neg_crashes,neg_distance"
@@ -2337,7 +2344,7 @@ if __name__ == "__main__":
     # Fancy updates
     mirror_episode_prob = 0.0
     evaluate_both_mirrors = False
-    cache_elite_evaluations = True
+    reuse_elite_evaluations = True
     trajectory_log_mode = "top"  # off / top / top-finishers-final / all
     trajectory_top_k = 1
     trajectory_log_actions = False
@@ -2356,6 +2363,10 @@ if __name__ == "__main__":
     policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
     start_idle_max_time = 2.0
     # Baseline run from scratch: stronger exploration first, then gradual annealing.
+    if ranking_progress_source == "dense_progress":
+        ranking_progress_source = "progress"
+    elif ranking_progress_source == "discrete_progress":
+        ranking_progress_source = "block_progress"
     Individual.COMPARE_BY_RANKING_KEY = selection_fitness_mode == "ranking"
     Individual.RANKING_KEY = ranking_key
     Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
@@ -2518,7 +2529,7 @@ if __name__ == "__main__":
             mutation_decay_trigger=mutation_decay_trigger,
             mirror_episode_prob=mirror_episode_prob,
             evaluate_both_mirrors=evaluate_both_mirrors,
-            cache_elite_evaluations=cache_elite_evaluations,
+            reuse_elite_evaluations=reuse_elite_evaluations,
             verbose=True,
             dnf_time_for_plot=env_max_time,
             checkpoint_every=checkpoint_every,
@@ -2541,7 +2552,7 @@ if __name__ == "__main__":
                 hidden_activations=list(trainer.hidden_activations),
                 target_steer_deadzone=target_steer_deadzone,
                 evaluate_both_mirrors=bool(evaluate_both_mirrors),
-                cache_elite_evaluations=bool(cache_elite_evaluations),
+                reuse_elite_evaluations=bool(reuse_elite_evaluations),
                 trajectory_log_mode=trajectory_log_mode,
                 trajectory_top_k=trajectory_top_k,
                 trajectory_log_actions=bool(trajectory_log_actions),
@@ -2583,8 +2594,8 @@ if __name__ == "__main__":
             print(
                 f"\nBest overall: finished={trainer.best_individual.finished}, "
                 f"crashes={trainer.best_individual.crashes}, "
-                f"progress={trainer.best_individual.discrete_progress:.1f}%, "
-                f"dense={trainer.best_individual.dense_progress:.1f}%, "
+                f"progress={trainer.best_individual.dense_progress:.1f}%, "
+                f"block={trainer.best_individual.discrete_progress:.1f}%, "
                 f"time={trainer.best_individual.time:.2f}s"
             )
         if logger is not None:

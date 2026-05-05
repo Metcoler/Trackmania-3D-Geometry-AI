@@ -1,5 +1,4 @@
 RoadTechStraight;36,9,16;West
-RoadTechFinish;25,9,19;North
 RoadTechStart;27,15,19;North
 RoadTechSlopeBase;27,14,20;South
 RoadTechCurve1;27,14,21;South

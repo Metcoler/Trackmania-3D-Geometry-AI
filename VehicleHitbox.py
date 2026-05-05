@@ -18,7 +18,7 @@ class VehicleHitbox:
     front_half_length: float = 2.15
     rear_half_length: float = 1.95
     half_height: float = 0.60
-    safety_margin: float = 0.7
+    safety_margin: float = 1
     source: str = "empirical_mesh_and_supervised_aabb_20260503"
 
     @classmethod

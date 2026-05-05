@@ -254,10 +254,10 @@ class RacingGameEnviroment(gym.Env):
     ) -> dict:
         """Return the canonical raw rollout metrics used by trainers and logs.
 
-        This mirrors the local TM2D simulator contract:
-        `progress` is the discrete/path-tile progress, while `dense_progress`
-        is the continuous projected progress. Ranking code can decide which
-        one should become the active `progress` term.
+        Current public convention:
+        `progress` is continuous projected progress, while `block_progress`
+        is the legacy discrete/path-tile progress. The dense/discrete aliases
+        remain for older scripts and logs.
         """
 
         discrete_progress = float(info.get("discrete_progress", 0.0))
@@ -282,7 +282,8 @@ class RacingGameEnviroment(gym.Env):
         )
 
         return {
-            "progress": discrete_progress,
+            "progress": dense_progress,
+            "block_progress": discrete_progress,
             "discrete_progress": discrete_progress,
             "dense_progress": dense_progress,
             "time": time_value,

@@ -17,8 +17,8 @@ class Individual:
     DISTANCE_WEIGHT = 1.0
     COMPARE_BY_RANKING_KEY = False
     RANKING_KEY = "(finished, progress, -time, -crashes, -distance)"
-    RANKING_PROGRESS_SOURCE = "dense_progress"
-    RANKING_PROGRESS_SOURCES = ("discrete_progress", "dense_progress")
+    RANKING_PROGRESS_SOURCE = "progress"
+    RANKING_PROGRESS_SOURCES = ("progress", "block_progress", "dense_progress", "discrete_progress")
 
     def __init__(
         self,
@@ -148,6 +148,8 @@ class Individual:
             "progress_norm": progress_norm,
             "ranking_progress": progress,
             "ranking_progress_norm": progress_norm,
+            "block_progress": discrete,
+            "block_progress_norm": discrete_norm,
             "discrete_progress": discrete,
             "discrete_progress_norm": discrete_norm,
             "dense_progress": dense,
@@ -159,9 +161,9 @@ class Individual:
 
     def ranking_progress(self) -> float:
         source = str(Individual.RANKING_PROGRESS_SOURCE)
-        if source == "discrete_progress":
+        if source in {"block_progress", "discrete_progress"}:
             return float(self.discrete_progress)
-        if source == "dense_progress":
+        if source in {"progress", "dense_progress"}:
             return float(self.dense_progress)
         raise ValueError(f"Unknown Individual.RANKING_PROGRESS_SOURCE: {source}")
 
@@ -785,8 +787,8 @@ class Individual:
             "Individual("
             f"finished={self.finished}, "
             f"crashes={self.crashes}, "
-            f"discrete_progress={self.discrete_progress:.1f}, "
-            f"dense_progress={self.dense_progress:.1f}, "
+            f"progress={self.dense_progress:.1f}, "
+            f"block_progress={self.discrete_progress:.1f}, "
             f"distance={self.distance:.1f}, "
             f"time={self.time:.2f}, "
             f"fitness={self.fitness})"

@@ -714,6 +714,8 @@ class TM2DSimEnv:
             "dy": 0.0,
             "dz": float(forward[1]),
             "time": float(self.time),
+            "block_progress": float(progress),
+            "progress": float(dense_progress),
             "discrete_progress": float(progress),
             "dense_progress": float(dense_progress),
             "done": 1.0 if int(self.finished) > 0 else 0.0,
@@ -932,7 +934,8 @@ class TM2DSimEnv:
                     "y": float(info.get("y", 0.0)),
                     "z": float(info.get("z", self.position[1])),
                     "speed": float(info.get("speed", self.speed)),
-                    "dense_progress": float(info.get("dense_progress", 0.0)),
+                    "progress": float(info.get("progress", info.get("dense_progress", 0.0))),
+                    "dense_progress": float(info.get("progress", info.get("dense_progress", 0.0))),
                     "physics_hz": float(info.get("physics_hz", 1.0 / self.obs_encoder.dt_ref)),
                     "physics_delay_norm": float(info.get("physics_delay_norm", 0.0)),
                 }
@@ -945,13 +948,13 @@ class TM2DSimEnv:
         crashes = int(info.get("crashes", int(getattr(self, "crashes", 0))))
         if terminated and finished <= 0 and crashes <= 0:
             crashes = 1
-        progress = float(info.get("discrete_progress", 0.0))
-        dense_progress = float(info.get("dense_progress", progress))
+        block_progress = float(info.get("block_progress", info.get("discrete_progress", 0.0)))
+        progress = float(info.get("progress", info.get("dense_progress", block_progress)))
         time_value = float(info.get("time", self.time))
         distance = float(info.get("distance", self.distance))
         fitness_progress = (
-            dense_progress
-            if Individual.RANKING_PROGRESS_SOURCE == "dense_progress"
+            block_progress
+            if Individual.RANKING_PROGRESS_SOURCE in {"block_progress", "discrete_progress"}
             else progress
         )
         fitness = Individual.compute_scalar_fitness_for(
@@ -966,7 +969,9 @@ class TM2DSimEnv:
             "crashes": crashes,
             "timeout": int(bool(truncated) and finished <= 0 and crashes <= 0),
             "progress": progress,
-            "dense_progress": dense_progress,
+            "block_progress": block_progress,
+            "dense_progress": progress,
+            "discrete_progress": block_progress,
             "time": time_value,
             "distance": distance,
             "reward": total_reward,

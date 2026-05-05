@@ -42,20 +42,50 @@ The current research direction is intentionally evidence-driven:
 - transfer only the best-supported ideas into realtime Trackmania
 - keep GA/neuroevolution as the main approach
 - use RL as an experimental comparison branch
-- investigate Pareto / NSGA-II style multi-objective GA as the next step
+- keep Pareto / NSGA-II style multi-objective GA as a comparison branch, not
+  the current default, unless newer evidence beats the lexicographic baseline
 
 Current lexicographic GA status:
 
-- The strongest simple GA ranking found in local TM2D experiments is
-  `(finished, progress, -time)`.
-- `progress` defaults to dense geometric progress in the local simulator.
-- Interpretation: prefer a finished run, otherwise prefer the policy that gets
-  farther, and among comparable progress values prefer lower time.
-- This tuple performed best in the latest four-way lexicographic reward
-  comparison on `AI Training #5`.
-- It is now the baseline to transfer into live Trackmania GA experiments.
+- The current thesis-grade lexicographic GA baseline is
+  `(finished, progress, -time, -crashes)`.
+- From 2026-05-05 onward, public `progress` means dense/continuous
+  geometric progress. The old discrete/path-tile value is `block_progress`.
+  `dense_progress` and `discrete_progress` are legacy log/read aliases only.
+- Interpretation: first prefer a finished run, otherwise prefer farther
+  continuous progress; among comparable policies prefer lower time, and then fewer
+  crashes/touches.
+- This tuple is the strongest result from the AABB-clearance lidar reward sweep
+  on `AI Training #5` and replaces the older `(finished, progress, -time)`
+  baseline for new GA experiments.
+- Current practical TM2D GA baseline: `population=48`, `parent_count=14`,
+  `elite_count=2`, `mutation_prob=0.10`, `mutation_sigma=0.25`,
+  AABB-clearance lidar, binary gas/brake, max time `30`, and continuous progress
+  ranking. The refined grid found `48/14/1` slightly stronger on paper, but
+  `48/14/2` is preferred for practical elite diversity.
 
-Real Trackmania GA metric contract:
+Real Trackmania GA metric contract (current):
+
+- Live `RacingGameEnviroment` now exposes the same raw rollout metrics as
+  TM2D through `raw_metrics_from_info`.
+- `progress` is dense/continuous geometric progress in percent, projected on
+  the current path segment.
+- `block_progress` is the legacy discrete path-tile/checkpoint progress in
+  percent.
+- `dense_progress` and `discrete_progress` may still appear in old logs and
+  compatibility code; new plots/reports should prefer `progress` and
+  `block_progress`.
+- `ranking_progress` is the value currently used by lexicographic ranking
+  according to `Individual.RANKING_PROGRESS_SOURCE`; current default is
+  `progress`.
+- New `generation_metrics.csv` should use `best_progress`, `mean_progress`,
+  percentile bands `progress_p10...progress_p90`, and `block_progress_*` only
+  when discrete progress is intentionally discussed.
+- New `individual_metrics.csv` should write `progress`, `block_progress`,
+  `ranking_progress`, `ranking_key`, `reward`, `evaluation_steps`,
+  `evaluation_terminated`, `evaluation_truncated`, and `evaluation_valid`.
+
+Legacy pre-2026-05-05 metric wording kept below for context only:
 
 - Reálny `RacingGameEnviroment` teraz vystavuje rovnaké raw metriky ako TM2D
   sandbox cez `raw_metrics_from_info`.
@@ -94,6 +124,61 @@ Useful thesis GA baselines:
 
 These variants expose the tradeoff between progress-only learning, aggressive
 time pressure, and safer driving.
+
+Training graph convention:
+
+- Sweep heatmaps and large comparisons can stay single-metric for readability.
+- For one concrete training run or an A/B comparison, use the focus progress
+  plot from `Experiments/plot_training_focus.py`: best progress as the main
+  line, mean progress as dashed line, p25-p75 and p10-p90 population bands,
+  and optional population-density shading from `individual_metrics.csv`.
+- Thesis-facing axis labels should say `Progress [%]`; do not write
+  `dense_progress` unless explicitly discussing legacy logs or comparing
+  dense/continuous progress to `block_progress`.
+
+Current thesis-grade experiment conclusions:
+
+- Curated experiment packages live under `Diplomová práca/Experiments/...`
+  and should be preferred over raw working runs when writing thesis-final
+  claims. Important packages so far:
+  `lex_reward_aabb_lidar_fixed100_20260503`,
+  `ga_hyperparam_refinement_20260504`, `ga_mutation_grid_20260504`,
+  `ga_architecture_activation_ablation_20260504`, and
+  `vehicle_hitbox_aabb_20260503`. The newest working analysis package is
+  `Experiments/analysis/latest_training_results_20260505`.
+- Supervised architecture capacity sweep used clean `v2d/asphalt` supervised
+  data with `34 -> 3` observation/action dimensions. It is a capacity test,
+  not a closed-loop driving proof. `128x64 relu,tanh` is the upper-capacity
+  reference; `48x24` is the stronger practical candidate; `32x16 relu,tanh`
+  remains the cheap experimental GA baseline because most existing GA evidence
+  uses it. Hidden sigmoid was consistently a useful negative/control
+  activation.
+- Closed-loop architecture ablation under the selected GA reward tuple showed
+  that `relu,tanh` outperformed `relu,relu` in actual driving runs. `48x24`
+  is stronger, while `32x16` remains cheaper and good enough for broad
+  experiment sweeps.
+- The AABB-clearance lidar reward sweep selected
+  `(finished, progress, -time, -crashes)` as the current lexicographic ranking
+  baseline. Older `(finished, progress, -time)` results are still useful as a
+  historical step, but they are no longer the recommended baseline.
+- GA hyperparameter refinement suggests moderate selection pressure and a very
+  small elite set. Best paper result was `population=48`, `parent_count=14`,
+  `elite_count=1`, `mutation_prob=0.10`, `mutation_sigma=0.25`; practical
+  baseline uses `elite_count=2` to preserve more elite diversity.
+- Mutation evidence points toward less frequent but meaningful mutations.
+  `mutation_prob=0.10` and `mutation_sigma=0.25` are the safe interior
+  baseline; lower probability with larger sigma remains a possible refinement
+  direction, but needs repeated seeds before becoming a default.
+- Training-improvement evidence is mixed:
+  variable physics tick with elite reuse/cache is the strongest positive
+  result so far; first-finish mutation decay is a useful tradeoff idea with
+  better best-time potential but weaker stability; max touches and mirror
+  holdout are diagnostic; both-mirror evaluation did not yet prove better
+  holdout-map generalization.
+- GA MOO / NSGA-II remains a research branch, not the default. Older MOO
+  variants were weak or unstable. The revised `trackmania_racing` objective has
+  a usable signal, but it has not beaten the crash-aware lexicographic baseline
+  as the practical default.
 
 Current local RL status:
 
@@ -139,6 +224,12 @@ Current multi-objective GA / NSGA-II status:
 - The older shaped objective vector remains available as `trackmania_racing`:
   `finish`, `progress`, `speed_for_progress`, `safe_progress`,
   `path_efficiency`.
+- Current 2026-05-05 interpretation: MOO is still valuable for explaining
+  conflicting objectives and Pareto-front selection, but it is not the current
+  default training method. Recent MOO variants using the same primitive metrics
+  performed poorly; the revised `trackmania_racing` objective produced a
+  promising signal, but did not beat the practical lexicographic baseline
+  `(finished, progress, -time, -crashes)`.
 - 2026-05-01 MOO analysis on `AI Training #5`:
   - `finished,progress,neg_time` did not reach a finish.
   - `finished,progress,neg_time,neg_crashes` found a fast training finish
@@ -160,7 +251,7 @@ Current multi-objective GA / NSGA-II status:
   MOO-specific columns (`front0_size`, `front_rank`, `crowding`,
   `priority_score`, `obj_*`) remain as extra diagnostics.
 
-Current GA vs RL vs GA MOO comparison:
+Historical GA vs RL vs GA MOO comparison from 2026-05-01:
 
 - Analysis output:
   `Experiments/analysis/ga_rl_moo_comparison_20260501/REPORT.md`.
@@ -496,10 +587,14 @@ curve-feasibility parameter and should be validated by rollout behavior.
   `laser_hitbox_offsets`, and `laser_clearances`, so future hitbox and
   collision analyses do not need to reconstruct raw lidar from observation.
 - Current practical TM2D defaults for GA reward/selection research:
-  AABB clearance lidar for live-like crash behavior, dense progress, no elite
-  cache, and an explicit physics tick profile instead of the older continuous
-  FPS-range model. `center` and `corners` collision remain only fast diagnostic
-  simplifications, not the canonical live-like lidar model.
+  AABB clearance lidar for live-like crash behavior, dense progress, binary
+  gas/brake, max time `30`, and an explicit physics tick profile instead of the
+  older continuous FPS-range model. The current practical GA baseline is
+  `population=48`, `parent_count=14`, `elite_count=2`,
+  `mutation_prob=0.10`, `mutation_sigma=0.25`, and ranking
+  `(finished, progress, -time, -crashes)`. `center` and `corners` collision
+  remain only fast diagnostic simplifications, not the canonical live-like
+  lidar model.
 
 2026-05-04 physics-tick variability check:
 
@@ -2089,6 +2184,28 @@ Current supervised baseline as of 2026-05-02:
 - trained run: `logs/supervised_runs/20260502_151314_v2d_asphalt_target_supervised`
 - offline sanity sample: `gas_acc ~= 0.967`, `brake_acc ~= 0.984`,
   `steer_mae ~= 0.158`, best train loss `0.0400`
+
+Supervised architecture capacity sweep on 2026-05-03:
+
+- Main run:
+  `logs/supervised_architecture_sweep/20260503_214049_v2d_asphalt_capacity_sweep`.
+- Dataset roots:
+  `logs/supervised_data/20260502_153421_map_AI Training #5_v2d_asphalt_target_dataset`
+  and
+  `logs/supervised_data/20260502_154227_map_AI Training #5_v2d_asphalt_target_dataset`.
+- This was an offline representation-capacity experiment on clean
+  `v2d/asphalt` data, not a closed-loop driving proof. It used an attempt-level
+  split, `34 -> 3` observation/action dimensions, mirroring on train data, and
+  fixed preprocessing across candidates.
+- The absolute best validation loss came from the over-capacity reference
+  `128x64 relu,tanh`, but this is not a practical GA default because it creates
+  a much larger genome.
+- The practical conclusion is a size/quality tradeoff: `48x24` is the stronger
+  candidate for final-quality runs, while `32x16 relu,tanh` remains the cheap
+  experimental baseline used by most current GA evidence. Closed-loop ablation
+  later supported `relu,tanh` over `relu,relu` in actual GA driving runs.
+- Hidden sigmoid activations were consistently worse and should be treated as a
+  negative/control activation, not a serious default.
 
 Supervised robustness idea added on 2026-05-02:
 

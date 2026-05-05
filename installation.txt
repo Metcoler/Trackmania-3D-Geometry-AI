@@ -163,3 +163,5 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_map_specia
 
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_supervised_seeded_pretrain_20260505.ps1
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_ga_supervised_seeded_dense_pretrain_20260505.ps1

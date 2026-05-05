@@ -602,6 +602,7 @@ def seed_population_from_model(
     hidden_dim: tuple[int, ...],
     hidden_activation: tuple[str, ...],
     exact_copies: int,
+    noise_mode: str,
     mutation_probs: list[float],
     mutation_sigmas: list[float],
     tier_counts: list[int] | None,
@@ -610,6 +611,9 @@ def seed_population_from_model(
         raise ValueError("--initial-model-mutation-probs and --initial-model-mutation-sigmas must have the same length.")
     if not mutation_probs:
         raise ValueError("At least one initial model mutation tier is required.")
+    noise_mode = str(noise_mode).strip().lower()
+    if noise_mode not in {"sparse", "dense"}:
+        raise ValueError("--initial-model-noise-mode must be either sparse or dense.")
 
     model_path = Path(model_path)
     loaded_policy, model_extra = NeuralPolicy.load(str(model_path), map_location="cpu")
@@ -670,9 +674,21 @@ def seed_population_from_model(
             continue
         for _ in range(count):
             child = base.copy()
-            child.mutate(mutation_prob=float(prob), sigma=float(sigma))
+            if noise_mode == "dense":
+                noisy_genome = child.genome.copy()
+                noisy_genome += np.random.randn(noisy_genome.size).astype(np.float32) * float(sigma)
+                child.genome = noisy_genome
+            else:
+                child.mutate(mutation_prob=float(prob), sigma=float(sigma))
             population.append(child)
-        tiers.append({"count": count, "mutation_prob": float(prob), "mutation_sigma": float(sigma)})
+        tiers.append(
+            {
+                "count": count,
+                "noise_mode": noise_mode,
+                "mutation_prob": float(prob),
+                "mutation_sigma": float(sigma),
+            }
+        )
 
     if len(population) != population_size:
         raise RuntimeError(f"Seeded population has {len(population)} individuals, expected {population_size}.")
@@ -684,6 +700,7 @@ def seed_population_from_model(
     summary = {
         "source_model": str(model_path),
         "exact_copies": int(exact_copies),
+        "noise_mode": noise_mode,
         "tiers": tiers,
         "unique_genomes": int(len(unique_genomes)),
         "model_config": json_safe(loaded_policy.get_config()),
@@ -945,6 +962,15 @@ def main() -> None:
         help="Number of exact supervised-model copies in the initial population.",
     )
     parser.add_argument(
+        "--initial-model-noise-mode",
+        choices=["sparse", "dense"],
+        default="sparse",
+        help=(
+            "How to perturb supervised-seeded tiers. sparse uses GA mutation_prob masks; "
+            "dense adds Gaussian noise to every genome value in the tier."
+        ),
+    )
+    parser.add_argument(
         "--initial-model-mutation-probs",
         default="0.02,0.05,0.10",
         help="Comma-separated mutation probabilities for supervised-seeded population tiers.",
@@ -1041,6 +1067,7 @@ def main() -> None:
             hidden_dim=hidden_dim,
             hidden_activation=hidden_activation,
             exact_copies=int(args.initial_model_exact_copies),
+            noise_mode=str(args.initial_model_noise_mode),
             mutation_probs=parse_list(args.initial_model_mutation_probs, float),
             mutation_sigmas=parse_list(args.initial_model_mutation_sigmas, float),
             tier_counts=tier_counts,
@@ -1126,6 +1153,7 @@ def main() -> None:
         "initial_population_source": "supervised_model" if initial_population_model else "random",
         "initial_population_model": initial_population_model,
         "initial_model_exact_copies": int(args.initial_model_exact_copies),
+        "initial_model_noise_mode": str(args.initial_model_noise_mode),
         "initial_model_mutation_probs": parse_list(args.initial_model_mutation_probs, float),
         "initial_model_mutation_sigmas": parse_list(args.initial_model_mutation_sigmas, float),
         "initial_model_tier_counts": (

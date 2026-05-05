@@ -1,0 +1,50 @@
+{
+  "experiment_id": "supervised_map_specialists_20260505",
+  "category": "supervised_imitation_diagnostic",
+  "status": "thesis_usable_qualitative",
+  "created_date": "2026-05-05",
+  "maps": [
+    "single_surface_flat",
+    "multi_surface_flat",
+    "single_surface_height"
+  ],
+  "validated_figure": "analysis/single_surface_flat/single_surface_flat_teacher_agent_paths.png",
+  "model_config": {
+    "observation_dim": 53,
+    "action_dim": 3,
+    "hidden_dims": [48, 24],
+    "hidden_activations": ["relu", "tanh"],
+    "vertical_mode": true,
+    "multi_surface_mode": true,
+    "mirror_augmentation": true,
+    "action_mode": "target"
+  },
+  "analysis_config": {
+    "map_name": "single_surface_flat",
+    "physics_tick_profile": "fixed100",
+    "collision_mode": "lidar",
+    "max_touches": "inf",
+    "collision_slowdown": 0.30,
+    "collision_bounce_speed_retention": 0.70,
+    "collision_wall_tangent_blend": 0.30,
+    "max_time": 100
+  },
+  "single_surface_flat_result": {
+    "finished": 1,
+    "progress": 100.0,
+    "block_progress": 100.0,
+    "time": 43.39,
+    "crashes": 32,
+    "left_road_surface": 0
+  },
+  "source_paths": {
+    "analysis": "Experiments/analysis/supervised_map_specialists_20260505",
+    "training_runs": "logs/supervised_runs_map_specialists_20260505",
+    "datasets": [
+      "logs/supervised_data/20260505_132438_map_single_surface_flat_v3d_surface_target_dataset",
+      "logs/supervised_data/20260505_134201_map_multi_surface_flat_v3d_surface_target_dataset",
+      "logs/supervised_data/20260505_135345_map_single_surface_height_v3d_surface_target_dataset"
+    ]
+  },
+  "interpretation": "Qualitative supervised imitation diagnostic. The flat-map specialist can finish in TM2D replay, but wall touches show that pure supervised imitation remains sensitive to trajectory deviations."
+}

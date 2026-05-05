@@ -415,6 +415,7 @@ def write_report(summary: pd.DataFrame, output_dir: Path) -> None:
 
     exp05a = row("exp05a_variable_tick_no_cache_control")
     exp05b = row("exp05b_variable_tick_elite_cache")
+    exp06 = row("exp06_supervised_seeded_fixed100")
     decay = row("exp01b_mutation_decay_first_finish_fixed100")
     max_touches = row("exp04_max_touches_3_fixed100")
     moo_racing = row("moo_trackmania_racing")
@@ -433,6 +434,22 @@ def write_report(summary: pd.DataFrame, output_dir: Path) -> None:
             "- Variable physics tick with elite cache is the strongest positive result: "
             f"no-cache had {int(exp05a['total_finish'])} total finishes, cache had "
             f"{int(exp05b['total_finish'])} total finishes and best time {exp05b['best_time']:.2f}s."
+        )
+    if exp06 is not None:
+        best_time_text = (
+            f"{exp06['best_time']:.2f}s"
+            if math.isfinite(float(exp06["best_time"]))
+            else "no finish"
+        )
+        first_finish_text = (
+            str(int(exp06["first_finish_generation"]))
+            if math.isfinite(float(exp06["first_finish_generation"]))
+            else "none"
+        )
+        lines.append(
+            "- Supervised-seeded GA is a hybrid BC + GA fine-tuning experiment, not a pure GA baseline: "
+            f"first finish generation {first_finish_text}, best time {best_time_text}, "
+            f"last50 mean progress {exp06['last50_mean_progress']:.1f}."
         )
     if decay is not None:
         lines.append(
@@ -467,6 +484,7 @@ def write_report(summary: pd.DataFrame, output_dir: Path) -> None:
             "- Include first-finish decay as an optimization idea with mixed results.",
             "- Keep max-touches and mirror holdout as diagnostic evidence, not as final improvements.",
             "- Mention MOO trackmania_racing as a promising revised MOO formulation, while lexicographic ranking remains the safer baseline.",
+            "- Treat supervised-seeded GA separately from pure GA improvements because it uses extra human demonstrations.",
             "",
             "## Generated files",
             "",

@@ -323,6 +323,28 @@ class TM2DGeometry:
                     return False
         return True
 
+    def closest_wall_tangent(self, point: np.ndarray) -> np.ndarray | None:
+        if len(self.wall_segments) <= 0:
+            return None
+        point = np.asarray(point, dtype=np.float32).reshape(1, 2)
+        start = self._seg_start
+        vec = self._seg_vec
+        len_sq = np.einsum("ij,ij->i", vec, vec)
+        valid = len_sq > 1e-8
+        if not bool(np.any(valid)):
+            return None
+        rel = point - start
+        t = np.zeros_like(len_sq, dtype=np.float32)
+        t[valid] = np.einsum("ij,ij->i", rel[valid], vec[valid]) / len_sq[valid]
+        t = np.clip(t, 0.0, 1.0)
+        closest = start + vec * t.reshape(-1, 1)
+        dist_sq = np.einsum("ij,ij->i", closest - point, closest - point)
+        dist_sq = np.where(valid, dist_sq, np.inf)
+        idx = int(np.argmin(dist_sq))
+        if not np.isfinite(float(dist_sq[idx])):
+            return None
+        return _normalize_2d(vec[idx])
+
     def update_path_index(self, point: np.ndarray, path_index: int) -> int:
         current_cell = self.point_to_cell(point)
         if 0 <= path_index < len(self.path_tiles_xz) and current_cell == self.path_tiles_xz[path_index]:

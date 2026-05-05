@@ -1,6 +1,9 @@
+import argparse
 import glob
 import os
+import re
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -8,6 +11,14 @@ import numpy as np
 from Enviroment import RacingGameEnviroment
 from NeuralPolicy import NeuralPolicy
 from Individual import Individual
+
+
+MAP_SPECIALIST_NAMES = (
+    "single_surface_flat",
+    "multi_surface_flat",
+    "single_surface_height",
+)
+PRACTICAL_INFINITY_TOUCHES = 1_000_000
 
 
 def find_latest_population(patterns: Optional[List[str]] = None) -> str:
@@ -63,6 +74,73 @@ def find_latest_policy_model() -> str:
         )
 
     return max(files, key=os.path.getmtime)
+
+
+def parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Expected boolean value, got {value!r}.")
+
+
+def parse_max_touches(value: Any) -> int:
+    text = str(value).strip().lower()
+    if text in {"inf", "infinite", "infinity", "nekonecno", "nekonečno"}:
+        return PRACTICAL_INFINITY_TOUCHES
+    touches = int(text)
+    if touches < 1:
+        raise argparse.ArgumentTypeError("--max-touches must be >= 1 or 'inf'.")
+    return touches
+
+
+def infer_map_name_from_model(model_file: str, extra: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    candidates: List[str] = [str(model_file)]
+    if extra:
+        attempt_files = extra.get("attempt_files") or []
+        if isinstance(attempt_files, (list, tuple)):
+            candidates.extend(str(path) for path in attempt_files)
+    for candidate in candidates:
+        normalized = candidate.replace("\\", "/")
+        for map_name in MAP_SPECIALIST_NAMES:
+            if f"/{map_name}/" in normalized or f"map_{map_name}_" in normalized:
+                return map_name
+        match = re.search(r"map_(.+?)_v[23]d_", normalized)
+        if match:
+            return match.group(1)
+    return None
+
+
+def find_latest_map_specialist_model(
+    specialist_root: str = "logs/supervised_runs_map_specialists_20260505",
+    map_name: Optional[str] = None,
+) -> str:
+    root = Path(specialist_root)
+    if map_name:
+        search_root = root / map_name
+        if not search_root.exists():
+            search_root = root
+        patterns = [
+            str(search_root / "**" / "best_model.pt"),
+            str(root / f"**{map_name}**" / "**" / "best_model.pt"),
+        ]
+    else:
+        patterns = [str(root / "**" / "best_model.pt")]
+
+    files: List[str] = []
+    for pattern in patterns:
+        files.extend(glob.glob(pattern, recursive=True))
+    files = sorted(set(files), key=os.path.getmtime)
+    if not files:
+        if map_name:
+            raise FileNotFoundError(
+                f"No map-specialist best_model.pt found for {map_name!r} under {specialist_root!r}."
+            )
+        raise FileNotFoundError(f"No map-specialist best_model.pt found under {specialist_root!r}.")
+    return files[-1]
 
 
 def infer_hidden_dim(genome_size: int, obs_dim: int, act_dim: int) -> int:
@@ -449,19 +527,41 @@ def replay_population(
 
 
 def drive_model(
-    map_name: str,
+    map_name: Optional[str],
     model_file: str,
     max_steps: Optional[int] = None,
     env_max_time: float = 60.0,
     max_touches: int = 1,
     never_quit: bool = True,
-    action_mode: str = "target",
-    vertical_mode: bool = True,
-    multi_surface_mode: bool = True,
+    action_mode: Optional[str] = None,
+    vertical_mode: Optional[bool] = None,
+    multi_surface_mode: Optional[bool] = None,
     target_steer_deadzone: float = 0.0,
 ) -> None:
     policy, extra = NeuralPolicy.load(model_file, map_location="cpu")
+    if map_name is None or str(map_name).strip().lower() == "auto":
+        map_name = infer_map_name_from_model(model_file, extra)
+    if not map_name:
+        raise ValueError("Map name could not be inferred. Pass --map-name explicitly.")
+    if action_mode is None:
+        action_mode = str(getattr(policy, "action_mode", "target"))
+    if vertical_mode is None:
+        if extra and "vertical_mode" in extra:
+            vertical_mode = bool(extra["vertical_mode"])
+        else:
+            vertical_mode = int(policy.obs_dim) >= 44
+    if multi_surface_mode is None:
+        if extra and "multi_surface_mode" in extra:
+            multi_surface_mode = bool(extra["multi_surface_mode"])
+        else:
+            multi_surface_mode = int(policy.obs_dim) >= 39
+
     print(f"Loaded model from: {model_file}")
+    print(f"Replay map: {map_name}")
+    print(
+        f"Replay config: action_mode={action_mode}, vertical_mode={vertical_mode}, "
+        f"multi_surface_mode={multi_surface_mode}, max_touches={max_touches}"
+    )
     print(f"Model config: {policy.get_config()}")
     if extra:
         print(f"Model extra: {extra}")
@@ -513,7 +613,8 @@ def drive_model(
             f"Replay finished | reward={total_reward:.3f} | "
             f"finished={int(info.get('finished', getattr(env, 'finished', 0)))} | "
             f"crashes={int(info.get('crashes', getattr(env, 'crashes', 0)))} | "
-            f"progress={float(info.get('discrete_progress', 0.0)):.2f}% | "
+            f"progress={float(info.get('progress', info.get('dense_progress', info.get('discrete_progress', 0.0)))):.2f}% | "
+            f"block={float(info.get('block_progress', info.get('discrete_progress', 0.0))):.2f}% | "
             f"time={float(info.get('time', 0.0)):.2f}s | "
             f"distance={float(info.get('distance', 0.0)):.2f}"
         )
@@ -522,63 +623,105 @@ def drive_model(
         print("Environment closed.")
 
 
-if __name__ == "__main__":
-    MAP_NAME = "AI Training #3"
-    MODEL_FILE = find_latest_policy_model()
-    POPULATION_FILE = None
-    # POPULATION_FILE = None  # Auto-pick latest supported population checkpoint.
-    # Example TM checkpoint:
-    # POPULATION_FILE = (
-    #     r"logs/tm_finetune_runs/20260222_213116_tm_finetune_map_small_map_h32_p32"
-    #     r"_src_20260221_235425_population_gen_0100/checkpoints/population_gen_0100.npz"
-    # )
+def parse_auto_bool_arg(value: str) -> Optional[bool]:
+    if str(value).strip().lower() == "auto":
+        return None
+    return parse_bool(value)
 
-    EPISODES_PER_INDIVIDUAL = 1
-    MAX_STEPS = None # None -> run until time/termination guards stop the episode
-    ENV_MAX_TIME = 60.0
-    MAX_TOUCHES = 3
-    NEVER_QUIT = True
-    ACTION_MODE = "target"
-    VERTICAL_MODE = False
-    MULTI_SURFACE_MODE = False
-    TARGET_STEER_DEADZONE = 0.05
-    PAUSE_BETWEEN = False
 
-    # Selection (choose one style):
-    SORT_BY_FITNESS = True
-    RANK_START = 1
-    RANK_END = 32  # full mini population (32); set None for all selected from RANK_START onward
-    EXACT_INDICES = None  # e.g. [0, 17, 42] (population indices from file)
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Drive a trained NeuralPolicy in live Trackmania.")
+    parser.add_argument("--map-name", default="auto", help="Map to replay. Use 'all' for all map specialists.")
+    parser.add_argument("--model-file", default=None, help="Exact .pt model path. If omitted, latest map specialist is used.")
+    parser.add_argument(
+        "--specialist-root",
+        default="logs/supervised_runs_map_specialists_20260505",
+        help="Root with map-specific supervised specialists.",
+    )
+    parser.add_argument("--population-file", default=None, help="Replay a saved population instead of a .pt model.")
+    parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument("--env-max-time", type=float, default=60.0)
+    parser.add_argument("--max-touches", type=parse_max_touches, default=1)
+    parser.add_argument("--never-quit", type=parse_bool, default=True)
+    parser.add_argument("--action-mode", choices=("auto", "target", "delta"), default="auto")
+    parser.add_argument("--vertical-mode", default="auto", help="auto|true|false")
+    parser.add_argument("--multi-surface-mode", default="auto", help="auto|true|false")
+    parser.add_argument("--target-steer-deadzone", type=float, default=0.05)
+    parser.add_argument("--pause-between-maps", type=parse_bool, default=True)
 
-    if MODEL_FILE:
-        drive_model(
-            map_name=MAP_NAME,
-            model_file=MODEL_FILE,
-            max_steps=MAX_STEPS,
-            env_max_time=ENV_MAX_TIME,
-            max_touches=MAX_TOUCHES,
-            never_quit=NEVER_QUIT,
-            action_mode=ACTION_MODE,
-            vertical_mode=VERTICAL_MODE,
-            multi_surface_mode=MULTI_SURFACE_MODE,
-            target_steer_deadzone=TARGET_STEER_DEADZONE,
-        )
-    else:
+    parser.add_argument("--episodes-per-individual", type=int, default=1)
+    parser.add_argument("--pause-between-individuals", type=parse_bool, default=False)
+    parser.add_argument("--sort-by-fitness", type=parse_bool, default=True)
+    parser.add_argument("--rank-start", type=int, default=1)
+    parser.add_argument("--rank-end", type=int, default=None)
+    parser.add_argument("--exact-indices", default="", help="Comma-separated population indices.")
+    return parser
+
+
+def parse_exact_indices(value: str) -> Optional[List[int]]:
+    text = str(value).strip()
+    if not text:
+        return None
+    return [int(part.strip()) for part in text.split(",") if part.strip()]
+
+
+def main() -> None:
+    args = build_arg_parser().parse_args()
+    vertical_mode = parse_auto_bool_arg(args.vertical_mode)
+    multi_surface_mode = parse_auto_bool_arg(args.multi_surface_mode)
+    action_mode = None if args.action_mode == "auto" else args.action_mode
+
+    if args.population_file:
+        if args.map_name in {"auto", "all"}:
+            raise ValueError("--map-name must be explicit when replaying a population.")
         replay_population(
-            map_name=MAP_NAME,
-            population_file=POPULATION_FILE,
-            episodes_per_individual=EPISODES_PER_INDIVIDUAL,
-            max_steps=MAX_STEPS,
-            env_max_time=ENV_MAX_TIME,
-            max_touches=MAX_TOUCHES,
-            never_quit=NEVER_QUIT,
-            action_mode=ACTION_MODE,
-            vertical_mode=VERTICAL_MODE,
-            multi_surface_mode=MULTI_SURFACE_MODE,
-            pause_between=PAUSE_BETWEEN,
-            sort_by_fitness=SORT_BY_FITNESS,
-            rank_start=RANK_START,
-            rank_end=RANK_END,
-            exact_indices=EXACT_INDICES,
-            target_steer_deadzone=TARGET_STEER_DEADZONE,
+            map_name=args.map_name,
+            population_file=args.population_file,
+            episodes_per_individual=args.episodes_per_individual,
+            max_steps=args.max_steps,
+            env_max_time=args.env_max_time,
+            max_touches=args.max_touches,
+            never_quit=args.never_quit,
+            action_mode=action_mode or "target",
+            vertical_mode=True if vertical_mode is None else vertical_mode,
+            multi_surface_mode=True if multi_surface_mode is None else multi_surface_mode,
+            pause_between=args.pause_between_individuals,
+            sort_by_fitness=args.sort_by_fitness,
+            rank_start=args.rank_start,
+            rank_end=args.rank_end,
+            exact_indices=parse_exact_indices(args.exact_indices),
+            target_steer_deadzone=args.target_steer_deadzone,
         )
+        return
+
+    map_names: List[Optional[str]]
+    if str(args.map_name).strip().lower() == "all":
+        map_names = list(MAP_SPECIALIST_NAMES)
+    else:
+        map_names = [None if str(args.map_name).strip().lower() == "auto" else str(args.map_name)]
+
+    for index, map_name in enumerate(map_names):
+        model_file = args.model_file
+        if model_file is None:
+            model_file = find_latest_map_specialist_model(
+                specialist_root=args.specialist_root,
+                map_name=map_name,
+            )
+        if index > 0 and args.pause_between_maps:
+            input(f"Load map '{map_name}' in Trackmania, then press Enter to continue...")
+        drive_model(
+            map_name=map_name,
+            model_file=model_file,
+            max_steps=args.max_steps,
+            env_max_time=args.env_max_time,
+            max_touches=args.max_touches,
+            never_quit=args.never_quit,
+            action_mode=action_mode,
+            vertical_mode=vertical_mode,
+            multi_surface_mode=multi_surface_mode,
+            target_steer_deadzone=args.target_steer_deadzone,
+        )
+
+
+if __name__ == "__main__":
+    main()

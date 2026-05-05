@@ -136,8 +136,14 @@ class TM2DSimEnv:
         max_touches: int = 1,
         collision_bounce_speed_retention: float = 0.40,
         collision_bounce_backoff: float = 0.05,
+        collision_bounce_path_axis_bias: float = 0.0,
+        collision_bounce_normal_restitution: float = 1.0,
+        collision_bounce_wall_tangent_blend: float = 0.0,
+        collision_bounce_reference_window: int = 8,
+        collision_bounce_skip_recent: int = 1,
         touch_release_clearance_threshold: float = 0.50,
         mask_physics_delay_observation: bool = False,
+        never_stop: bool = False,
     ) -> None:
         self.geometry = TM2DGeometry(map_name=map_name)
         self.max_time = float(max_time)
@@ -158,8 +164,14 @@ class TM2DSimEnv:
         self.max_touches = max(1, int(max_touches))
         self.collision_bounce_speed_retention = float(np.clip(collision_bounce_speed_retention, 0.0, 1.0))
         self.collision_bounce_backoff = max(0.0, float(collision_bounce_backoff))
+        self.collision_bounce_path_axis_bias = float(np.clip(collision_bounce_path_axis_bias, 0.0, 1.0))
+        self.collision_bounce_normal_restitution = float(np.clip(collision_bounce_normal_restitution, 0.0, 1.0))
+        self.collision_bounce_wall_tangent_blend = float(np.clip(collision_bounce_wall_tangent_blend, 0.0, 1.0))
+        self.collision_bounce_reference_window = max(1, int(collision_bounce_reference_window))
+        self.collision_bounce_skip_recent = max(0, int(collision_bounce_skip_recent))
         self.touch_release_clearance_threshold = max(0.0, float(touch_release_clearance_threshold))
         self.mask_physics_delay_observation = bool(mask_physics_delay_observation)
+        self.never_stop = bool(never_stop)
         self.rng = np.random.default_rng(seed)
         self.obs_encoder = ObservationEncoder(
             vertical_mode=bool(vertical_mode),
@@ -208,6 +220,7 @@ class TM2DSimEnv:
         self.crashes = 0
         self.touch_count = 0
         self._laser_touch_latched = False
+        self.wall_hug_frames = 0
         self.done = False
         self._stuck_since_time = None
         self.last_score = self._score_state(
@@ -226,6 +239,14 @@ class TM2DSimEnv:
         self.previous_speed = None
         self.previous_side_speed = None
         self.previous_clearance_windows = None
+        self._last_safe_position = self.position.copy()
+        self._last_safe_heading = float(self.heading)
+        self._last_safe_velocity = self.velocity.copy()
+        self._bounce_velocity_history: list[np.ndarray] = []
+        self._record_bounce_reference_state()
+        self.last_bounce_recovered = 0
+        self.last_bounce_clearance = float("inf")
+        self.last_bounce_reference_samples = 0
         self._obs_buffer.fill(0.0)
         obs, info = self._build_observation()
         return obs, info
@@ -252,8 +273,12 @@ class TM2DSimEnv:
         self.current_physics_hz_norm = 1.0 / float(physics_ticks)
         self.current_physics_hz = self.current_physics_hz_norm / float(self.physics.dt_ref)
         self.current_physics_delay_norm = float(1.0 - self.current_physics_hz_norm)
+        self.last_bounce_recovered = 0
+        self.last_bounce_clearance = float("inf")
         old_heading = float(self.heading)
         old_position = self.position.copy()
+        old_velocity = self.velocity.copy()
+        old_path_index = int(self.path_index)
 
         forward = np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32)
         right = np.array([-forward[1], forward[0]], dtype=np.float32)
@@ -276,8 +301,9 @@ class TM2DSimEnv:
         side_speed *= math.exp(-self.physics.lateral_grip * dt)
         self.velocity = self.forward * forward_speed + right * side_speed
         self.position = self.position + self.velocity * dt
+        step_distance = float(np.linalg.norm(self.position - old_position))
         self.time += dt
-        self.distance += float(np.linalg.norm(self.position - old_position))
+        self.distance += step_distance
         self.speed = float(np.linalg.norm(self.velocity))
         self.side_speed = float(side_speed)
         self.last_yaw_rate = float((self.heading - old_heading) / max(dt, 1e-6))
@@ -292,32 +318,56 @@ class TM2DSimEnv:
         truncated = False
         finished = 0
         touch_reason = ""
+        wall_hug_active = False
         contact = self._laser_contact_state(raycast=raycast)
+        footprint_on_road = self.geometry.car_on_road(
+            self.position,
+            self.heading,
+            length=self.physics.car_length,
+            width=self.physics.car_width,
+        )
+        off_road_contact = not bool(footprint_on_road)
         if contact["min_clearance"] > self.touch_release_clearance_threshold:
             self._laser_touch_latched = False
 
-        if self._crash_detected_from_contact(contact):
+        in_contact = bool(self._crash_detected_from_contact(contact) or off_road_contact)
+        if in_contact:
             if self.max_touches <= 1:
                 self.touch_count = max(1, self.touch_count + 1)
                 terminated = True
-                touch_reason = "laser"
+                touch_reason = "off_road" if off_road_contact else "laser"
             else:
                 if not self._laser_touch_latched:
                     self.touch_count += 1
                     self._laser_touch_latched = True
-                    touch_reason = "laser"
+                    touch_reason = "off_road" if off_road_contact else "laser"
                     if self.touch_count >= self.max_touches:
                         terminated = True
-                    else:
-                        self._apply_collision_bounce(contact)
-                        raycast = None
+                else:
+                    wall_hug_active = True
+                    self.wall_hug_frames += 1
+                    touch_reason = "wall_hug"
+                if not terminated:
+                    before_bounce_position = self.position.copy()
+                    self._apply_collision_bounce(
+                        contact,
+                        fallback_position=old_position,
+                        fallback_heading=old_heading,
+                        fallback_velocity=old_velocity,
+                        fallback_path_index=old_path_index,
+                    )
+                    self.distance -= float(np.linalg.norm(before_bounce_position - old_position))
+                    self.distance += float(np.linalg.norm(self.position - old_position))
+                    self.path_index = old_path_index
+                    raycast = None
         elif self.path_index >= len(self.geometry.path_tiles_xz) - 1:
             terminated = True
             finished = 1
         elif self.time >= self.max_time:
             truncated = True
         elif (
-            self.time >= self.start_idle_max_time
+            not self.never_stop
+            and self.time >= self.start_idle_max_time
             and progress <= self.start_idle_progress_epsilon
             and self.speed <= self.start_idle_speed_threshold
         ):
@@ -325,7 +375,8 @@ class TM2DSimEnv:
             self.touch_count = max(1, self.touch_count)
             touch_reason = "start_idle"
         elif (
-            progress > self.start_idle_progress_epsilon
+            not self.never_stop
+            and progress > self.start_idle_progress_epsilon
             and self.speed <= self.stuck_timeout_speed_threshold
         ):
             if self._stuck_since_time is None:
@@ -336,6 +387,12 @@ class TM2DSimEnv:
                 touch_reason = "stuck_after_progress"
         else:
             self._stuck_since_time = None
+
+        if not self.done and not off_road_contact and footprint_on_road:
+            self._last_safe_position = self.position.copy()
+            self._last_safe_heading = float(self.heading)
+            self._last_safe_velocity = self.velocity.copy()
+            self._record_bounce_reference_state()
 
         self.done = bool(terminated or truncated)
         self.finished = int(finished)
@@ -367,6 +424,12 @@ class TM2DSimEnv:
                 "touch_count": int(self.touch_count),
                 "max_touches": int(self.max_touches),
                 "touch_reason": touch_reason,
+                "footprint_on_road": int(bool(footprint_on_road)),
+                "wall_hug_active": int(bool(wall_hug_active)),
+                "wall_hug_frames": int(self.wall_hug_frames),
+                "bounce_recovered": int(self.last_bounce_recovered),
+                "bounce_clearance": float(self.last_bounce_clearance),
+                "bounce_reference_samples": int(self.last_bounce_reference_samples),
             }
         )
         return obs, reward, bool(terminated), bool(truncated), info
@@ -410,34 +473,271 @@ class TM2DSimEnv:
             width=self.physics.car_width,
         )
 
-    def _apply_collision_bounce(self, contact: dict) -> None:
+    def _apply_collision_bounce(
+        self,
+        contact: dict,
+        fallback_position: np.ndarray | None = None,
+        fallback_heading: float | None = None,
+        fallback_velocity: np.ndarray | None = None,
+        fallback_path_index: int | None = None,
+    ) -> None:
+        if fallback_position is None:
+            fallback_position = getattr(self, "_last_safe_position", self.position)
+        if fallback_heading is None:
+            fallback_heading = float(getattr(self, "_last_safe_heading", self.heading))
+        if fallback_velocity is None:
+            fallback_velocity = getattr(self, "_last_safe_velocity", self.velocity)
+        fallback_velocity = self._bounce_reference_velocity(fallback_velocity)
+        if fallback_path_index is None:
+            fallback_path_index = int(getattr(self, "path_index", 0))
+        self.last_bounce_recovered = 0
+        self.last_bounce_clearance = float("inf")
+
         raycast = contact.get("raycast")
         index = int(contact.get("index", -1))
         if raycast is None or index < 0:
-            self.velocity *= self.collision_bounce_speed_retention
+            self.position = np.asarray(fallback_position, dtype=np.float32).copy()
+            self.heading = float(fallback_heading)
+            self.velocity = -np.asarray(fallback_velocity, dtype=np.float32) * self.collision_bounce_speed_retention
+            self.velocity = self._blend_bounce_velocity_toward_path_axis(self.velocity, fallback_path_index)
+            self._align_heading_to_bounce_velocity()
+            self.position = self._find_bounce_recovery_position(
+                fallback_position=self.position,
+                heading=self.heading,
+                directions=[_normalize_2d(self.velocity, fallback=np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32))],
+            )
             self.speed = float(np.linalg.norm(self.velocity))
+            self.forward = np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32)
             return
 
         directions = np.asarray(raycast.directions, dtype=np.float32)
         if index >= len(directions):
-            self.velocity *= self.collision_bounce_speed_retention
+            self.position = np.asarray(fallback_position, dtype=np.float32).copy()
+            self.heading = float(fallback_heading)
+            self.velocity = -np.asarray(fallback_velocity, dtype=np.float32) * self.collision_bounce_speed_retention
+            self.velocity = self._blend_bounce_velocity_toward_path_axis(self.velocity, fallback_path_index)
+            self._align_heading_to_bounce_velocity()
+            self.position = self._find_bounce_recovery_position(
+                fallback_position=self.position,
+                heading=self.heading,
+                directions=[_normalize_2d(self.velocity, fallback=np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32))],
+            )
             self.speed = float(np.linalg.norm(self.velocity))
+            self.forward = np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32)
             return
 
         ray_direction = _normalize_2d(directions[index])
         normal = -ray_direction
-        velocity = np.asarray(self.velocity, dtype=np.float32)
-        if float(np.dot(velocity, normal)) < 0.0:
-            velocity = velocity - (2.0 * float(np.dot(velocity, normal)) * normal)
+        velocity = np.asarray(fallback_velocity, dtype=np.float32)
+        contact_point = np.asarray(raycast.endpoints[index], dtype=np.float32)
+        wall_tangent = self.geometry.closest_wall_tangent(contact_point)
+        velocity = self._collision_bounce_velocity_from_wall_model(
+            velocity,
+            normal,
+            wall_tangent=wall_tangent,
+        )
         velocity = velocity * self.collision_bounce_speed_retention
+        velocity = self._blend_bounce_velocity_toward_path_axis(velocity, fallback_path_index)
 
         penetration = max(0.0, -float(contact.get("min_clearance", 0.0)))
-        self.position = self.position + normal * float(penetration + self.collision_bounce_backoff)
+        self.position = np.asarray(fallback_position, dtype=np.float32).copy()
+        self.heading = float(fallback_heading)
         self.velocity = velocity.astype(np.float32, copy=False)
+        self._align_heading_to_bounce_velocity()
+        bounce_direction = _normalize_2d(self.velocity, fallback=normal)
+        self.position = self._find_bounce_recovery_position(
+            fallback_position=self.position,
+            heading=self.heading,
+            directions=[
+                _normalize_2d(normal),
+                bounce_direction,
+                _normalize_2d(normal + bounce_direction, fallback=normal),
+            ],
+            initial_offset=penetration + self.collision_bounce_backoff,
+        )
         self.speed = float(np.linalg.norm(self.velocity))
+        self.forward = np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32)
         forward = np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32)
         right = np.array([-forward[1], forward[0]], dtype=np.float32)
         self.side_speed = float(np.dot(self.velocity, right))
+
+    def _collision_bounce_velocity_from_wall_model(
+        self,
+        incoming_velocity: np.ndarray,
+        normal: np.ndarray,
+        wall_tangent: np.ndarray | None = None,
+    ) -> np.ndarray:
+        incoming_velocity = np.asarray(incoming_velocity, dtype=np.float32)
+        if wall_tangent is not None:
+            tangent = _normalize_2d(wall_tangent)
+            normal = np.array([-tangent[1], tangent[0]], dtype=np.float32)
+            if float(np.dot(incoming_velocity, normal)) > 0.0:
+                normal = -normal
+        else:
+            tangent = None
+            normal = _normalize_2d(normal)
+        normal_speed = float(np.dot(incoming_velocity, normal))
+        reflected_velocity = incoming_velocity.astype(np.float32, copy=True)
+        if normal_speed < 0.0:
+            reflected_velocity = incoming_velocity - 2.0 * normal_speed * normal
+
+        wall_blend = float(self.collision_bounce_wall_tangent_blend)
+        reflected_speed = float(np.linalg.norm(reflected_velocity))
+        if wall_blend > 0.0 and reflected_speed > 1e-6 and tangent is not None:
+            if float(np.dot(tangent, incoming_velocity)) < 0.0:
+                tangent = -tangent
+            reflected_dir = _normalize_2d(reflected_velocity, fallback=tangent)
+            target_dir = _normalize_2d(
+                (1.0 - wall_blend) * reflected_dir + wall_blend * tangent,
+                fallback=reflected_dir,
+            )
+            return (target_dir * reflected_speed).astype(np.float32, copy=False)
+
+        if normal_speed < 0.0:
+            tangent_velocity = incoming_velocity - normal * normal_speed
+            return (
+                tangent_velocity
+                - normal * normal_speed * self.collision_bounce_normal_restitution
+            ).astype(np.float32, copy=False)
+        return reflected_velocity.astype(np.float32, copy=False)
+
+    def _record_bounce_reference_state(self) -> None:
+        velocity = np.asarray(self.velocity, dtype=np.float32)
+        if float(np.linalg.norm(velocity)) <= 1e-4:
+            return
+        self._bounce_velocity_history.append(velocity.astype(np.float32, copy=True))
+        max_len = self.collision_bounce_reference_window + self.collision_bounce_skip_recent + 2
+        if len(self._bounce_velocity_history) > max_len:
+            self._bounce_velocity_history = self._bounce_velocity_history[-max_len:]
+
+    def _bounce_reference_velocity(self, fallback_velocity: np.ndarray) -> np.ndarray:
+        fallback_velocity = np.asarray(fallback_velocity, dtype=np.float32)
+        speed = float(np.linalg.norm(fallback_velocity))
+        if speed <= 1e-6:
+            speed = float(np.linalg.norm(getattr(self, "_last_safe_velocity", fallback_velocity)))
+        history = list(getattr(self, "_bounce_velocity_history", []))
+        skip = min(int(self.collision_bounce_skip_recent), len(history))
+        if skip > 0:
+            history = history[:-skip]
+        if self.collision_bounce_reference_window > 0:
+            history = history[-int(self.collision_bounce_reference_window):]
+        self.last_bounce_reference_samples = int(len(history))
+        if not history or speed <= 1e-6:
+            return fallback_velocity.astype(np.float32, copy=False)
+
+        average_velocity = np.mean(np.stack(history, axis=0), axis=0).astype(np.float32)
+        average_direction = _normalize_2d(average_velocity, fallback=fallback_velocity)
+        return (average_direction * speed).astype(np.float32, copy=False)
+
+    def _path_axis_for_bounce(self, path_index: int) -> np.ndarray:
+        points = getattr(self.geometry, "path_points", np.empty((0, 2), dtype=np.float32))
+        if len(points) <= 1:
+            return np.array([math.cos(self.heading), math.sin(self.heading)], dtype=np.float32)
+        idx = int(np.clip(path_index, 0, max(0, len(points) - 2)))
+        tangent = _normalize_2d(points[idx + 1] - points[idx])
+        if idx < len(points) - 2:
+            next_tangent = _normalize_2d(points[idx + 2] - points[idx + 1], fallback=tangent)
+            tangent = _normalize_2d(0.65 * tangent + 0.35 * next_tangent, fallback=tangent)
+        return tangent.astype(np.float32, copy=False)
+
+    def _blend_bounce_velocity_toward_path_axis(self, velocity: np.ndarray, path_index: int) -> np.ndarray:
+        bias = float(self.collision_bounce_path_axis_bias)
+        velocity = np.asarray(velocity, dtype=np.float32)
+        if bias <= 0.0:
+            return velocity.astype(np.float32, copy=False)
+        speed = float(np.linalg.norm(velocity))
+        if speed <= 1e-6:
+            return velocity.astype(np.float32, copy=False)
+        bounce_dir = _normalize_2d(velocity)
+        path_axis = self._path_axis_for_bounce(path_index)
+        blended_dir = _normalize_2d((1.0 - bias) * bounce_dir + bias * path_axis, fallback=bounce_dir)
+        return (blended_dir * speed).astype(np.float32, copy=False)
+
+    def _align_heading_to_bounce_velocity(self) -> None:
+        speed = float(np.linalg.norm(self.velocity))
+        if speed <= 1e-6:
+            return
+        self.heading = float(math.atan2(float(self.velocity[1]), float(self.velocity[0])))
+
+    def _pose_clearance(self, position: np.ndarray, heading: float) -> float:
+        if self.collision_mode not in {"laser", "lidar"}:
+            return float("inf")
+        raycast = self.geometry.cast_lasers(position, heading)
+        distances = np.asarray(raycast.distances, dtype=np.float32)
+        if distances.size <= 0:
+            return float("inf")
+        clearances = distances - self.laser_hitbox_offsets
+        return float(np.min(clearances))
+
+    def _is_safe_bounce_pose(self, position: np.ndarray, heading: float) -> bool:
+        if not self.geometry.car_on_road(
+            position,
+            heading,
+            length=self.physics.car_length,
+            width=self.physics.car_width,
+        ):
+            return False
+        clearance = self._pose_clearance(position, heading)
+        return bool(clearance > self.touch_release_clearance_threshold)
+
+    def _find_bounce_recovery_position(
+        self,
+        fallback_position: np.ndarray,
+        heading: float,
+        directions: list[np.ndarray],
+        initial_offset: float = 0.0,
+    ) -> np.ndarray:
+        fallback_position = np.asarray(fallback_position, dtype=np.float32)
+        unique_directions: list[np.ndarray] = []
+        for direction in directions:
+            direction = _normalize_2d(direction)
+            if not any(float(np.dot(direction, existing)) > 0.98 for existing in unique_directions):
+                unique_directions.append(direction)
+
+        offsets = [
+            max(0.0, float(initial_offset)),
+            0.25,
+            0.50,
+            0.75,
+            1.00,
+            1.50,
+            2.00,
+            3.00,
+            4.00,
+            6.00,
+        ]
+        best_position = fallback_position.copy()
+        best_clearance = self._pose_clearance(best_position, heading)
+        if self._is_safe_bounce_pose(best_position, heading):
+            self.last_bounce_recovered = 1
+            self.last_bounce_clearance = float(best_clearance)
+            return best_position.astype(np.float32, copy=False)
+
+        for offset in offsets:
+            for direction in unique_directions:
+                candidate = fallback_position + direction * float(offset)
+                clearance = self._pose_clearance(candidate, heading)
+                if clearance > best_clearance and self.geometry.car_on_road(
+                    candidate,
+                    heading,
+                    length=self.physics.car_length,
+                    width=self.physics.car_width,
+                ):
+                    best_position = candidate.astype(np.float32, copy=True)
+                    best_clearance = float(clearance)
+                if clearance > self.touch_release_clearance_threshold and self.geometry.car_on_road(
+                    candidate,
+                    heading,
+                    length=self.physics.car_length,
+                    width=self.physics.car_width,
+                ):
+                    self.last_bounce_recovered = 1
+                    self.last_bounce_clearance = float(clearance)
+                    return candidate.astype(np.float32, copy=False)
+
+        self.last_bounce_recovered = 0
+        self.last_bounce_clearance = float(best_clearance)
+        return best_position.astype(np.float32, copy=False)
 
     def _score_state(self, finished: int, crashes: int, progress: float, time_value: float, distance: float) -> float:
         mode = str(self.reward_config.mode).strip().lower()

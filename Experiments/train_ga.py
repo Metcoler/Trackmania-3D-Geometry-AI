@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from NeuralPolicy import normalize_hidden_activations, normalize_hidden_dims
+from NeuralPolicy import NeuralPolicy, normalize_hidden_activations, normalize_hidden_dims
 from Individual import Individual
 from RankingKey import canonical_ranking_key_expression
 from TrajectoryLogger import TrajectoryLogger, should_log_trajectory
@@ -74,6 +74,20 @@ class NumpyPolicyView:
 
 def parse_list(value: str, cast):
     return [cast(part.strip()) for part in str(value).split(",") if part.strip()]
+
+
+def json_safe(value):
+    if isinstance(value, dict):
+        return {str(key): json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return json_safe(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    return value
 
 
 def parse_physics_tick_probs(value: str | None) -> tuple[tuple[int, ...], tuple[float, ...]] | tuple[None, None]:
@@ -579,6 +593,105 @@ def make_child_pool(parents: list[Individual], child_count: int) -> list[Individ
     return children
 
 
+def seed_population_from_model(
+    model_path: str | Path,
+    *,
+    population_size: int,
+    obs_dim: int,
+    act_dim: int,
+    hidden_dim: tuple[int, ...],
+    hidden_activation: tuple[str, ...],
+    exact_copies: int,
+    mutation_probs: list[float],
+    mutation_sigmas: list[float],
+    tier_counts: list[int] | None,
+) -> tuple[list[Individual], dict]:
+    if len(mutation_probs) != len(mutation_sigmas):
+        raise ValueError("--initial-model-mutation-probs and --initial-model-mutation-sigmas must have the same length.")
+    if not mutation_probs:
+        raise ValueError("At least one initial model mutation tier is required.")
+
+    model_path = Path(model_path)
+    loaded_policy, model_extra = NeuralPolicy.load(str(model_path), map_location="cpu")
+    loaded_hidden_dim = tuple(int(dim) for dim in loaded_policy.hidden_dims)
+    loaded_hidden_activation = tuple(str(value) for value in loaded_policy.hidden_activations)
+
+    if int(loaded_policy.obs_dim) != int(obs_dim):
+        raise ValueError(f"Initial model obs_dim={loaded_policy.obs_dim} does not match TM2D obs_dim={obs_dim}.")
+    if int(loaded_policy.act_dim) != int(act_dim):
+        raise ValueError(f"Initial model act_dim={loaded_policy.act_dim} does not match TM2D act_dim={act_dim}.")
+    if loaded_hidden_dim != tuple(hidden_dim):
+        raise ValueError(f"Initial model hidden_dim={loaded_hidden_dim} does not match requested hidden_dim={hidden_dim}.")
+    if loaded_hidden_activation != tuple(hidden_activation):
+        raise ValueError(
+            f"Initial model hidden_activation={list(loaded_hidden_activation)} "
+            f"does not match requested hidden_activation={list(hidden_activation)}."
+        )
+    if str(loaded_policy.action_mode).strip().lower() != "target":
+        raise ValueError(f"Initial model action_mode={loaded_policy.action_mode!r}; expected 'target'.")
+
+    exact_copies = int(exact_copies)
+    population_size = int(population_size)
+    if exact_copies < 0:
+        raise ValueError("--initial-model-exact-copies must be non-negative.")
+    if exact_copies > population_size:
+        raise ValueError("--initial-model-exact-copies must not exceed --population-size.")
+
+    remaining = population_size - exact_copies
+    if tier_counts is None:
+        tier_counts = [remaining // len(mutation_probs) for _ in mutation_probs]
+        for index in range(remaining % len(mutation_probs)):
+            tier_counts[index] += 1
+    else:
+        tier_counts = [int(value) for value in tier_counts]
+        if len(tier_counts) != len(mutation_probs):
+            raise ValueError("--initial-model-tier-counts length must match mutation tier count.")
+        if sum(tier_counts) != remaining:
+            raise ValueError(
+                f"--initial-model-tier-counts sum to {sum(tier_counts)}, expected remaining population {remaining}."
+            )
+
+    action_scale = loaded_policy.action_scale.detach().cpu().numpy().astype(np.float32)
+    base = Individual(
+        obs_dim=obs_dim,
+        hidden_dim=hidden_dim,
+        act_dim=act_dim,
+        genome=loaded_policy.genome.copy(),
+        action_scale=action_scale,
+        action_mode="target",
+        hidden_activation=hidden_activation,
+    )
+
+    population = [base.copy() for _ in range(exact_copies)]
+    tiers: list[dict] = []
+    for count, prob, sigma in zip(tier_counts, mutation_probs, mutation_sigmas):
+        count = int(count)
+        if count <= 0:
+            continue
+        for _ in range(count):
+            child = base.copy()
+            child.mutate(mutation_prob=float(prob), sigma=float(sigma))
+            population.append(child)
+        tiers.append({"count": count, "mutation_prob": float(prob), "mutation_sigma": float(sigma)})
+
+    if len(population) != population_size:
+        raise RuntimeError(f"Seeded population has {len(population)} individuals, expected {population_size}.")
+
+    unique_genomes = {
+        individual.genome.astype(np.float32, copy=False).tobytes()
+        for individual in population
+    }
+    summary = {
+        "source_model": str(model_path),
+        "exact_copies": int(exact_copies),
+        "tiers": tiers,
+        "unique_genomes": int(len(unique_genomes)),
+        "model_config": json_safe(loaded_policy.get_config()),
+        "model_extra": json_safe(model_extra),
+    }
+    return population, summary
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fast 2D Trackmania-like GA experiments.")
     parser.add_argument("--map-name", default="AI Training #5")
@@ -820,6 +933,32 @@ def main() -> None:
         default=None,
         help="Max episode time for holdout-map evaluation. Defaults to --max-time.",
     )
+    parser.add_argument(
+        "--initial-population-model",
+        default="",
+        help="Optional NeuralPolicy best_model.pt used to seed the first TM2D GA population.",
+    )
+    parser.add_argument(
+        "--initial-model-exact-copies",
+        type=int,
+        default=1,
+        help="Number of exact supervised-model copies in the initial population.",
+    )
+    parser.add_argument(
+        "--initial-model-mutation-probs",
+        default="0.02,0.05,0.10",
+        help="Comma-separated mutation probabilities for supervised-seeded population tiers.",
+    )
+    parser.add_argument(
+        "--initial-model-mutation-sigmas",
+        default="0.01,0.025,0.05",
+        help="Comma-separated mutation sigmas for supervised-seeded population tiers.",
+    )
+    parser.add_argument(
+        "--initial-model-tier-counts",
+        default="",
+        help="Optional comma-separated tier counts. Sum must be population minus exact copies.",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -886,17 +1025,43 @@ def main() -> None:
     )
     env = make_tm2d_env_from_args(args, reward_config, physics_config, seed=args.seed)
     action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
-    population = [
-        Individual(
-            obs_dim=env.obs_dim,
-            hidden_dim=hidden_dim,
-            act_dim=env.act_dim,
-            action_scale=action_scale,
-            action_mode="target",
-            hidden_activation=hidden_activation,
+    initial_population_model = str(args.initial_population_model).strip()
+    initial_population_summary: dict | None = None
+    if initial_population_model:
+        tier_counts = (
+            parse_list(args.initial_model_tier_counts, int)
+            if str(args.initial_model_tier_counts).strip()
+            else None
         )
-        for _ in range(args.population_size)
-    ]
+        population, initial_population_summary = seed_population_from_model(
+            initial_population_model,
+            population_size=int(args.population_size),
+            obs_dim=int(env.obs_dim),
+            act_dim=int(env.act_dim),
+            hidden_dim=hidden_dim,
+            hidden_activation=hidden_activation,
+            exact_copies=int(args.initial_model_exact_copies),
+            mutation_probs=parse_list(args.initial_model_mutation_probs, float),
+            mutation_sigmas=parse_list(args.initial_model_mutation_sigmas, float),
+            tier_counts=tier_counts,
+        )
+        print(
+            "Seeded initial population from supervised model: "
+            f"{initial_population_model} | unique_genomes={initial_population_summary['unique_genomes']}/"
+            f"{args.population_size}"
+        )
+    else:
+        population = [
+            Individual(
+                obs_dim=env.obs_dim,
+                hidden_dim=hidden_dim,
+                act_dim=env.act_dim,
+                action_scale=action_scale,
+                action_mode="target",
+                hidden_activation=hidden_activation,
+            )
+            for _ in range(args.population_size)
+        ]
 
     run_name = time.strftime("%Y%m%d_%H%M%S") + f"_tm2d_ga_{args.map_name.replace(' ', '_').replace('#', '')}"
     run_dir = Path(args.log_dir) / run_name
@@ -958,6 +1123,17 @@ def main() -> None:
             "Holdout-map rollouts are diagnostic only and never affect ranking, "
             "selection, elite cache, mutation, or best policy selection."
         ),
+        "initial_population_source": "supervised_model" if initial_population_model else "random",
+        "initial_population_model": initial_population_model,
+        "initial_model_exact_copies": int(args.initial_model_exact_copies),
+        "initial_model_mutation_probs": parse_list(args.initial_model_mutation_probs, float),
+        "initial_model_mutation_sigmas": parse_list(args.initial_model_mutation_sigmas, float),
+        "initial_model_tier_counts": (
+            parse_list(args.initial_model_tier_counts, int)
+            if str(args.initial_model_tier_counts).strip()
+            else None
+        ),
+        "initial_population_summary": initial_population_summary,
         "trajectory_logging_note": (
             "TM2D trajectories are replayed after selection to avoid worker IPC. "
             "With stochastic FPS they are diagnostic replays of the same genome, "

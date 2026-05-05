@@ -19,6 +19,10 @@ $CommonArgs = @(
     "--activation-fn", "relu",
     "--collision-mode", "lidar",
     "--checkpoint-every-episodes", "100",
+    "--train-freq", "1",
+    "--train-freq-unit", "episode",
+    "--gradient-steps", "1",
+    "--n-steps", "3000",
     "--seed", "$Seed"
 )
 

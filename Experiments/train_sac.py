@@ -539,6 +539,15 @@ def main() -> None:
     env = Monitor(raw_env, filename=str(run_dir / "monitor.csv"), info_keywords=("episode_metrics",))
     net_arch = parse_int_list(args.net_arch)
     train_freq = (int(args.train_freq), str(args.train_freq_unit))
+    episode_update_policy = (
+        "off_policy_train_after_each_episode"
+        if str(args.algorithm).upper() in {"SAC", "TD3"} and train_freq == (1, "episode")
+        else (
+            f"ppo_rollout_update_approx_one_episode_n_steps_{int(args.n_steps)}"
+            if str(args.algorithm).upper() == "PPO"
+            else "custom_update_schedule"
+        )
+    )
     config = {
         "algorithm": args.algorithm,
         "map_name": args.map_name,
@@ -577,6 +586,7 @@ def main() -> None:
         "tau": float(args.tau),
         "gradient_steps": int(args.gradient_steps),
         "train_freq": list(train_freq),
+        "episode_update_policy": episode_update_policy,
         "ent_coef": args.ent_coef,
         "n_steps": int(args.n_steps),
         "n_epochs": int(args.n_epochs),
@@ -601,6 +611,7 @@ def main() -> None:
     print(f"[TM2D {algorithm}] map_name={args.map_name}")
     print(f"[TM2D {algorithm}] reward_mode={args.reward_mode} action_layout={args.action_layout}")
     print(f"[TM2D {algorithm}] train_freq={train_freq} gradient_steps={args.gradient_steps}")
+    print(f"[TM2D {algorithm}] episode_update_policy={episode_update_policy}")
     print(f"[TM2D {algorithm}] net_arch={net_arch} activation={args.activation_fn}")
     print(f"[TM2D {algorithm}] observation_space={env.observation_space}")
     print(f"[TM2D {algorithm}] action_space={env.action_space}")

@@ -40,7 +40,6 @@ RL_test/logs/sb3_runs/**/*.zip
 
 # Local simulator run artifacts
 Experiments/runs/
-Experiments/runs_rl/
 Experiments/_discarded/
 Experiments/analysis/**/combined_individual_metrics.csv
 Diplomová práca/Experiments/**/combined_individual_metrics.csv

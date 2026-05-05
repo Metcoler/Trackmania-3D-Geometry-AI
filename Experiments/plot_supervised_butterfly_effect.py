@@ -23,6 +23,7 @@ from NeuralPolicy import NeuralPolicy
 from Experiments.analyze_supervised_map_specialists import (
     PRACTICAL_INFINITY_TOUCHES,
     find_latest_model,
+    infer_policy_modes,
     map_xz_bounds,
     parse_max_touches,
     parse_slowdown,
@@ -43,6 +44,8 @@ def rollout_policy(
     policy: NeuralPolicy,
     *,
     map_name: str,
+    vertical_mode: bool,
+    multi_surface_mode: bool,
     seed: int,
     max_time: float,
     max_touches: int,
@@ -59,8 +62,8 @@ def rollout_policy(
         physics_config=TM2DPhysicsConfig().with_tick_profile("fixed100"),
         seed=int(seed),
         collision_mode="lidar",
-        vertical_mode=True,
-        multi_surface_mode=True,
+        vertical_mode=bool(vertical_mode),
+        multi_surface_mode=bool(multi_surface_mode),
         binary_gas_brake=True,
         max_touches=int(max_touches),
         collision_bounce_speed_retention=float(np.clip(1.0 - collision_slowdown, 0.0, 1.0)),
@@ -352,8 +355,8 @@ def write_metrics_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plot a supervised specialist butterfly-effect trajectory demo.")
     parser.add_argument("--map-name", default="single_surface_flat")
-    parser.add_argument("--specialist-root", default="logs/supervised_runs_map_specialists_20260505")
-    parser.add_argument("--output-dir", default="Experiments/analysis/supervised_map_specialists_20260505")
+    parser.add_argument("--specialist-root", default="logs/supervised_runs_map_specialists_v2d_asphalt_20260505")
+    parser.add_argument("--output-dir", default="Experiments/analysis/supervised_map_specialists_v2d_asphalt_20260505")
     parser.add_argument("--seed", type=int, default=2026050505)
     parser.add_argument("--max-time", type=float, default=60.0)
     parser.add_argument("--max-touches", default="inf")
@@ -367,13 +370,14 @@ def main() -> None:
     max_touches = parse_max_touches(args.max_touches)
     collision_slowdown = parse_slowdown(args.collision_slowdown)
     model_path = find_latest_model(Path(args.specialist_root), args.map_name)
-    policy, _extra = NeuralPolicy.load(str(model_path), map_location="cpu")
-    if int(policy.obs_dim) != 53:
-        raise ValueError(f"{model_path} has obs_dim={policy.obs_dim}, expected 53.")
+    policy, extra = NeuralPolicy.load(str(model_path), map_location="cpu")
+    vertical_mode, multi_surface_mode = infer_policy_modes(policy, extra, model_path)
 
     baseline_metrics, baseline_trajectory = rollout_policy(
         policy,
         map_name=args.map_name,
+        vertical_mode=vertical_mode,
+        multi_surface_mode=multi_surface_mode,
         seed=int(args.seed),
         max_time=float(args.max_time),
         max_touches=max_touches,
@@ -386,6 +390,8 @@ def main() -> None:
     perturbed_metrics, perturbed_trajectory = rollout_policy(
         policy,
         map_name=args.map_name,
+        vertical_mode=vertical_mode,
+        multi_surface_mode=multi_surface_mode,
         seed=int(args.seed),
         max_time=float(args.max_time),
         max_touches=max_touches,

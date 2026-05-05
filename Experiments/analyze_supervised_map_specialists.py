@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from NeuralPolicy import NeuralPolicy
+from ObservationEncoder import ObservationEncoder
 
 from Experiments.tm2d_env import TM2DPhysicsConfig, TM2DRewardConfig, TM2DSimEnv
 from Experiments.tm_map_plotting import _all_road_heights, add_map_legend, render_map_background
@@ -42,6 +43,12 @@ WALL_HUG_COLOR = "#fb7185"
 SPEED_CMAP = plt.get_cmap("turbo")
 PRACTICAL_INFINITY_TOUCHES = 1_000_000
 MAP_BOUNDS_MARGIN = 8.0
+LAYOUTS = {
+    "v2d_asphalt": (False, False, 34),
+    "v2d_surface": (False, True, 40),
+    "v3d_asphalt": (True, False, 43),
+    "v3d_surface": (True, True, 53),
+}
 
 
 def safe_name(value: str) -> str:
@@ -53,6 +60,21 @@ def parse_maps(value: str) -> list[str]:
     if not maps:
         raise ValueError("--maps must contain at least one map name")
     return maps
+
+
+def parse_layout(value: str) -> str:
+    layout = str(value).strip().lower()
+    if layout == "any":
+        return layout
+    if layout not in LAYOUTS:
+        raise ValueError(f"Unsupported layout {value!r}. Use any or one of {sorted(LAYOUTS)}.")
+    return layout
+
+
+def modes_from_layout(layout: str) -> tuple[bool, bool, int]:
+    if layout not in LAYOUTS:
+        raise ValueError(f"Unsupported layout {layout!r}.")
+    return LAYOUTS[layout]
 
 
 def parse_max_touches(value: str) -> int:
@@ -96,7 +118,8 @@ def map_xz_bounds(game_map: Map) -> tuple[float, float, float, float]:
     return float(min_xz[0]), float(min_xz[1]), float(max_xz[0]), float(max_xz[1])
 
 
-def find_latest_dataset(data_root: Path, map_name: str) -> Path:
+def find_latest_dataset(data_root: Path, map_name: str, source_layout: str = "any") -> Path:
+    source_layout = parse_layout(source_layout)
     candidates: list[Path] = []
     for config_path in data_root.glob("*/config.json"):
         try:
@@ -105,15 +128,21 @@ def find_latest_dataset(data_root: Path, map_name: str) -> Path:
             continue
         if str(config.get("map_name")) != str(map_name):
             continue
-        if not bool(config.get("vertical_mode", False)):
-            continue
-        if not bool(config.get("multi_surface_mode", False)):
-            continue
-        if int(config.get("observation_dim", 0)) != 53:
-            continue
+        if source_layout != "any":
+            expected_vertical, expected_multi_surface, expected_obs_dim = modes_from_layout(source_layout)
+            if bool(config.get("vertical_mode", False)) != expected_vertical:
+                continue
+            if bool(config.get("multi_surface_mode", False)) != expected_multi_surface:
+                continue
+            observed_dim = int(config.get("observation_dim", 0))
+            if observed_dim and observed_dim != int(expected_obs_dim):
+                continue
         candidates.append(config_path.parent)
     if not candidates:
-        raise FileNotFoundError(f"No v3d+surface dataset found for map {map_name!r} under {data_root}")
+        raise FileNotFoundError(
+            f"No supervised dataset found for map {map_name!r} under {data_root} "
+            f"with source layout {source_layout!r}"
+        )
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
@@ -125,6 +154,29 @@ def find_latest_model(specialist_root: Path, map_name: str) -> Path:
     if not models:
         raise FileNotFoundError(f"No best_model.pt found for map {map_name!r} under {search_root}")
     return max(models, key=lambda path: path.stat().st_mtime)
+
+
+def infer_policy_modes(policy: NeuralPolicy, extra: dict[str, Any], model_path: Path) -> tuple[bool, bool]:
+    inferred = ObservationEncoder.infer_modes_from_dim(int(policy.obs_dim))
+    if inferred is not None:
+        return bool(inferred[0]), bool(inferred[1])
+
+    if "vertical_mode" in extra and "multi_surface_mode" in extra:
+        return bool(extra["vertical_mode"]), bool(extra["multi_surface_mode"])
+
+    summary_path = model_path.with_name("summary.json")
+    if summary_path.exists():
+        try:
+            summary = read_json(summary_path)
+            if "vertical_mode" in summary and "multi_surface_mode" in summary:
+                return bool(summary["vertical_mode"]), bool(summary["multi_surface_mode"])
+        except Exception:
+            pass
+
+    raise ValueError(
+        f"Cannot infer observation layout for {model_path} with obs_dim={policy.obs_dim}. "
+        "Use a model saved by the current SupervisedTraining.py."
+    )
 
 
 def attempt_files(dataset_dir: Path, limit: int) -> list[Path]:
@@ -168,6 +220,8 @@ def load_teacher_path(path: Path) -> dict[str, Any]:
 def rollout_agent(
     policy: NeuralPolicy,
     map_name: str,
+    vertical_mode: bool,
+    multi_surface_mode: bool,
     max_time: float,
     seed: int,
     max_touches: int,
@@ -187,8 +241,8 @@ def rollout_agent(
         physics_config=TM2DPhysicsConfig().with_tick_profile("fixed100"),
         seed=int(seed),
         collision_mode="lidar",
-        vertical_mode=True,
-        multi_surface_mode=True,
+        vertical_mode=bool(vertical_mode),
+        multi_surface_mode=bool(multi_surface_mode),
         binary_gas_brake=True,
         max_touches=int(max_touches),
         collision_bounce_speed_retention=speed_retention,
@@ -628,6 +682,7 @@ def analyze_map(
     data_root: Path,
     specialist_root: Path,
     output_dir: Path,
+    source_layout: str,
     teacher_count: int,
     max_time: float,
     seed: int,
@@ -640,16 +695,17 @@ def analyze_map(
     collision_skip_recent: int,
     never_stop: bool,
 ) -> dict[str, Any]:
-    dataset_dir = find_latest_dataset(data_root, map_name)
+    dataset_dir = find_latest_dataset(data_root, map_name, source_layout=source_layout)
     model_path = find_latest_model(specialist_root, map_name)
     policy, extra = NeuralPolicy.load(str(model_path), map_location="cpu")
-    if int(policy.obs_dim) != 53:
-        raise ValueError(f"{model_path} has obs_dim={policy.obs_dim}, expected 53.")
+    model_vertical_mode, model_multi_surface_mode = infer_policy_modes(policy, extra, model_path)
 
     teachers = [load_teacher_path(path) for path in attempt_files(dataset_dir, teacher_count)]
     metrics, trajectory = rollout_agent(
         policy,
         map_name=map_name,
+        vertical_mode=model_vertical_mode,
+        multi_surface_mode=model_multi_surface_mode,
         max_time=max_time,
         seed=seed,
         max_touches=max_touches,
@@ -728,6 +784,10 @@ def analyze_map(
         "map_name": map_name,
         "dataset_dir": str(dataset_dir),
         "model_path": str(model_path),
+        "model_obs_dim": int(policy.obs_dim),
+        "model_vertical_mode": bool(model_vertical_mode),
+        "model_multi_surface_mode": bool(model_multi_surface_mode),
+        "source_layout": source_layout,
         "plot_path": str(plot_path),
         "teacher_attempts": len(teachers),
         **metrics,
@@ -737,9 +797,15 @@ def analyze_map(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze supervised map specialists and plot teacher/agent paths.")
     parser.add_argument("--data-root", default="logs/supervised_data")
-    parser.add_argument("--specialist-root", default="logs/supervised_runs_map_specialists_20260505")
-    parser.add_argument("--output-dir", default="Experiments/analysis/supervised_map_specialists_20260505")
+    parser.add_argument("--specialist-root", default="logs/supervised_runs_map_specialists_v2d_asphalt_20260505")
+    parser.add_argument("--output-dir", default="Experiments/analysis/supervised_map_specialists_v2d_asphalt_20260505")
     parser.add_argument("--maps", default=",".join(MAP_NAMES), help="Comma-separated map names to analyze.")
+    parser.add_argument(
+        "--source-layout",
+        default="any",
+        choices=["any", *LAYOUTS.keys()],
+        help="Dataset layout filter for teacher paths. The agent rollout layout is inferred from the model.",
+    )
     parser.add_argument("--teacher-count", type=int, default=10)
     parser.add_argument("--max-time", type=float, default=60.0)
     parser.add_argument(
@@ -815,6 +881,7 @@ def main() -> None:
                 data_root=Path(args.data_root),
                 specialist_root=Path(args.specialist_root),
                 output_dir=output_dir,
+                source_layout=str(args.source_layout),
                 teacher_count=int(args.teacher_count),
                 max_time=float(args.max_time),
                 seed=int(args.seed) + index,
@@ -835,6 +902,10 @@ def main() -> None:
             "map_name",
             "dataset_dir",
             "model_path",
+            "model_obs_dim",
+            "model_vertical_mode",
+            "model_multi_surface_mode",
+            "source_layout",
             "plot_path",
             "teacher_attempts",
             "finished",

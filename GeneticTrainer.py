@@ -2306,7 +2306,7 @@ if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
     # map dependend constants
-    map_name = "AI Training #5"
+    map_name = "single_surface_flat"
     env_max_time = 30
     
     # neural network architecture

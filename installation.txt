@@ -173,3 +173,6 @@ powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_pretrain_a
 
 
 python Driver.py --population-file night-ga --map-name single_surface_flat --end_max_time=inf
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_pretrain_single_height_48x24_20260506.ps1

@@ -2316,11 +2316,11 @@ if __name__ == "__main__":
     vertical_mode = True
     multi_surface_mode = False
 
-    # Best-supported real-TM 2D asphalt lexicographic GA profile.
-    pop_size = 32
+    # Best-supported real-TM lexicographic GA profile for the seeded height run.
+    pop_size = 48
     elite_count = 2
-    parent_count = 10
-    generations_to_run = 200
+    parent_count = 14
+    generations_to_run = 300
     checkpoint_every = 10
 
     # Selection metric for the overnight GA experiment.
@@ -2387,11 +2387,11 @@ if __name__ == "__main__":
     
     # Train from checkpoint or supervised pretrained model.
     #
-    # Hybrid BC initialization: AI Training #5 + single_surface_flat pretrain,
-    # converted to the live 2D asphalt observation layout.
+    # Hybrid BC initialization: single_surface_height pretrain with the live
+    # v3d asphalt observation layout (obs_dim=48, vertical=True, surface=False).
     initial_population_source: Optional[str] = (
-        r"logs\supervised_runs_ai5_single_flat_pretrain_48x24_20260506"
-        r"\20260506_003103_v2d_asphalt_target_supervised\best_model.pt"
+        r"logs\supervised_runs_single_height_pretrain_48x24_20260506"
+        r"\20260506_154202_v3d_asphalt_target_supervised\best_model.pt"
     )
     # Old v2d population checkpoints are intentionally not used as the default
     # source anymore because the canonical training observation is now v3d.

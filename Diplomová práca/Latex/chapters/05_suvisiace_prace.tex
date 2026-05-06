@@ -1,0 +1,87 @@
+\chapter{Súvisiace práce}
+
+Táto kapitola nadväzuje na teoretické východiská a hľadá miesto, do ktorého patrí náš návrh. V predchádzajúcej kapitole sme zaviedli agenta, prostredie, politiku správania, učenie posilňovaním, genetické algoritmy, simulácie a \Trackmania{} ako cieľové virtuálne prostredie. Teraz sa pozrieme na práce, ktoré riešia podobné otázky: ako sa správa umelá inteligencia v hrách, ako môže agent reprezentovať svet okolo vozidla, ako sa trénujú pretekárski agenti a aké obmedzenia majú existujúce prístupy vzhľadom na našu úlohu.
+
+Cieľom nie je ukázať čo najdlhší zoznam projektov. Dôležitejšie je pochopiť, čo jednotlivé smery robia dobre a kde sa začínajú lámať, keď ich chceme použiť pre autonómneho agenta v hre bežiacej v reálnom čase. Práve z týchto obmedzení potom prirodzene vyplýva motivácia pre ďalšiu kapitolu: namiesto toho, aby agent vnímal svet iba cez obraz, budeme hľadať kompaktnejšiu reprezentáciu založenú na geometrii prostredia a explicitných metrikách jazdy.
+
+\section{Krátky most z teórie}
+
+Z pohľadu teórie môžeme hru chápať ako prostredie, v ktorom agent opakovane prijíma pozorovania, volí akcie a svojím správaním vytvára trajektóriu. Pretekárske hry sú v tomto smere zaujímavé tým, že rozhodnutia majú plynulú dynamiku a často oneskorené následky. Ak hráč vojde do zákruty nesprávnou rýchlosťou alebo pod zlým uhlom, problém sa nemusí prejaviť v tom istom okamihu, ale až o niekoľko krokov neskôr.
+
+\Trackmania{} tento problém ešte viac zvýrazňuje. Podľa oficiálneho opisu ide o pretekársku hru s dôrazom na tratiach vytváraných z blokov, súťaženie a opakované zlepšovanie času \cite{ubisoft_trackmania2026}. Komunitná dokumentácia opisuje jej editor tratí a time-attack charakter hry, kde je hlavným cieľom prejsť trať čo najrýchlejšie \cite{trackmania_wiki2026}. Pre agenta to znamená, že nestačí rozhodnúť sa správne v jednom okamihu. Kvalita jazdy sa ukáže až na celej trajektórii.
+
+V ďalších častiach preto sledujeme tri otázky. Prvá je, ako sa v hrách tradične navrhuje správanie agentov. Druhá je, akým spôsobom môžu vodiaci agenti reprezentovať svet. Tretia je, čo sa dá naučiť z existujúcich pretekárskych a Trackmania projektov, ale aj prečo ich nestačí jednoducho prevziať.
+
+\section{Umelá inteligencia v hrách: od pravidiel k učeniu}
+
+Umelá inteligencia v hrách má dlhšiu históriu než moderné strojové učenie v hrách. V bežnom hernom vývoji sa označenie AI často používa aj pre ručne navrhnuté správanie postáv, protivníkov alebo vozidiel. Yannakakis a Togelius opisujú hry ako prirodzené prostredie pre výskum umelej inteligencie, ale zároveň upozorňujú, že AI v hrách môže mať viacero úloh: hrať hru, generovať obsah, modelovať hráča alebo vytvárať správanie, ktoré pôsobí zaujímavo pre človeka \cite{yannakakis_togelius2018aigames}.
+
+V praktickom hernom vývoji sa často používajú pravidlové systémy, konečné automaty, hľadanie ciest a stromy správania (angl.~\emph{behavior trees}). Millington a Funge tieto techniky opisujú ako základné nástroje hernej AI, pretože sú čitateľné, dobre kontrolovateľné a dizajnér vie pomerne presne určiť, ako sa má postava správať \cite{millington_funge2019ai_for_games}. Pre hry je to veľká výhoda: správanie nemusí byť optimálne v matematickom zmysle, dôležité je, aby bolo presvedčivé, zábavné alebo férové.
+
+Stromy správania vznikli práve ako praktický spôsob, ako skladať komplexnejšie správanie z menších rozhodovacích blokov. Prehľad Iovina a kol. ukazuje, že sa používajú nielen v hrách, ale aj v robotike a ďalších oblastiach, kde je potrebné skladať reaktívne správanie z prehľadných častí \cite{iovino2022behavior_trees}. Ich silnou stránkou je modularita a interpretovateľnosť. Slabou stránkou z pohľadu našej práce je, že správanie ostáva z veľkej časti navrhnuté človekom.
+
+Pre autonómneho vodiča v pretekárskej hre je to podstatné rozlíšenie. Ručne navrhnutý vodič môže byť dobrý herný protivník alebo testovací agent, ale neodpovedá priamo na otázku, ako sa má agent sám zlepšovať z dát alebo z vlastných pokusov. Naša práca preto nestojí proti tradičnej hernej AI. Skôr nadväzuje na jej myšlienku jasnej reprezentácie stavu a rozhodovania, ale samotné správanie chceme hľadať pomocou učiacich sa metód.
+
+\section{Reprezentácia vodiča a sveta v pretekárskych úlohách}
+
+Pri autonómnom riadení je kľúčová otázka, čo agent vlastne vidí. Prirodzenou odpoveďou je obraz, pretože človek tiež riadi najmä podľa vizuálneho vnemu. Už starší systém ALVINN ukázal, že neurónová sieť môže mapovať vstupy zo senzorov vozidla na smerovanie vozidla a tým sa učiť riadenie z demonštrácií \cite{pomerleau1989alvinn}. Novšie práce, napríklad NVIDIA PilotNet, používajú obraz z prednej kamery a učia sieť priamo predikovať riadenie \cite{bojarski2016endtoend}.
+
+Takýto prístup učenia typu end-to-end má veľkú silu. Model sa nemusí opierať o ručne navrhnuté príznaky a môže sa naučiť reprezentácie, ktoré autor systému vopred explicitne nepopísal. Zároveň však spája dva problémy do jedného: percepciu a riadenie. Sieť sa musí najskôr naučiť, čo je cesta, okraj, prekážka alebo relevantná časť obrazu, a až potom z toho odvodiť akciu. Pri hre bežiacej v reálnom čase to môže znamenať väčší výpočtový nárok a ťažšiu interpretáciu toho, prečo agent zvolil konkrétne správanie.
+
+Ďalším problémom je behaviorálne klonovanie (angl.~\emph{behavior cloning}). Pri ňom sa agent učí napodobňovať akcie experta v dátach. Ross, Gordon a Bagnell ukazujú, že v sekvenčnom rozhodovaní sa chyba môže postupne hromadiť, pretože agent svojimi vlastnými akciami mení budúce stavy, do ktorých sa dostane \cite{ross2011dagger}. Ak sa politika dostane mimo distribúciu stavov, ktoré videla počas učenia, nemusí vedieť, ako sa opraviť. Toto je pre vodiaceho agenta mimoriadne dôležité, pretože malá odchýlka v zákrute môže o niekoľko sekúnd vytvoriť úplne inú situáciu.
+
+Z týchto prác si berieme dve poučenia. Prvé je pozitívne: neurónová sieť vie byť užitočná rozhodovacia funkcia pre riadenie. Druhé je opatrnejšie: ak použijeme obraz alebo čisté napodobňovanie, môžeme zaplatiť vyššou výpočtovou náročnosťou, horšou interpretovateľnosťou a citlivosťou na distribučný posun. Preto je pre našu prácu zaujímavá aj iná cesta: oddeliť vnímanie geometrie od učenia samotnej politiky.
+
+% TODO: doplniť porovnávaciu schému obrazový vstup vs. telemetria/geometrické senzory vs. kombinovaný vstup.
+
+\section{Autonómne pretekanie v simulátoroch}
+
+Pretekárske simulátory tvoria prirodzený most medzi hrami a autonómnym riadením. TORCS, teda The Open Racing Car Simulator, bol dlhodobo používaný ako otvorené prostredie pre výskum riadenia vozidiel a pretekárskych agentov \cite{wymann2000torcs}. Naň nadviazala aj Simulated Car Racing Championship, ktorá poskytla súťažné prostredie, rozhranie pre agentov a porovnateľné podmienky pre rôzne prístupy \cite{loiacono2010scrc}.
+
+Výhodou takýchto prostredí je, že agent nemusí riešiť všetky detaily komerčnej hry. Dostáva definované senzory, akčné rozhranie a opakovateľné vyhodnotenie. To umožňuje skúmať samotné rozhodovanie, učenie a pretekársku stratégiu. Zároveň však platí, že takýto simulátor je navrhnutý ako výskumné prostredie. Komerčná hra má iné rozhrania, iné časovanie a často neposkytuje agentovi stav priamo v podobe, ktorú by výskumník chcel.
+
+Zaujímavým praktickým zdrojom je aj kapitola z knihy \emph{Game AI Pro}, ktorá opisuje reprezentáciu a riadenie pretekárskej trate pre AI vozidlá \cite{game_ai_pro_racetrack2013}. Tento typ práce je blízky hernému vývoju: namiesto všeobecnej optimalizácie politiky sa často rieši, ako reprezentovať trať, stredovú čiaru, cieľovú rýchlosť a lokálne rozhodovanie vozidla. Pre našu prácu je to dôležitá inšpirácia, pretože ukazuje, že samotná reprezentácia trate je významná časť problému.
+
+Novšie benchmarky, napríklad Offline Mania, ukazujú záujem o pretekárske hry aj v kontexte učenia posilňovaním a offline dát \cite{offline_mania2024}. Takéto práce potvrdzujú, že pretekanie nie je iba vizuálne efektná hra, ale užitočný testovací problém pre sekvenčné rozhodovanie. Zároveň však opäť platí, že benchmark alebo špeciálne pripravený simulátor nie je totožný s naším cieľom: agent má nakoniec fungovať v konkrétnej hre \Trackmania{} a v jej podmienkach reálneho času.
+
+\section{Moderné úspechy: Gran Turismo Sophy a hranice hlbokého učenia posilňovaním}
+
+Najvýraznejším moderným príkladom umelej inteligencie v pretekárskej hre je Gran Turismo Sophy. Wurman a kol. ukázali agenta, ktorý v hre Gran Turismo dokázal poraziť špičkových ľudských hráčov \cite{wurman2022gt_sophy}. Predchádzajúca práca Fuchsa a kol. tiež ukazuje nadľudský výkon v Gran Turismo Sport pomocou hlbokého učenia posilňovaním \cite{gt_sport_drl_fuchs2021}. Tieto práce sú pre nás dôležité preto, že nejde iba o jednoduché simulované auto, ale o rýchlu a dynamickú pretekársku hru.
+
+Gran Turismo Sophy zároveň pekne ukazuje, že úspech hlbokého učenia posilňovaním nevznikne iba výberom algoritmu. Systém potrebuje vhodnú reprezentáciu stavu, veľké množstvo tréningu, dobre navrhnuté odmeny a infraštruktúru, ktorá umožní opakovane vyhodnocovať správanie agenta. Navyše rieši aj aspekty, ktoré v našej práci nechceme priamo skúmať, napríklad predbiehanie súperov alebo pravidlá férovej jazdy.
+
+Pre našu prácu je Sophy silná inšpirácia, ale nie priamo opakovateľný recept. Ukazuje, že pretekárske hry sú dostatočne seriózne prostredie pre výskum autonómneho riadenia. Zároveň však nastavuje latku, ktorú diplomová práca nemôže mechanicky kopírovať: nemáme rovnakú infraštruktúru, rovnaké prostredie ani rovnaký cieľ. Namiesto veľkého systému hlbokého učenia posilňovaním preto hľadáme praktickejšiu cestu pre jeden konkrétny projekt: kompaktný vstup, explicitné hodnotenie jazdy a systematické experimentovanie.
+
+\section{Trackmania a existujúce AI prístupy}
+
+Najbližšou skupinou prác sú projekty priamo spojené s \Trackmania{}. Hra je zaujímavá tým, že je rýchla, presná a silno orientovaná na opakovanie pokusov a zlepšovanie času. Oficiálny opis hry zdôrazňuje súťaženie, tvorbu tratí a komunitný obsah \cite{ubisoft_trackmania2026}. Komunitná wiki dopĺňa praktický kontext o editor tratí a blokovú stavbu máp \cite{trackmania_wiki2026}.
+
+Najdôležitejší praktický príbuzný projekt je TMRL, teda TrackMania Reinforcement Learning \cite{tmrl_github2024}. Ide o framework pre tréning agentov v aplikáciách bežiacich v reálnom čase, pričom poskytuje aj pipeline pre \Trackmania{}. Pre našu prácu je TMRL dôležitý najmä tým, že ukazuje, že Trackmaniu možno napojiť na tréningové rozhranie a použiť ju ako prostredie pre učenie posilňovaním. Zároveň však ide primárne o softvérový framework a dokumentáciu, nie o recenzovaný článok s úplným experimentálnym vyhodnotením.
+
+TMRL je užitočný aj ako kontrast. Podobné praktické projekty často pracujú s obrazom, snímkami obrazovky alebo jednoduchšími senzormi odvodenými z dostupných runtime informácií. Takýto prístup je prirodzený, pretože sa drží toho, čo je možné z hry získať priamo. Pre náš cieľ však ostáva otvorená otázka, či by agent nemal dostať svet v kompaktnejšej forme: nie ako pixely, ale ako geometrický opis svojho okolia.
+
+Pri \Trackmania{} projektoch treba rozlišovať medzi vedeckými zdrojmi, dokumentáciou a komunitným kontextom. OpenPlanet je prakticky dôležitý nástroj, pretože dokumentácia ukazuje možnosti skriptovania a prístupu k runtime údajom v Trackmanii \cite{openplanet_wiki2026}. V tejto kapitole ho však používame iba ako kontext dostupnosti dát, nie ako opis nášho riešenia. Podobne existujú aj preprinty alebo študentské práce zamerané na Trackmania RL, napríklad práca Authiera a Carcelena alebo práca Neindersa \cite{trackmania_drl_preprint2024, neinders_trackmania_sophy2023}. Sú užitočné ako dôkaz záujmu o tému, ale treba ich čítať opatrne, pretože nemajú rovnakú váhu ako recenzované články.
+
+Z bakalárskej práce si zároveň berieme dôležitý historický motív. Už v nej sa ukázalo, že obrazový vstup a snaha extrahovať informácie zo snímky obrazovky môžu viesť k problémom s odozvou a interpretáciou. Rovnako sa ukázalo, že geometrická reprezentácia trate je veľmi sľubná myšlienka, ale musí byť opísaná a vyhodnotená presnejšie. V diplomovej práci preto nechceme iba zopakovať staré riešenie. Chceme z tejto myšlienky spraviť systematický návrh, ktorý sa dá merať a porovnávať.
+
+% TODO: doplniť tabuľku Trackmania a racing prístupov podľa typu vstupu, metódy učenia, hlavného prínosu a obmedzenia pre našu prácu.
+
+\section[Problémy existujúcich prístupov]{Problémy existujúcich prístupov relevantné pre našu prácu}
+
+Z prehľadu príbuzných prác vyplýva niekoľko opakujúcich sa problémov. Prvý sa týka obrazového vstupu. Obraz je bohatý a prirodzený, ale model sa pri ňom učí naraz vnímanie aj riadenie. V pretekárskej hre, kde záleží na rýchlej odozve, môže byť takéto riešenie výpočtovo náročnejšie a horšie interpretovateľné. Práce založené na učení typu end-to-end ukazujú, že obrazové učenie je možné \cite{bojarski2016endtoend}, ale pre náš cieľ nie je zrejmé, že je to najvhodnejší hlavný vstup.
+
+Druhým problémom je závislosť na človeku. Pri behaviorálnom klonovaní alebo pri metódach, ktoré potrebujú referenčnú trajektóriu, agent silno stojí na kvalite ľudských dát. To môže byť výhoda v počiatočnej fáze, pretože človek poskytne dobrý príklad správania. Zároveň to však znamená, že agent sa učí najmä napodobňovať, nie priamo optimalizovať vlastný výkon. Problém distribučného posunu navyše spôsobuje, že aj malá odchýlka od demonštrácií môže viesť k situáciám, ktoré model počas tréningu nevidel \cite{ross2011dagger}.
+
+Tretím problémom je čisté učenie posilňovaním v prostredí bežiacom v reálnom čase. RL je teoreticky veľmi vhodné, pretože agent optimalizuje správanie podľa odmeny. V praxi však potrebuje veľa pokusov, dobrý návrh odmeny a lacné opakovateľné vyhodnocovanie. Gran Turismo Sophy ukazuje, že pri dostatočnej infraštruktúre môže byť tento smer mimoriadne silný \cite{wurman2022gt_sophy}. Pre menší projekt v konkrétnej hre však ostáva otázka, ako tréning urobiť dostatočne praktický a merateľný.
+
+Štvrtým problémom je ručne navrhnuté správanie. Pravidlá, automaty a stromy správania sú čitateľné a užitočné, ale pri dynamickej jazde môžu byť krehké. Pretekárske vozidlo potrebuje plynulé rozhodovanie, prácu s rýchlosťou, stopou a oneskorenými následkami akcií. Ak všetko navrhneme ručne, riskujeme, že agent bude len vykonávať naše očakávania, nie hľadať lepšiu politiku správania.
+
+Posledným problémom je rozdiel medzi simulátorom a cieľovým prostredím. Simulátory a benchmarky sú užitočné, pretože umožňujú rýchle a opakovateľné experimenty \cite{loiacono2010scrc, offline_mania2024}. Ak však cieľom ostáva konkrétna hra, výsledky treba interpretovať opatrne. Agent sa môže naučiť správanie, ktoré funguje v zjednodušenom prostredí, ale nie v hre bežiacej v reálnom čase s jej vlastným časovaním a technickými obmedzeniami.
+
+\section{Ako súvisiace práce pripravujú miesto pre náš prístup}
+
+Súvisiace práce ukazujú, že problém autonómneho pretekárskeho agenta možno riešiť viacerými smermi. Tradičná herná AI ponúka čitateľné rozhodovacie štruktúry. Učenie typu end-to-end z obrazu ukazuje silu neurónových sietí pri riadení. Učenie napodobňovaním a behaviorálne klonovanie poskytujú prirodzený spôsob, ako využiť ľudské dáta. Učenie posilňovaním a projekty ako Gran Turismo Sophy dokazujú, že agent môže optimalizovať jazdu priamo cez správanie v prostredí. Trackmania projekty, najmä TMRL, ukazujú praktickú možnosť napojiť hru na tréningový systém.
+
+Zároveň však žiadny z týchto smerov presne nerieši kombináciu obmedzení, ktorú máme v tejto práci. Chceme autonómneho agenta pre \Trackmania{} v reálnom čase, ale nechceme, aby hlavnou reprezentáciou sveta bol obraz. Chceme využiť to, že trať má geometriu a že z hry vieme získať stav auta. Chceme tiež oddeliť otázku vnímania prostredia od otázky, ako trénovať politiku správania. To vytvára priestor pre vlastný návrh: rekonštruovať svet mimo hry, vypočítať kompaktné pozorovanie a potom systematicky skúmať, ako sa dá nájsť dobrá rozhodovacia funkcia.
+
+Tento záver netvrdí, že geometrický prístup je všeobecne lepší než obraz alebo hlboké učenie posilňovaním. Tvrdí iba to, že pre náš cieľ rieši inú, prakticky dôležitú kombináciu problémov: rýchle snímanie, interpretovateľné vstupy, dostupnosť explicitných metrík jazdy a možnosť opakovaného experimentovania. Nasledujúca kapitola preto začne od otázky, ako z bežiacej hry vytvoriť prostredie, v ktorom agent nevidí pixely obrazovky, ale vlastnú geometrickú reprezentáciu trate.

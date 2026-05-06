@@ -1,0 +1,107 @@
+\documentclass[12pt,twoside]{book}
+
+\input{preamble}
+\input{variables}
+\input{definitions}
+
+\begin{document}
+\frontmatter
+\pagestyle{empty}
+
+% -------------------
+% Obal
+% -------------------
+\begin{center}
+\sc\large
+\mfuniverzita\\
+\mffakulta
+
+\vfill
+
+{\LARGE\mfnazov}\\
+\mftyp
+\end{center}
+
+\vfill
+
+{\sc\large
+\noindent \mfrok\\
+\mfautor
+}
+
+\cleardoublepage
+
+% -------------------
+% Titulný list
+% -------------------
+\begin{center}
+\sc
+\large
+\mfuniverzita\\
+\mffakulta
+
+\vfill
+
+{\LARGE\mfnazov}\\
+\mftyp
+\end{center}
+
+\vfill
+
+\noindent
+\begin{tabular}{ll}
+Študijný program: & \mfprogram \\
+Študijný odbor: & \mfodbor \\
+Školiace pracovisko: & \mfpracovisko \\
+Školiteľ: & \mfskolitel \\
+% Konzultant: & \mfkonzultant \\
+\end{tabular}
+
+\vfill
+
+\noindent \mfmiesto\\
+\mfautor
+
+\cleardoublepage
+
+% -------------------
+% Zadanie z AIS
+% -------------------
+\newpage
+\setcounter{page}{3}
+\includepdf[pages=-]{images/zadanie.pdf}
+
+% -------------------
+% Úvodná časť
+% -------------------
+\input{chapters/00_podakovanie}
+\input{chapters/01_abstrakt}
+\input{chapters/02_abstract}
+
+\cleardoublepage
+\tableofcontents
+
+\newpage
+\listoffigures
+\listoftables
+
+\mainmatter
+\pagestyle{headings}
+
+\input{chapters/03_uvod}
+\input{chapters/04_teoreticke_vychodiska}
+\input{chapters/05_suvisiace_prace}
+\input{chapters/06_navrh_riesenia}
+\input{chapters/07_trening_policy}
+\input{chapters/08_vyhodnotenie_agenta}
+\input{chapters/09_zaver}
+
+\backmatter
+\cleardoublepage
+\nocite{vp2023_32}
+\bibliographystyle{plain}
+\bibliography{references}
+
+\input{appendices/appendix_a_elektronicka_priloha}
+
+\end{document}

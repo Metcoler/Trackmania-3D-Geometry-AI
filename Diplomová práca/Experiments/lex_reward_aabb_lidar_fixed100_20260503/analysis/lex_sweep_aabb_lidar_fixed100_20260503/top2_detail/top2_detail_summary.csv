@@ -1,0 +1,3 @@
+variant,ranking_key,max_time,first_finish_generation,total_finish_individuals,best_finish_time,best_finish_generation,last50_finish_per_generation,last50_mean_dense_progress,last50_mean_penalized_time,last50_best_finish_time_so_far
+finished_progress_time_crashes,"(finished, progress, -time, -crashes)",30.0,137,2209,17.32999999999991,264,15.46,49.387908028532564,26.824883333333442,17.32999999999991
+finished_progress_crashes_time,"(finished, progress, -crashes, -time)",30.0,136,2246,17.97000000000001,276,14.7,54.04037378975281,27.571891666666872,17.97000000000001

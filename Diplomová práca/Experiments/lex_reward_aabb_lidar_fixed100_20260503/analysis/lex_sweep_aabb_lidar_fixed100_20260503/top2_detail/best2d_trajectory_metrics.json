@@ -1,0 +1,20 @@
+{
+  "finished": 0,
+  "crashes": 1,
+  "timeout": 0,
+  "progress": 3.358328683035714,
+  "block_progress": 2.857142857142857,
+  "dense_progress": 3.358328683035714,
+  "discrete_progress": 2.857142857142857,
+  "time": 1.370000000000001,
+  "distance": 24.523777410387993,
+  "reward": 3.3346041592583036,
+  "fitness": 3334604.1592583037,
+  "steps": 137,
+  "physics_tick_mean": 1.0,
+  "physics_hz_mean": 100.0,
+  "physics_delay_norm_mean": 0.0,
+  "terminated": true,
+  "truncated": false,
+  "mirrored": 0
+}

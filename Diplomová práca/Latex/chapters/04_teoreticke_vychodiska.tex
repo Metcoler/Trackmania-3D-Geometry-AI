@@ -1,0 +1,610 @@
+\chapter{Teoretické východiská}
+
+Táto kapitola zavádza pojmy, ktoré budú použité v ďalších častiach práce. Cieľom ešte nie je opisovať konkrétnu implementáciu agenta ani výsledky experimentov. Najprv potrebujeme spoločný slovník: čo je agent, prostredie, pozorovanie, akcia, politika správania sa agenta, odmena, neurónová sieť a optimalizačný algoritmus. Až potom má zmysel ukázať, ako sa tieto pojmy spájajú v konkrétnom riešení autonómneho vodiča.
+
+Teoretická časť je preto písaná od všeobecného k špecifickejšiemu. Najprv sa pozrieme na umelú inteligenciu ako na problém rozhodovania v prostredí. Následne zavedieme formálny model agenta a jeho politiky správania sa. Na tento základ potom nadviaže hodnotenie správania, neurónové siete a metódy učenia, ktoré hľadajú vhodné parametre rozhodovacej funkcie.
+
+\section{Umelá inteligencia a autonómne rozhodovanie}
+
+Umelá inteligencia je široký pojem a v rôznych obdobiach sa na ňu kládol iný dôraz. Historicky sa často spájala s otázkou, či stroj dokáže prejavovať správanie, ktoré by sme u človeka označili za inteligentné \cite{turing1950computing}. Pre potreby tejto práce je však užitočnejší praktickejší pohľad: inteligentný systém budeme chápať ako systém, ktorý vníma svoje prostredie a volí akcie tak, aby dosahoval zadaný cieľ. Podobne definujú inteligentného agenta aj Russell a Norvig, ktorí zdôrazňujú dvojicu vnímanie prostredia a konanie v prostredí \cite{russell_norvig_aima2021}.
+
+\paragraph{Riadenie ako sekvenčné rozhodovanie.}
+Tento pohľad je vhodný najmä pri autonómnom riadení. Agent nemusí mať vedomie ani rozumieť svetu tak ako človek. Stačí, aby mal informácie o aktuálnej situácii, vedel zvoliť akciu a jeho správanie bolo možné hodnotiť podľa toho, či sa približuje k cieľu. Pri riadení vozidla môže byť cieľom napríklad bezpečne pokračovať po ceste, dostať sa do cieľa alebo prejsť trať za čo najkratší čas. Dôležité je, že agent nerieši jeden izolovaný výpočet. Rozhoduje sa postupne a každá jeho akcia ovplyvní situáciu, v ktorej sa bude rozhodovať neskôr.
+
+\paragraph{Pravidlový systém a učiaci sa systém.}
+Z tohto dôvodu je vhodné odlíšiť pravidlový systém od systému, ktorý sa učí. Pravidlový systém má správanie ručne opísané vopred. Autor systému doň zapíše podmienky a reakcie, napríklad čo má agent urobiť, ak sa pred ním nachádza prekážka. Takýto prístup môže byť čitateľný a dobre kontrolovateľný, ale pri zložitejšom prostredí môže byť krehký. Systém učený zo skúsenosti má namiesto pevne napísaných pravidiel parametre, ktoré sa menia podľa dát alebo podľa hodnotenia správania. Výhodou je, že takéto správanie nemusí byť celé ručne navrhnuté. Nevýhodou je, že potrebujeme vhodný spôsob učenia a vhodné hodnotenie, inak sa systém môže naučiť niečo iné, než sme zamýšľali.
+
+Autonómne rozhodovanie je preto prirodzene sekvenčný problém. Agent v čase pozoruje prostredie, zvolí akciu, prostredie sa zmení a proces pokračuje. Rovnaká akcia nemusí mať vždy rovnaký význam, pretože závisí od stavu, v ktorom bola vykonaná. V riadiacich úlohách je táto vlastnosť obzvlášť výrazná. Jemná korekcia smeru môže byť pri nízkej rýchlosti bezpečná, ale pri vysokej rýchlosti môže zásadne zmeniť budúcu trajektóriu. Už na tejto úrovni teda vzniká hlavná otázka práce: ako nájsť rozhodovaciu funkciu, ktorá v každom kroku z dostupných informácií vyberie vhodnú akciu.
+
+\section{Agent, prostredie a politika správania sa agenta}
+
+Základný model sekvenčného rozhodovania pozostáva z agenta a prostredia. Prostredie označuje časť sveta, v ktorej sa agent nachádza a ktorú môže svojimi akciami ovplyvňovať. Agent je systém, ktorý z prostredia získava informácie a na ich základe volí akcie. Tento opis je zámerne všeobecný. Agentom môže byť robot, program ovládajúci postavu v hre, model obchodujúci na trhu alebo vodič vo virtuálnom pretekárskom prostredí.
+
+\paragraph{Stav, pozorovanie a akcia.}
+V diskrétnom čase môžeme interakciu zapísať nasledovne. V kroku $t$ sa prostredie nachádza v stave
+\[
+    s_t \in \mathcal{S},
+\]
+kde $\mathcal{S}$ je množina všetkých možných stavov. Agent nemusí mať prístup k celému skutočnému stavu. Často dostáva iba pozorovanie
+\[
+    o_t \in \mathcal{O},
+\]
+kde $\mathcal{O}$ je množina pozorovaní. Na základe tohto pozorovania zvolí akciu
+\[
+    a_t \in \mathcal{A},
+\]
+kde $\mathcal{A}$ je množina akcií, ktoré môže agent vykonať. Prostredie potom prejde do nového stavu. V stochastickom prípade tento prechod opisujeme pravdepodobnosťou
+\[
+    s_{t+1} \sim P(\cdot \mid s_t, a_t),
+\]
+teda nový stav sa vyberá podľa prechodového rozdelenia podmieneného aktuálnym stavom a akciou. V deterministickom prípade môžeme prechod zapísať jednoduchšie ako
+\[
+    s_{t+1} = f(s_t, a_t).
+\]
+Rovnakú myšlienku môžeme čítať aj ako prechod zo stavu $s_t$ do stavu $s_{t+1}$ po vykonaní akcie $a_t$:
+\[
+    s_t \xrightarrow{\,a_t\,} s_{t+1}.
+\]
+Prvý zápis zdôrazňuje, že nasledujúci stav je výsledkom funkcie prechodu, druhý zápis zdôrazňuje samotný krok interakcie. Takýto formalizmus je základom mnohých modelov učenia posilňovaním a sekvenčného rozhodovania \cite{sutton_barto2018rl}.
+
+Rozdiel medzi stavom a pozorovaním je dôležitý. Stav je úplný opis prostredia z pohľadu teoretického modelu. Pozorovanie je to, čo agent skutočne dostane ako vstup. Ak agent vidí celý stav, môžeme uvažovať $o_t = s_t$. V mnohých praktických úlohách však agent vidí iba časť sveta alebo spracovanú reprezentáciu. Potom sa musí rozhodovať z neúplnej informácie. To neznamená, že úloha je neriešiteľná, ale znamená to, že kvalita reprezentácie pozorovania je súčasťou návrhu celého systému.
+
+\paragraph{Epizóda a trajektória.}
+Jedna postupnosť interakcií agenta s prostredím sa nazýva epizóda. Epizóda začína v počiatočnom stave a končí po splnení koncovej podmienky, napríklad po dosiahnutí cieľa, po zlyhaní alebo po vypršaní časového limitu. Postupnosť stavov, pozorovaní a akcií počas epizódy označujeme ako trajektóriu. Práve trajektória je pri riadiacich úlohách často dôležitejšia než jedna samostatná akcia, pretože ukazuje, ako sa rozhodnutia agenta hromadili v čase.
+
+\paragraph{Politika správania sa agenta.}
+Správanie agenta opisuje politika správania sa agenta (angl.~\emph{policy}). V ďalšom texte budeme používať aj kratší pojem politika. Politika je pravidlo, podľa ktorého agent vyberá akciu na základe dostupnej informácie. V deterministickom prípade má politika tvar
+\[
+    a_t = \pi(o_t),
+\]
+teda pre každé pozorovanie určí jednu konkrétnu akciu. V stochastickom prípade politika neurčuje priamo akciu, ale pravdepodobnostné rozdelenie nad akciami:
+\[
+    \pi(a \mid o) = \Pr(A_t = a \mid O_t = o).
+\]
+Stochastická politika teda hovorí, s akou pravdepodobnosťou agent vyberie akciu $a$, keď pozoruje $o$. Takýto zápis je bežný najmä v učení posilňovaním, kde náhodnosť politiky pomáha prieskumu prostredia \cite{sutton_barto2018rl}.
+
+\paragraph{Akčný priestor.}
+Akčný priestor môže byť diskrétny alebo spojitý. Pri diskrétnom akčnom priestore si agent vyberá z konečnej množiny možností, napríklad vľavo, vpravo alebo nič. Pri spojitom akčnom priestore môže mať akcia hodnotu z intervalu, napríklad mieru natočenia volantu. V niektorých úlohách sa tieto typy kombinujú. Dôležité je, že politika musí produkovať akcie, ktoré sa dajú v prostredí skutočne vykonať. Ak je výstup modelu mimo povoleného rozsahu, musí byť buď vhodne obmedzený, alebo samotná politika musí byť navrhnutá tak, aby neplatné akcie nevytvárala.
+
+\paragraph{Typ prostredia a časovanie.}
+Prostredie môže byť deterministické alebo nedeterministické. V deterministickom prostredí rovnaký stav a rovnaká akcia vždy vedú k rovnakému ďalšiemu stavu. V nedeterministickom prostredí môže do výsledku vstupovať náhodnosť, šum, neúplné pozorovanie alebo vonkajšie vplyvy. Podobne môžeme rozlišovať synchrónne a asynchrónne prostredia. V synchrónnom prostredí sa rozhodovanie deje v pravidelných krokoch. V asynchrónnom alebo realtime prostredí môže mať čas medzi rozhodnutiami rôznu dĺžku a rovnaká akcia môže pôsobiť dlhšie alebo kratšie. Pri riadení je preto časovanie súčasťou problému, nie iba technický detail.
+
+\paragraph{Uzavretá slučka riadenia.}
+Napokon je dôležité rozlíšiť otvorenú a uzavretú slučku riadenia. Pri otvorenej slučke model iba predikuje akcie pre vopred dané vstupy. Pri uzavretej slučke riadenia (angl.~\emph{closed-loop control}) sa jeho vlastné akcie premietajú do budúcich stavov a pozorovaní. Malá chyba sa preto nemusí prejaviť hneď, ale môže posunúť agenta do situácie, v ktorej sa bude rozhodovať horšie. Tento fakt bude neskôr dôležitý pri učení s učiteľom a učení napodobňovaním: dobrá predikcia na uložených dátach ešte automaticky neznamená dobré samostatné správanie v prostredí.
+
+Základnú uzavretú slučku medzi agentom a prostredím schematicky znázorňuje obrázok~\ref{fig:agent-environment-loop}.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.78\textwidth]{theory/theory_agent_environment_loop.pdf}
+    \caption[Interakcia agenta s prostredím]{Základná interakcia agenta s prostredím. Agent z pozorovania vyberá akciu, ktorá mení budúci stav prostredia a vedie k ďalšej odmene. Vlastné spracovanie podľa modelu sekvenčného rozhodovania.}
+    \label{fig:agent-environment-loop}
+\end{figure}
+\FloatBarrier
+
+\section{Hodnotenie správania agenta}
+
+V predchádzajúcej časti sme opísali agenta ako systém, ktorý pozoruje prostredie a vyberá akcie. Samotný opis rozhodovacieho cyklu však ešte nehovorí, ktoré správanie je dobré a ktoré zlé. Ak chceme agenta učiť alebo porovnávať viacerých kandidátov, potrebujeme pravidlo, ktoré správanie ohodnotí. Bez takéhoto hodnotenia by sme vedeli iba zaznamenať, čo agent urobil, ale nevedeli by sme rozhodnúť, či sa zlepšil.
+
+V sekvenčných úlohách nie je hodnotenie vždy priamočiare. Jedna akcia môže vyzerať lokálne správne, ale po niekoľkých krokoch viesť k horšej trajektórii. Naopak, akcia, ktorá sa v jednom okamihu javí ako nevýhodná, môže byť súčasťou dlhodobo dobrého správania. Hodnotenie agenta preto zvyčajne nehodnotí iba jeden okamih, ale celú postupnosť rozhodnutí.
+
+\paragraph{Odmena a návrat epizódy.}
+V učení posilňovaním sa spätná väzba často zapisuje pomocou odmeny (angl.~\emph{reward}). Odmena je číselná hodnota, ktorú agent získa za stav, akciu alebo prechod medzi stavmi. Pre jeden krok môžeme okamžitú odmenu zapísať ako
+\[
+    r_t = R(s_t, a_t, s_{t+1}),
+\]
+kde $r_t$ je odmena v čase $t$, $s_t$ je aktuálny stav, $a_t$ vykonaná akcia a $s_{t+1}$ nový stav prostredia. Funkcia $R$ teda vyjadruje, ako hodnotíme konkrétny prechod v prostredí \cite{sutton_barto2018rl}.
+
+Keďže agent koná počas celej epizódy, zaujíma nás aj súčet budúcich odmien. Tento súčet sa nazýva návrat (angl.~\emph{return}). Pre konečnú epizódu dĺžky $T$ ho môžeme zapísať napríklad ako
+\[
+    G_t = \sum_{k=0}^{T-t-1} \gamma^k r_{t+k},
+\]
+kde $G_t$ je návrat od času $t$, $r_{t+k}$ sú budúce odmeny a $\gamma \in [0,1]$ je diskontný faktor. Diskontný faktor určuje, akú váhu majú budúce odmeny oproti okamžitej odmene. Ak je $\gamma$ blízke nule, agent uprednostňuje krátkodobý zisk. Ak je $\gamma$ blízke jednej, väčší význam majú aj neskoršie dôsledky rozhodnutí \cite{sutton_barto2018rl}.
+
+\paragraph{Optimalizačný cieľ.}
+Ak máme definované hodnotenie správania, učenie agenta môžeme zapísať ako optimalizačný problém. Cieľom je nájsť takú politiku správania sa agenta, ktorá dosahuje čo najvyššie očakávané hodnotenie. Formálne môžeme písať
+\[
+    \pi^* = \arg\max_{\pi} J(\pi),
+\]
+kde $\pi^*$ je optimálna politika, $\pi$ je kandidátna politika a $J(\pi)$ je funkcia, ktorá priraďuje politike jej očakávanú kvalitu. V učení posilňovaním môže byť $J(\pi)$ očakávaný návrat. V iných optimalizačných prístupoch môže ísť o inú funkciu, ktorá hodnotí výslednú trajektóriu alebo celé správanie kandidáta.
+
+Táto formulácia je dôležitá, pretože oddeľuje dve veci. Prvá otázka je, ako správanie meriame. Druhá otázka je, akým algoritmom hľadáme politiku, ktorá toto meranie maximalizuje. Ak je hodnotenie zle navrhnuté, ani veľmi silný optimalizačný algoritmus nemusí nájsť správanie, ktoré naozaj chceme.
+
+\paragraph{Odmena, hodnotenie vhodnosti a stratová funkcia.}
+Rôzne metódy strojového učenia používajú pre hodnotenie podobnú myšlienku, ale odlišný jazyk. V učení posilňovaním hovoríme o odmene a návrate. V genetických algoritmoch sa často používa pojem hodnotenie vhodnosti kandidáta (angl.~\emph{fitness}). Kandidátom môže byť napríklad konkrétna politika alebo sada jej parametrov. Ak označíme trajektóriu agenta ako
+\[
+    \tau = (s_0, a_0, s_1, a_1, \ldots, s_T),
+\]
+potom fitness môžeme chápať ako funkciu
+\[
+    F(\tau),
+\]
+ktorá celej trajektórii priradí jedno hodnotenie.
+
+Pri učení s učiteľom sa naopak častejšie minimalizuje stratová funkcia (angl.~\emph{loss}). Stratová funkcia meria rozdiel medzi výstupom modelu a požadovaným cieľom v dátach. Kým odmena alebo fitness býva formulovaná tak, aby väčšia hodnota znamenala lepšie správanie, stratová funkcia sa zvyčajne minimalizuje. Napriek rozdielnemu znamienku ide stále o rovnaký typ otázky: ako číselne vyjadriť, že jeden kandidát je lepší než iný.
+
+\paragraph{Jedno číslo a viac cieľov.}
+Ak je hodnotenie vyjadrené jedným číslom, porovnávanie agentov je jednoduché. Kandidát s vyššou hodnotou je lepší, kandidát s nižšou hodnotou je horší. To je praktické pre optimalizačné algoritmy, ktoré potrebujú jedincov zoradiť, vybrať najlepších alebo vypočítať gradient.
+
+Problém vznikne vtedy, keď správanie nechceme hodnotiť iba jednou vlastnosťou. V riadiacich úlohách môže agent sledovať viac cieľov naraz: má sa dostať do cieľa, má byť rýchly, má byť stabilný a nemá riskovať nežiaduce stavy. Tieto ciele sa môžu navzájom biť. Rýchle správanie môže byť riskantnejšie a bezpečné správanie môže byť pomalšie.
+
+Jedna možnosť je spojiť viac metrík do jedného skalárneho hodnotenia. Ak máme metriky $m_1, m_2, \ldots, m_n$, môžeme ich normalizovať a zapísať napríklad
+\[
+    S = \sum_{i=1}^{n} w_i m_i,
+\]
+kde $S$ je výsledné skalárne skóre a $w_i$ sú váhy jednotlivých metrík. Pri vhodnom návrhu môžu váhy vyjadrovať priority. Niekedy sa priority dajú zosilniť aj tak, že normalizované metriky násobíme veľkými rozdielnymi koeficientmi, napríklad mocninami desiatky. Takéto riešenie je však citlivé na voľbu váh. Ak váhy nevyjadrujú skutočnú prioritu cieľov, agent môže optimalizovať nesprávny kompromis.
+
+\paragraph{Lexikografické porovnávanie.}
+Druhá možnosť je nepremiešať všetky ciele do jedného čísla, ale porovnávať ich v pevnom poradí priorít. Takýto prístup sa nazýva lexikografické porovnávanie. Namiesto skaláru priradíme kandidátovi vektor metrík
+\[
+    \mathbf{m}(\tau) = (m_1(\tau), m_2(\tau), \ldots, m_n(\tau)).
+\]
+Dve trajektórie potom porovnávame od prvej metriky. Ak sa líšia v $m_1$, rozhoduje $m_1$. Ak sú v prvej metrike rovnaké, pokračujeme druhou metrikou. Až keď sú rovnaké aj v nej, rozhoduje ďalšia metrika.
+
+Výhodou lexikografického poradia je, že priority sú čitateľné. Nehovoríme, že jedna metrika má nejakú nejasnú číselnú váhu voči druhej. Hovoríme, že prvá metrika je dôležitejšia a druhá rozhoduje až vtedy, keď prvá nerozlíši kandidátov. Nevýhodou je, že poradie priorít musíme zvoliť veľmi opatrne. Ak je poradie zlé, algoritmus bude dôsledne optimalizovať práve toto zlé poradie.
+
+Rozdiel medzi spojením metrík do jedného čísla a ich lexikografickým porovnávaním zhŕňa obrázok~\ref{fig:scalar-vs-lexicographic}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{theory/theory_scalar_vs_lexicographic.pdf}
+    \caption[Skalárne a lexikografické hodnotenie]{Dva pohľady na hodnotenie s viacerými metrikami. Skalárny prístup mieša metriky pomocou váh do jedného čísla, zatiaľ čo lexikografické poradie necháva metriky oddelené a porovnáva ich podľa pevne určených priorít. Vlastné spracovanie.}
+    \label{fig:scalar-vs-lexicographic}
+\end{figure}
+\FloatBarrier
+
+\paragraph{Riziko zle navrhnutého hodnotenia.}
+Návrh hodnotenia je preto jednou z najdôležitejších častí práce s autonómnym agentom. Agent sa nesnaží naplniť náš zámer tak, ako ho máme v hlave. Snaží sa optimalizovať to, čo sme mu formálne zadali. Ak sa formálne hodnotenie líši od skutočného cieľa, agent môže nájsť správanie, ktoré je podľa vzorca dobré, ale prakticky nežiaduce. Tento problém sa objavuje pri návrhu odmien aj pri tvarovaní odmeny (angl.~\emph{reward shaping}), teda pri dopĺňaní pomocných odmien, ktoré majú uľahčiť učenie \cite{ng1999shaping}. Moderná literatúra o nesprávne navrhnutých odmenách zároveň upozorňuje, že chyba v odmeňovaní môže viesť k správaniu, ktoré vyzerá optimalizované, ale neplní pôvodný zámer návrhára \cite{knox2023reward_misdesign}.
+
+V tejto práci bude hodnotenie správania kľúčové. Najprv však potrebujeme ešte určiť, čo vlastne optimalizujeme. Politika správania sa agenta môže byť zapísaná rôznymi spôsobmi. V ďalšej časti preto zavedieme neurónové siete ako parametrizované funkcie, ktoré dokážu aproximovať rozhodovanie agenta.
+
+\section{Neurónové siete ako aproximátory funkcií}
+
+V predchádzajúcej časti sme zaviedli hodnotenie správania agenta. Tým však ešte nemáme povedané, ako bude samotné správanie reprezentované. Potrebujeme funkciu, ktorá z pozorovania agenta vytvorí akciu. Takúto funkciu by bolo možné napísať ručne ako súbor pravidiel, ale pri zložitejšom riadení by počet výnimiek rýchlo rástol. V tejto práci preto budeme uvažovať neurónovú sieť ako parametrickú funkciu, ktorej parametre sa dajú učiť alebo optimalizovať.
+
+Neurónové siete sú výpočtové modely zložené z jednoduchých jednotiek a vrstiev. V modernom strojovom učení sa používajú práve preto, že dokážu reprezentovať nelineárne vzťahy medzi vstupom a výstupom \cite{goodfellow2016deep}. Pre túto prácu nie je dôležité opisovať všetky typy neurónových sietí. Stačí nám viacvrstvová dopredná sieť, teda model, v ktorom informácia postupuje od vstupu cez skryté vrstvy až k výstupu.
+
+\paragraph{Neurón a vrstva.}
+Základnou výpočtovou operáciou v neurónovej sieti je vážený súčet vstupov. Ak vstup označíme ako vektor $\mathbf{x}$, jedna vrstva siete môže byť zapísaná ako
+\[
+    \mathbf{h} = \sigma(W\mathbf{x} + \mathbf{b}),
+\]
+kde $W$ je matica váh, $\mathbf{b}$ je vektor posunov, často označovaný aj anglickým pojmom bias, $\sigma$ je aktivačná funkcia a $\mathbf{h}$ je výstup vrstvy. Váhy určujú, ktoré vstupné hodnoty majú byť pre výpočet dôležité. Posun umožňuje vrstve meniť výstup aj vtedy, keď je vstup nulový. Celý výraz teda predstavuje jednu transformáciu vstupného vektora na nový vektor príznakov.
+
+Ak má vrstva viac neurónov, každý z nich počíta vlastnú kombináciu vstupov. Maticový zápis je preto praktický: namiesto samostatného opisovania každého neurónu vieme celú vrstvu zapísať jednou lineárnou transformáciou a jednou nelineárnou aktivačnou funkciou.
+
+\paragraph{Aktivačné funkcie.}
+Aktivačná funkcia zavádza do siete nelinearitu. Bez nej by skladanie viacerých lineárnych vrstiev bolo stále iba jednou lineárnou transformáciou. Sieť by potom vedela modelovať iba jednoduché lineárne závislosti, čo je pre riadenie v nelineárnom prostredí príliš slabé. Medzi základné nelineárne funkcie patria napríklad sigmoid,
+\[
+    \sigma(z) = \frac{1}{1 + e^{-z}},
+\]
+ktorý výstup obmedzuje do intervalu $[0,1]$, ReLU,
+\[
+    \operatorname{ReLU}(z) = \max(0, z),
+\]
+alebo hyperbolický tangens $\tanh(z)$, ktorý výstup obmedzuje do intervalu $[-1, 1]$. Výber aktivačnej funkcie ovplyvňuje, aké transformácie vie sieť ľahko vyjadriť a ako sa jej parametre počas učenia menia \cite{goodfellow2016deep}. V tejto teoretickej časti stačí zapamätať si hlavne to, že aktivačné funkcie dávajú sieti schopnosť skladať jednoduché výpočty do nelineárnej rozhodovacej funkcie.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{theory/theory_activation_functions.pdf}
+    \caption[Aktivačné funkcie]{Príklady základných aktivačných funkcií. Sigmoid obmedzuje výstup do intervalu $[0,1]$, hyperbolický tangens do intervalu $[-1,1]$ a ReLU zachováva kladné vstupy, zatiaľ čo záporné hodnoty potláča na nulu. Vlastné vykreslenie.}
+    \label{fig:activation-functions}
+\end{figure}
+\FloatBarrier
+
+\paragraph{Viacvrstvová sieť a dopredný výpočet.}
+Viacvrstvová neurónová sieť vznikne tak, že výstup jednej vrstvy použijeme ako vstup ďalšej vrstvy. Dopredný výpočet (angl.~\emph{forward pass}) potom znamená postupné aplikovanie všetkých vrstiev od vstupu po výstup. Pri sieti s $L$ vrstvami môžeme jej parametre označiť ako
+\[
+    \theta = \{W_i, \mathbf{b}_i\}_{i=1}^{L},
+\]
+kde $W_i$ a $\mathbf{b}_i$ sú váhy a posuny $i$-tej vrstvy. Celú sieť potom môžeme chápať ako funkciu $f_\theta$, ktorej tvar je daný architektúrou a ktorej konkrétne správanie určujú parametre $\theta$.
+
+Táto formulácia je dôležitá, pretože oddeľuje dve otázky. Prvá otázka je, aký tvar modelu zvolíme: koľko vrstiev, aké veľké vrstvy a aké aktivačné funkcie. Druhá otázka je, ako nájdeme vhodné hodnoty parametrov. Samotná neurónová sieť ešte nie je naučené správanie. Je to iba rodina funkcií, z ktorej tréning vyberá jednu konkrétnu funkciu.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{theory/theory_neuron_layer_mlp.pdf}
+    \caption[Neurónová sieť]{Od jedného neurónu cez vrstvu až po viacvrstvovú doprednú sieť. Jednotlivé vrstvy postupne transformujú vstupný vektor na výstup, ktorý môže reprezentovať napríklad akciu agenta. Vlastné spracovanie.}
+    \label{fig:neuron-layer-mlp}
+\end{figure}
+\FloatBarrier
+
+\paragraph{Sieť ako aproximátor funkcie.}
+Neurónové siete sú často opisované ako aproximátory funkcií. Intuitívne to znamená, že namiesto ručného zápisu neznámej funkcie hľadáme sieť, ktorá sa jej správa dostatočne podobne. Univerzálna aproximačná veta ukazuje, že dopredné siete s vhodnou nelineárnou aktivačnou funkciou dokážu za určitých podmienok aproximovať širokú triedu spojitých funkcií \cite{cybenko1989approximation}. Tento výsledok je dôležitý, ale treba ho čítať opatrne.
+
+Univerzálna aproximácia nehovorí, že vhodnú sieť vieme ľahko nájsť. Nehovorí ani to, že malá sieť bude stačiť na každú úlohu, ani to, že sieť bude dobre fungovať na situáciách, ktoré pri učení nevidela. Hovorí iba to, že neurónová sieť má silnú reprezentačnú schopnosť. Pre praktické použitie preto stále musíme riešiť veľkosť siete, kvalitu dát, spôsob učenia a spôsob hodnotenia výsledného správania.
+
+\paragraph{Parametre siete ako priestor hľadania.}
+Ak všetky váhy a posuny siete spojíme do jedného dlhého vektora, dostaneme bod vo vysokorozmernom priestore parametrov. Učenie neurónovej siete potom môžeme chápať ako hľadanie takého bodu v tomto priestore, pri ktorom sieť dáva vhodné výstupy. Pri učení s učiteľom sa vhodnosť výstupu meria stratovou funkciou nad dátami. Pri učení posilňovaním alebo pri evolučných metódach sa vhodnosť často prejaví až po tom, ako sieť riadi agenta v prostredí.
+
+Tento pohľad bude v práci užitočný najmä pri neuroevolúcii. Ak kandidátom nie je priamo jedna akcia, ale celý vektor parametrov neurónovej siete, optimalizačný algoritmus nehľadá najlepšiu akciu pre jeden stav. Hľadá celú rozhodovaciu funkciu, ktorá sa má správať dobre počas celej epizódy.
+
+\paragraph{Politika reprezentovaná neurónovou sieťou.}
+Politiku správania sa agenta môžeme reprezentovať neurónovou sieťou tak, že vstupom siete je pozorovanie a výstupom je akcia. Formálne môžeme deterministickú politiku zapísať ako
+\[
+    a_t = \pi_\theta(o_t),
+\]
+kde $o_t$ je pozorovanie v čase $t$, $a_t$ je akcia zvolená agentom a $\theta$ sú parametre neurónovej siete. V takomto zápise je politika stále pravidlo výberu akcie, ale toto pravidlo už nie je ručne napísané. Je ukryté v parametroch siete.
+
+Z toho prirodzene vyplýva ďalšia otázka. Ak politika závisí od parametrov $\theta$, potrebujeme spôsob, ako tieto parametre nájsť. Môžeme ich učiť z príkladov človeka, môžeme ich meniť podľa odmeny získanej v prostredí alebo ich môžeme vyhľadávať evolučným algoritmom. Práve tieto možnosti sú predmetom nasledujúcej časti.
+
+\section{Techniky strojového učenia}
+
+V predchádzajúcej časti sme politiku správania sa agenta opísali ako parametrickú funkciu. Neurónová sieť nám dáva tvar tejto funkcie, ale sama osebe ešte neurčuje, aké hodnoty majú mať jej parametre. Strojové učenie môžeme v tomto kontexte chápať ako súbor metód, ktoré tieto parametre nehľadajú ručným písaním pravidiel, ale menia ich podľa dát, spätnej väzby alebo hodnotenia správania. Rôzne prístupy sa líšia najmä tým, odkiaľ berú informáciu o tom, čo je dobrý výstup.
+
+\paragraph{Učenie s učiteľom.}
+Učenie s učiteľom (angl.~\emph{supervised learning}) vychádza z dát, v ktorých ku každému vstupu poznáme požadovaný výstup. Takýto dataset môžeme zapísať ako
+\[
+    \mathcal{D} = \{(\mathbf{x}_i, \mathbf{y}_i)\}_{i=1}^{N},
+\]
+kde $\mathbf{x}_i$ je vstupný príklad, $\mathbf{y}_i$ je cieľová hodnota a $N$ je počet príkladov v datasete. Model $f_\theta$ s parametrami $\theta$ vytvorí pre vstup $\mathbf{x}_i$ predikciu $f_\theta(\mathbf{x}_i)$ a cieľom učenia je, aby sa táto predikcia čo najviac podobala cieľovej hodnote $\mathbf{y}_i$.
+
+Túto podobnosť vyjadruje stratová funkcia. Priemernú stratu na datasete môžeme zapísať napríklad ako
+\[
+    \mathcal{L}(\theta) =
+    \frac{1}{N}\sum_{i=1}^{N}
+    \ell(f_\theta(\mathbf{x}_i), \mathbf{y}_i),
+\]
+kde $\ell$ je strata jedného príkladu a $\mathcal{L}(\theta)$ je celková priemerná chyba modelu. Učenie s učiteľom potom znamená hľadanie takých parametrov $\theta$, ktoré túto chybu minimalizujú \cite{goodfellow2016deep}. Tento prístup je prirodzený vtedy, keď máme k dispozícii dostatočne kvalitné dvojice vstupov a správnych výstupov.
+
+\paragraph{Učenie napodobňovaním.}
+Učenie napodobňovaním (angl.~\emph{imitation learning}) je špeciálny prípad, v ktorom sa model učí správanie od experta. Expertom môže byť človek alebo iný systém, ktorý v danom prostredí vykonáva požadované akcie. V jednoduchom variante, ktorý sa nazýva behaviorálne klonovanie (angl.~\emph{behavior cloning}), zbierame demonštrácie experta a model trénujeme podobne ako pri učení s učiteľom. Dataset expertných ukážok môžeme zapísať ako
+\[
+    \mathcal{D}_E = \{(o_i, a_i^E)\}_{i=1}^{N},
+\]
+kde $o_i$ je pozorovanie a $a_i^E$ je akcia experta v tomto pozorovaní.
+
+V úlohách riadenia to znamená, že model sa učí mapovanie z pozorovania na akciu experta. Tento smer má dlhú históriu, napríklad systém ALVINN sa učil riadiť vozidlo z ľudských ukážok \cite{pomerleau1989alvinn} a neskoršie end-to-end prístupy ukazovali podobnú myšlienku pri neurónových sieťach pre riadenie z obrazu \cite{bojarski2016endtoend}. Dôležité obmedzenie však spočíva v tom, že model sa učí najmä zo stavov, ktoré navštívil expert. Ak po spustení v uzavretej slučke urobí malú chybu, môže sa dostať do stavov mimo trénovacej distribúcie. Tento problém distribučného posunu je jednou z motivácií metód ako DAgger, ktoré postupne pridávajú dáta zo stavov navštívených samotným agentom \cite{ross2011dagger}.
+
+\paragraph{Učenie bez učiteľa.}
+Učenie bez učiteľa (angl.~\emph{unsupervised learning}) pracuje s dátami, pri ktorých nemáme priamo zadaný správny výstup. Cieľom nie je naučiť sa konkrétne mapovanie zo vstupu na label, ale nájsť štruktúru v dátach. Môže ísť napríklad o zhlukovanie podobných príkladov, redukciu dimenzie alebo učenie skrytých príznakov. V tejto práci nejde o hlavný spôsob trénovania agenta, ale je užitočné ho spomenúť, pretože ukazuje širší kontext strojového učenia: nie všetky metódy potrebujú explicitné správne odpovede ku každému vstupu.
+
+\paragraph{Učenie posilňovaním.}
+Učenie posilňovaním (angl.~\emph{reinforcement learning}) rieši inú situáciu. Agent nedostáva správnu akciu pre každý stav. Namiesto toho koná v prostredí a získava spätnú väzbu vo forme odmeny. Cieľom je nájsť politiku, ktorá maximalizuje dlhodobý návrat, teda nie iba okamžitú odmenu za jeden krok \cite{sutton_barto2018rl}. Tento prístup priamo zodpovedá sekvenčnému rozhodovaniu: agent skúša akcie, prostredie reaguje a kvalita správania sa prejaví až cez celú trajektóriu.
+
+Výhodou učenia posilňovaním je, že optimalizuje správanie v prostredí, nie iba podobnosť s uloženými príkladmi. Nevýhodou je, že učenie môže byť citlivé na návrh odmeny, množstvo potrebných interakcií a prieskum prostredia. Ak agent nedostáva dostatočne informatívnu spätnú väzbu, môže byť ťažké zistiť, ktoré rozhodnutia boli zodpovedné za neskorší úspech alebo zlyhanie.
+
+\paragraph{Genetické algoritmy.}
+Genetický algoritmus (angl.~\emph{genetic algorithm}) je optimalizačná metóda inšpirovaná evolúciou. Namiesto toho, aby upravoval jeden model postupným gradientným učením, pracuje s populáciou kandidátov. Každý kandidát sa vyhodnotí pomocou fitness, najlepší kandidáti sa vyberú ako rodičia a z nich vzniká nová generácia pomocou kríženia a mutácie \cite{goldberg1989ga}. Tento proces sa opakuje, až kým populácia nenájde dostatočne dobré riešenie alebo sa nevyčerpá výpočtový rozpočet.
+
+Pri riadiacich úlohách môže kandidátom byť aj celá politika správania sa agenta, napríklad vektor parametrov neurónovej siete. Genetický algoritmus potom nevyžaduje gradient cez prostredie. Stačí, že vieme kandidáta spustiť, zaznamenať jeho správanie a priradiť mu hodnotenie. To je výhodné vtedy, keď je prostredie zložité, nediferencovateľné alebo keď chceme hodnotiť celú epizódu ako jeden výsledok.
+
+\paragraph{Spoločný pohľad na optimalizáciu politiky.}
+Tieto prístupy sa líšia zdrojom spätnej väzby, ale spája ich rovnaká hlavná otázka: ako nájsť parametre politiky, ktorá sa bude v prostredí správať dobre. Učenie s učiteľom minimalizuje chybu voči známym cieľovým hodnotám. Učenie napodobňovaním sa snaží priblížiť správaniu experta. Učenie posilňovaním optimalizuje politiku cez odmenu získanú interakciou s prostredím. Genetický algoritmus vyhľadáva dobrých kandidátov podľa fitness hodnotenia.
+
+% TODO: doplniť porovnávací diagram supervised learning vs. reinforcement learning vs. genetický algoritmus.
+
+V ďalších častiach sa preto môžeme pozrieť podrobnejšie na tie metódy, ktoré budú pre túto prácu najdôležitejšie: učenie posilňovaním, genetické algoritmy, neuroevolúciu a viackriteriálnu optimalizáciu.
+
+\section{Učenie posilňovaním}
+
+V učení s učiteľom poznáme požadovaný výstup pre každý trénovací príklad. Pri riadení agenta však často nevieme povedať, aká akcia je v každom stave jednoznačne správna. Vieme skôr posúdiť dôsledky správania: či agent dosiahol cieľ, ako rýchlo postupoval, koľko riskoval alebo aký návrat získal počas epizódy. Učenie posilňovaním (angl.~\emph{reinforcement learning}) sa zaoberá práve takouto situáciou. Agent sa učí cez interakciu s prostredím a spätnú väzbu dostáva vo forme odmien \cite{sutton_barto2018rl}.
+
+\paragraph{Markovov rozhodovací proces.}
+Základným formálnym modelom učenia posilňovaním je Markovov rozhodovací proces. Intuitívne opisuje prostredie, v ktorom agent v každom kroku pozoruje stav, vyberá akciu, prostredie prejde do nového stavu a agent dostane odmenu. Formálne ho môžeme zapísať ako päticu
+\[
+    \mathcal{M} = (\mathcal{S}, \mathcal{A}, P, R, \gamma),
+\]
+kde $\mathcal{S}$ je množina stavov, $\mathcal{A}$ je množina akcií, $P(s' \mid s,a)$ je pravdepodobnosť prechodu do stavu $s'$ po vykonaní akcie $a$ v stave $s$, $R(s,a,s')$ je odmena za tento prechod a $\gamma \in [0,1]$ je diskontný faktor. Markovova vlastnosť znamená, že rozdelenie ďalšieho stavu závisí od aktuálneho stavu a akcie, nie od celej histórie predchádzajúcich stavov \cite{sutton_barto2018rl}.
+
+Tento model je idealizáciou, ale je užitočný, pretože oddelí jednotlivé časti problému: čo agent vie urobiť, ako sa prostredie mení, akú spätnú väzbu dostáva a ako veľmi má brať do úvahy budúce následky aktuálnych rozhodnutí.
+
+\paragraph{Politika a návrat.}
+Politika správania sa agenta určuje, ako agent vyberá akcie. V učení posilňovaním je cieľom nájsť politiku, ktorá maximalizuje očakávaný návrat. Návrat sme už zaviedli ako súčet budúcich odmien, často diskontovaný faktorom $\gamma$. V tomto kontexte môžeme optimalizačný cieľ opísať ako hľadanie parametrov politiky $\pi_\theta$, ktoré maximalizujú funkciu kvality
+\[
+    \max_\theta J(\pi_\theta).
+\]
+Symbol $\theta$ označuje parametre politiky a $J(\pi_\theta)$ vyjadruje očakávanú kvalitu správania pri tejto politike. Dôležité je, že spätná väzba neprichádza ako správna akcia pre jeden stav, ale ako dôsledok celej postupnosti rozhodnutí.
+
+\paragraph{Hodnotová funkcia.}
+Na opis kvality správania sa často používajú hodnotové funkcie. Hodnotová funkcia stavu pri politike $\pi$ hovorí, aký návrat môžeme očakávať, ak začneme v stave $s$ a ďalej sa budeme riadiť politikou $\pi$:
+\[
+    V^\pi(s) = \mathbb{E}_\pi[G_t \mid S_t = s].
+\]
+Podobne akčná hodnotová funkcia vyjadruje očakávaný návrat po tom, čo v stave $s$ vykonáme akciu $a$ a potom pokračujeme podľa politiky $\pi$:
+\[
+    Q^\pi(s,a) = \mathbb{E}_\pi[G_t \mid S_t = s, A_t = a].
+\]
+Tieto funkcie sú dôležité preto, lebo agentovi umožňujú porovnávať nielen okamžitú odmenu, ale aj dlhodobejší význam stavov a akcií \cite{sutton_barto2018rl}.
+
+\paragraph{Prieskum a využívanie znalostí.}
+Pri učení posilňovaním vzniká prirodzený konflikt medzi prieskumom a využívaním znalostí. Prieskum znamená, že agent skúša akcie, ktorých dôsledky ešte dobre nepozná. Využívanie znalostí znamená, že agent volí akcie, ktoré sa podľa doterajšej skúsenosti javia ako dobré. Ak agent iba využíva známe správanie, môže zostať uviaznutý v lokálne dobrom riešení. Ak naopak príliš veľa skúša, môže sa učiť pomaly a často robiť zlé rozhodnutia. Tento konflikt patrí medzi základné praktické problémy učenia posilňovaním \cite{sutton_barto2018rl}.
+
+\paragraph{Riedka odmena a tvarovanie odmeny.}
+Ďalším dôležitým problémom je riedka odmena. Ak agent dostane významnú odmenu až na konci epizódy, napríklad iba po dosiahnutí cieľa, potom môže byť veľmi ťažké zistiť, ktoré predchádzajúce akcie k úspechu prispeli. Tento problém sa často označuje ako problém priradenia zásluhy. Jedným z možných riešení je tvarovanie odmeny (angl.~\emph{reward shaping}), teda pridanie pomocných odmien, ktoré majú agentovi poskytovať hustejší signál počas učenia.
+
+Tvarovanie odmeny však treba navrhovať opatrne. Pomocná odmena môže učenie výrazne zrýchliť, ale môže tiež zmeniť to, čo agent skutočne optimalizuje. Klasická práca Ng, Harada a Russell ukazuje, že nie každý spôsob tvarovania odmeny zachová optimálnu politiku pôvodného problému \cite{ng1999shaping}. Preto je pri návrhu odmien dôležité rozlišovať medzi tým, čo má byť konečný cieľ, a tým, čo má byť iba pomocný signál počas učenia.
+
+\paragraph{Policy-gradient a actor-critic prístup.}
+Jedna skupina metód učenia posilňovaním optimalizuje politiku priamo. Takéto metódy sa nazývajú policy-gradient metódy, pretože upravujú parametre politiky v smere, ktorý má zvýšiť očakávaný návrat. Všeobecne si ich môžeme predstaviť tak, že politika $\pi_\theta$ opakovane koná v prostredí, získané trajektórie sa použijú na odhad zlepšenia a parametre $\theta$ sa aktualizujú.
+
+Actor-critic prístup kombinuje dve časti. Actor je politika, ktorá vyberá akcie. Critic odhaduje hodnotu stavov alebo akcií a tým pomáha actorovi zistiť, ktoré rozhodnutia boli výhodné. Tento pohľad je praktický najmä preto, že samotný návrat z celej epizódy môže byť hlučný a ťažko priraditeľný jednotlivým rozhodnutiam \cite{sutton_barto2018rl}.
+
+\paragraph{PPO, SAC a TD3 v kontexte práce.}
+V modernej literatúre existuje viacero algoritmov učenia posilňovaním, ktoré stavajú na týchto princípoch. PPO obmedzuje príliš veľké zmeny politiky počas aktualizácie, aby bolo učenie stabilnejšie \cite{schulman2017ppo}. SAC je off-policy actor-critic metóda, ktorá do cieľa zahŕňa aj entropiu politiky a tým podporuje prieskum \cite{haarnoja2018sac}. TD3 je actor-critic metóda pre spojité akcie, ktorá rieši niektoré problémy nadhodnocovania akčných hodnôt pomocou dvojice critic modelov a oneskorených aktualizácií politiky \cite{fujimoto2018td3}. Praktické implementácie týchto algoritmov sú dostupné napríklad v knižnici Stable-Baselines3 \cite{raffin2021sb3}.
+
+Pre túto prácu nie je potrebné odvádzať tieto algoritmy do detailov. Dôležité je, že predstavujú rôzne spôsoby, ako optimalizovať politiku na základe odmien získaných v prostredí. Neskôr ich môžeme použiť ako porovnávaciu vetvu, ale hlavná myšlienka ostáva rovnaká: agent sa neučí kopírovať správne akcie z dát, ale hľadá správanie, ktoré vedie k vyššiemu hodnoteniu.
+
+\paragraph{Prechod ku genetickým algoritmom.}
+Učenie posilňovaním teda hľadá politiku pomocou spätnej väzby z prostredia. Stále však väčšinou predpokladá určitý spôsob postupnej aktualizácie politiky alebo hodnotových odhadov. Existuje aj iný pohľad: namiesto toho, aby sme politiku menili krok po kroku podľa odhadovaného gradientu, môžeme vytvoriť populáciu kandidátnych politík, každú z nich nechať konať v prostredí a vybrať tie, ktoré sa správali najlepšie. Tento prístup prirodzene vedie ku genetickým algoritmom a neuroevolúcii.
+
+% TODO: doplniť schému MDP / učenia posilňovaním: stav, akcia, odmena, nový stav.
+
+\section{Genetické algoritmy a neuroevolúcia}
+
+V predchádzajúcej časti sme opísali učenie posilňovaním ako prístup, v ktorom sa politika zlepšuje pomocou spätnej väzby z prostredia. Genetické algoritmy ponúkajú iný pohľad na rovnaký problém optimalizácie. Namiesto postupnej úpravy jednej politiky pracujú s populáciou kandidátnych riešení. Každý kandidát sa vyhodnotí, úspešnejšie riešenia majú väčšiu šancu ovplyvniť ďalšiu generáciu a menej úspešné riešenia postupne zanikajú. Tento proces je inšpirovaný evolúciou, ale v kontexte optimalizácie ide predovšetkým o všeobecný algoritmus pre prehľadávanie priestoru riešení \cite{goldberg1989ga}.
+
+\paragraph{Populácia kandidátov.}
+V genetickom algoritme nepracujeme iba s jedným riešením, ale s celou populáciou. Populáciu v generácii $g$ môžeme zapísať ako
+\[
+    \mathcal{P}^{(g)} =
+    \{x_1^{(g)}, x_2^{(g)}, \ldots, x_M^{(g)}\},
+\]
+kde $M$ je veľkosť populácie a $x_i^{(g)}$ je $i$-ty kandidát v generácii $g$. Kandidát sa často označuje aj ako jedinec. Jeho konkrétna podoba závisí od riešeného problému. Môže ísť o reťazec bitov, vektor čísel, sadu parametrov alebo inú reprezentáciu riešenia.
+
+Dôležité je, že kandidát musí byť vyhodnotiteľný. Algoritmus nemusí rozumieť vnútornému významu každého prvku kandidáta, ale musí vedieť zistiť, či je daný kandidát lepší alebo horší než ostatní. Tým sa genetické algoritmy líšia od metód, ktoré potrebujú priamo derivovať stratovú funkciu podľa parametrov.
+
+\paragraph{Fitness funkcia.}
+Kvalitu kandidáta vyjadruje hodnotenie vhodnosti (angl.~\emph{fitness}). Pre kandidáta $x_i^{(g)}$ môžeme fitness zapísať ako
+\[
+    F(x_i^{(g)}).
+\]
+Funkcia $F$ priraďuje kandidátovi číselné hodnotenie. Vyššia hodnota zvyčajne znamená lepšie riešenie, hoci konkrétna interpretácia závisí od úlohy. V riadiacich úlohách môže fitness hodnotiť celú trajektóriu agenta, nie iba jeden izolovaný krok. To je praktické, pretože kvalita správania sa často ukáže až po dlhšej postupnosti rozhodnutí.
+
+Návrh fitness funkcie je rovnako dôležitý ako návrh odmeny v učení posilňovaním. Ak fitness nevyjadruje skutočný cieľ úlohy, algoritmus bude dôsledne vyberať kandidátov, ktorí sú dobrí podľa nesprávneho kritéria. Genetický algoritmus teda nerieši problém definície cieľa. Poskytuje spôsob, ako cieľ optimalizovať, keď ho už vieme vyhodnotiť.
+
+\paragraph{Selekcia rodičov.}
+Po vyhodnotení populácie nasleduje výber kandidátov, ktorí budú slúžiť ako rodičia ďalšej generácie. Selekcia môže mať rôzne podoby. Najjednoduchšia predstava je vybrať najlepších kandidátov podľa fitness, ale často sa používa aj pravdepodobnostný výber, aby mali šancu aj slabší jedinci. Takýto prístup môže pomôcť udržať diverzitu populácie a znížiť riziko, že algoritmus príliš skoro uviazne v jednej oblasti priestoru riešení.
+
+Selekcia určuje selekčný tlak. Silný selekčný tlak rýchlo posúva populáciu k aktuálne najlepším riešeniam, ale môže znižovať rozmanitosť. Slabší selekčný tlak ponecháva viac priestoru na prieskum, ale učenie môže byť pomalšie. Tento kompromis bude neskôr dôležitý pri nastavovaní evolučného tréningu.
+
+\paragraph{Kríženie a mutácia.}
+Nové riešenia vznikajú z vybraných rodičov pomocou operátorov kríženia a mutácie. Kríženie (angl.~\emph{crossover}) kombinuje časti dvoch alebo viacerých rodičov. Cieľom je vytvoriť potomka, ktorý môže zdediť užitočné vlastnosti z rôznych riešení. Mutácia naopak zavádza náhodnú zmenu kandidáta. V jednoduchej číselnej reprezentácii ju môžeme zapísať napríklad ako
+\[
+    x' = x + \epsilon,
+\]
+kde $x$ je pôvodný kandidát, $x'$ je zmutovaný kandidát a $\epsilon$ je náhodná zmena.
+
+Kríženie a mutácia majú rozdielnu úlohu. Kríženie využíva už nájdené čiastkové riešenia, zatiaľ čo mutácia umožňuje objavovať nové oblasti priestoru riešení. Ak je mutácia príliš malá, populácia sa môže prestať výrazne meniť. Ak je príliš veľká, potomkovia môžu strácať dobré vlastnosti rodičov. Aj tu teda vzniká kompromis medzi prieskumom a jemným dolaďovaním.
+
+\paragraph{Elitizmus.}
+Elitizmus znamená, že najlepší kandidáti z aktuálnej generácie sa prenesú do ďalšej generácie priamo alebo s mimoriadnou ochranou. Výhodou je, že algoritmus nestratí už nájdené dobré riešenia náhodnou mutáciou alebo krížením. Nevýhodou môže byť zníženie diverzity, ak elita príliš silno dominuje ďalším generáciám. Elitizmus preto zlepšuje stabilitu hľadania, ale treba ho používať s rozumnou mierou.
+
+\paragraph{Explorácia a dolaďovanie.}
+Pri genetických algoritmoch sa často hovorí o explorácii a dolaďovaní. Explorácia znamená hľadanie nových oblastí priestoru riešení. Dolaďovanie znamená menšie úpravy už sľubných riešení. Veľká populácia, vyššia mutácia alebo slabší selekčný tlak môžu podporovať exploráciu. Menšia mutácia a silnejší výber najlepších kandidátov môžu podporovať dolaďovanie.
+
+Tieto pojmy sú dôležité, pretože evolučný algoritmus sa zvyčajne nespráva rovnako počas celého tréningu. Na začiatku môže byť výhodné skúšať veľa odlišných riešení. Neskôr, keď populácia nájde sľubnú oblasť, môže byť výhodnejšie robiť jemnejšie zmeny. V teoretickej rovine ide o rovnaké napätie ako pri prieskume a využívaní znalostí v učení posilňovaním, iba vyjadrené na úrovni populácie kandidátov.
+
+\paragraph{Neuroevolúcia.}
+Neuroevolúcia je použitie evolučných algoritmov na neurónové siete. Kandidátom už nie je priamo jedna akcia ani jednoduché pravidlo, ale parametre neurónovej siete. Ak parametre siete označíme ako $\theta$, môžeme kandidáta chápať ako
+\[
+    x \equiv \theta.
+\]
+Vyhodnotenie kandidáta potom znamená spustiť politiku $\pi_\theta$, nechať ju konať v prostredí a ohodnotiť výsledné správanie. Evolučný algoritmus následne vyberá, kombinuje a mutuje celé politiky.
+
+Tento prístup je užitočný najmä vtedy, keď vieme správanie kandidáta vyhodnotiť, ale nechceme alebo nevieme odvodiť gradient cez celé prostredie. Neuroevolúcia sa dá použiť aj na zložitejšie úlohy, kde sa optimalizujú nielen váhy siete, ale aj jej štruktúra. Príkladom je NEAT, ktorý evolučne hľadá váhy aj topológiu neurónovej siete \cite{stanley2002neat}. V tejto práci je dôležitá najmä základná myšlienka: parametre politiky môžu byť priamo kandidátom evolučného hľadania.
+
+\paragraph{Výhody a obmedzenia.}
+Výhodou genetických algoritmov je, že nepotrebujú diferencovateľné prostredie ani presný model prechodov. Stačí, aby sme vedeli kandidáta vyhodnotiť. To je praktické pri úlohách, v ktorých je hodnotenie dané celou epizódou alebo obsahuje nespojité udalosti. Genetické algoritmy sú zároveň prirodzene populačné, takže môžu skúmať viacero odlišných riešení naraz.
+
+Obmedzením je počet potrebných vyhodnotení. Ak je jedno vyhodnotenie kandidáta drahé, evolučné hľadanie môže byť časovo náročné. Výsledok je tiež citlivý na reprezentáciu kandidáta, fitness funkciu, veľkosť populácie, mutáciu a selekčný tlak. Genetický algoritmus preto nie je automatická náhrada za návrh problému. Je to nástroj, ktorý môže dobre fungovať vtedy, keď je cieľ rozumne formulovaný a vyhodnotenie kandidátov je uskutočniteľné.
+
+\paragraph{Prechod k viackriteriálnej optimalizácii.}
+Doteraz sme o fitness hovorili prevažne ako o jednom číselnom hodnotení. V mnohých úlohách však dobré správanie nemožno jednoducho zhrnúť jedným kritériom. Agent môže byť rýchly, ale riskantný. Môže byť bezpečný, ale pomalý. Môže dosiahnuť vysoký krátkodobý progres, ale neskôr zlyhať. Ak má genetický algoritmus vyberať medzi takýmito kandidátmi, musíme sa rozhodnúť, ako pracovať s viacerými cieľmi naraz. Tým sa prirodzene dostávame k viackriteriálnej optimalizácii.
+
+% TODO: doplniť schému genetického algoritmu: populácia -> vyhodnotenie -> selekcia -> kríženie/mutácia -> nová generácia.
+
+\section{Viackriteriálna optimalizácia}
+
+V predchádzajúcich častiach sme často predpokladali, že kvalitu kandidáta vieme vyjadriť jedným číslom. Takéto hodnotenie je praktické, pretože kandidátov možno jednoducho zoradiť. Pri riadení agenta však často nechceme iba jednu vlastnosť správania. Môže nás zaujímať, či agent dosiahne cieľ, ako rýchlo postupuje, či je jeho správanie stabilné a či sa vyhýba nebezpečným stavom. Tieto ciele nemusia byť vždy v súlade. Viackriteriálna optimalizácia sa zaoberá práve situáciami, v ktorých riešenie posudzujeme podľa viacerých kritérií naraz \cite{coello1999survey}.
+
+\paragraph{Konflikt cieľov.}
+Ak máme kandidátne riešenie $x$, jeho kvalitu môžeme opísať vektorom cieľov
+\[
+    \mathbf{f}(x) = (f_1(x), f_2(x), \ldots, f_k(x)),
+\]
+kde $f_i$ je $i$-te kritérium a $k$ je počet kritérií. V maximalizačnom zápise chceme, aby boli jednotlivé hodnoty čo najvyššie. V praktických úlohách však zlepšenie jedného kritéria môže zhoršiť iné kritérium. Rýchlejšie správanie môže byť riskantnejšie, bezpečnejšie správanie môže byť pomalšie a riešenie s dobrým krátkodobým výsledkom nemusí byť najlepšie z dlhodobého hľadiska.
+
+Tento konflikt je dôležitý preto, že neexistuje vždy jedno riešenie, ktoré by bolo najlepšie vo všetkých kritériách. Ak také riešenie existuje, výber je jednoduchý. Ak neexistuje, musíme určiť, aký kompromis je pre danú úlohu prijateľný.
+
+\paragraph{Skalárna agregácia.}
+Jedna možnosť je previesť viac kritérií na jedno skalárne skóre. Ak jednotlivým kritériám priradíme váhy $w_i$, môžeme písať
+\[
+    S(x) = \sum_{i=1}^{k} w_i f_i(x),
+\]
+kde $S(x)$ je výsledné skóre kandidáta. Takýto prístup je jednoduchý a dobre sa používa v optimalizačných algoritmoch, ktoré očakávajú jednu hodnotu. Jeho slabinou je voľba váh. Váhy musia vyjadrovať skutočné priority a zároveň musia rešpektovať rozsahy jednotlivých metrík. Ak sú kritériá v odlišných mierkach, jedno kritérium môže výsledné skóre ovládnuť iba preto, že má väčšie číselné hodnoty.
+
+Skalárna agregácia preto nie je nesprávna, ale musí byť čitateľná a odôvodnená. Ak váhy pôsobia ako ľubovoľné konštanty bez jasnej interpretácie, výsledné správanie môže byť ťažké vysvetliť. Pri agentoch je to obzvlášť citlivé, pretože optimalizačný algoritmus sa bude snažiť využiť presne tú funkciu, ktorú sme mu zadali.
+
+\paragraph{Lexikografické poradie.}
+Ďalšou možnosťou je ponechať kritériá oddelené a porovnávať ich podľa pevného poradia priorít. Tento prístup sme už zaviedli pri hodnotení správania agenta ako lexikografické porovnávanie. Vo viackriteriálnej optimalizácii ho môžeme chápať ako špeciálny spôsob rozhodovania: prvé kritérium má najvyššiu prioritu, druhé rozhoduje až pri rovnosti prvého a tak ďalej.
+
+Výhodou je, že priority sú jasne vyjadrené poradím kritérií. Nevýhodou je tvrdosť tohto poradia. Ak prvé kritérium rozlišuje kandidátov, nižšie kritériá sa vôbec nedostanú k slovu. Lexikografické poradie je preto vhodné vtedy, keď skutočne vieme povedať, že jeden cieľ má prednosť pred všetkými ostatnými. Ak chceme skúmať širšiu množinu kompromisov, potrebujeme iný pohľad.
+
+\paragraph{Pareto dominancia.}
+Pareto dominancia ponúka spôsob, ako porovnávať riešenia bez toho, aby sme museli hneď určiť jednu sadu váh alebo jedno pevné poradie priorít. Pre maximalizačný prípad povieme, že riešenie $x$ dominuje riešenie $y$, ak je aspoň také dobré vo všetkých kritériách a lepšie aspoň v jednom kritériu. Zapíšeme to ako
+\[
+    x \prec y,
+\]
+ak platí
+\[
+    \forall i: f_i(x) \ge f_i(y)
+    \quad \text{a zároveň} \quad
+    \exists j: f_j(x) > f_j(y).
+\]
+Prvá podmienka hovorí, že $x$ nie je horšie ako $y$ v žiadnom kritériu. Druhá podmienka hovorí, že v aspoň jednom kritériu je prísne lepšie. Ak ani jedno riešenie nedominuje druhé, znamená to, že každé z nich má inú výhodu a medzi nimi treba urobiť kompromis \cite{coello1999survey}.
+
+\paragraph{Pareto fronta.}
+Riešenia, ktoré nie sú dominované žiadnym iným riešením v množine kandidátov, tvoria Pareto frontu. Pareto fronta teda neobsahuje jedno univerzálne najlepšie riešenie, ale množinu kompromisov. Každý bod na fronte je v istom zmysle efektívny: ak chceme zlepšiť jedno kritérium, musíme zhoršiť aspoň jedno iné kritérium.
+
+Pre agenta je tento pohľad prirodzený. Ak hodnotíme napríklad úspešnosť, rýchlosť a bezpečnosť, rôzne politiky môžu predstavovať rôzne štýly správania. Jedna môže byť rýchla a riskantná, druhá pomalšia a stabilnejšia. Pareto fronta umožňuje tieto alternatívy zachytiť bez toho, aby sme ich hneď skryli do jedného čísla.
+
+\paragraph{NSGA-II.}
+NSGA-II je známy evolučný algoritmus pre viackriteriálnu optimalizáciu. Používa triedenie podľa nedominovanosti, teda rozdeľuje kandidátov do frontov podľa toho, kto koho dominuje. Okrem toho používa mieru hustoty riešení, často označovanú ako crowding distance, aby v populácii udržiaval diverzitu riešení pozdĺž Pareto fronty \cite{deb2002nsga2}.
+
+V kontexte evolučných algoritmov je to dôležité, pretože nechceme, aby populácia skončila iba pri jednom type kompromisu. Ak optimalizujeme viac cieľov, môže byť užitočné udržať viac odlišných riešení, ktoré reprezentujú rôzne časti fronty. NSGA-II preto nie je iba spôsob výberu najväčšieho čísla. Je to mechanizmus, ktorý sa snaží súčasne zohľadniť kvalitu riešení aj rozmanitosť kompromisov.
+
+\paragraph{Význam pre hodnotenie agenta.}
+Viackriteriálna optimalizácia je pre autonómnych agentov dôležitá preto, že dobré správanie má zvyčajne viac rozmerov. Jedno číselné hodnotenie je jednoduché a praktické, ale môže zakryť konflikt medzi cieľmi. Lexikografické poradie dáva jasné priority, ale môže byť príliš tvrdé. Pareto prístup umožňuje skúmať kompromisy, ale konečný výber riešenia stále vyžaduje interpretáciu.
+
+Táto časť uzatvára teoretický rámec optimalizácie správania. Vieme opísať agenta, jeho politiku, hodnotenie správania, neurónovú sieť ako reprezentáciu politiky, aj viacero spôsobov hľadania vhodných parametrov. Ďalšou otázkou je, kde takéto správanie bezpečne a opakovateľne skúšať. To nás privádza k simuláciám a virtuálnym prostrediam.
+
+% TODO: doplniť jednoduchý 2D nákres Pareto fronty s dominovanými a nedominovanými riešeniami.
+
+\section{Simulácie a virtuálne prostredia}
+
+Po zavedení hodnotenia, optimalizačných metód a viackriteriálneho pohľadu ostáva praktická otázka: kde budeme správanie agenta skúšať. Pri autonómnych agentoch je prostredie súčasťou problému. Ak chceme porovnávať politiky, potrebujeme ich nechať konať, merať dôsledky ich akcií a opakovať experimenty v rovnakých alebo kontrolovane odlišných podmienkach. Simulácia a virtuálne prostredia poskytujú spôsob, ako tento proces robiť bezpečnejšie, lacnejšie a systematickejšie než priamo v cieľovom prostredí.
+
+\paragraph{Prečo používať simuláciu.}
+Simulácia je model prostredia, v ktorom môžeme spúšťať agenta a sledovať dôsledky jeho akcií. Virtuálne prostredie môže byť jednoduchý fyzikálny model, štandardizovaný benchmark alebo komplexný svet vytvorený v hernom engine. V učení posilňovaním sa simulačné prostredia často používajú preto, že poskytujú spoločné rozhranie pre agentov, opakovateľné úlohy a jednoduché získavanie spätnej väzby. OpenAI Gym bol navrhnutý práve ako sada prostredí a spoločné rozhranie na vývoj a porovnávanie algoritmov učenia posilňovaním \cite{brockman2016openai_gym}.
+
+Pre riadiace úlohy je simulácia obzvlášť užitočná. Agent môže skúšať aj zlé alebo nebezpečné akcie bez toho, aby spôsobil škodu v reálnom svete alebo v cieľovom systéme. Výskumník zároveň získa kontrolu nad podmienkami experimentu. Môže opakovať rovnakú epizódu, meniť iba jeden parameter a presnejšie skúmať, prečo sa správanie zlepšilo alebo zhoršilo.
+
+\paragraph{Bezpečnosť a opakovateľnosť.}
+Bezpečnosť je prvý zrejmý dôvod, prečo používať simuláciu. Pri učení agenta musíme počítať s tým, že na začiatku bude robiť chyby. V simulácii sú tieto chyby lacné a nepoškodzujú skutočné zariadenie ani neohrozujú používateľa. Druhým dôvodom je opakovateľnosť. Ak chceme porovnať dve politiky alebo dva algoritmy, potrebujeme ich testovať v čo najpodobnejších podmienkach.
+
+Práve opakovateľnosť robí zo simulácie výskumný nástroj. Jedna úspešná epizóda ešte nemusí dokazovať dobrú politiku. Ak však vieme prostredie opakovane spúšťať a zaznamenávať metriky, môžeme lepšie rozlíšiť stabilný výsledok od náhodného úspechu. Simulátory autonómneho riadenia, ako CARLA, vznikli aj preto, aby poskytli kontrolované scenáre pre vývoj, tréning a vyhodnocovanie systémov autonómnej jazdy \cite{dosovitskiy2017carla}.
+
+\paragraph{Cena experimentovania a škálovanie.}
+Ďalšou výhodou simulácie je cena experimentovania. Mnohé optimalizačné metódy potrebujú veľké množstvo epizód. Genetický algoritmus môže vyhodnocovať celú populáciu kandidátov v každej generácii. Učenie posilňovaním môže potrebovať veľa interakcií, kým agent získa užitočné skúsenosti. Ak je každé vyhodnotenie pomalé alebo vyžaduje manuálny zásah, experimentovanie sa rýchlo stane nepraktickým.
+
+Virtuálne prostredie sa často dá spúšťať rýchlejšie, paralelizovať alebo aspoň automatizovať. Fyzikálne simulátory, napríklad MuJoCo, ukazujú význam rýchlych simulačných prostredí pre výskum riadenia a modelovania pohybu \cite{todorov2012mujoco}. Herné enginy a nástroje ako Unity ML-Agents zase ukazujú, že moderné virtuálne svety môžu poskytovať flexibilné, vizuálne aj fyzikálne bohaté prostredia pre inteligentných agentov \cite{juliani2018unity}.
+
+\paragraph{Deterministické a stochastické simulácie.}
+Simulácia môže byť deterministická alebo stochastická. V deterministickej simulácii rovnaký stav a rovnaká akcia vedú vždy k rovnakému ďalšiemu stavu. Takýto prechod môžeme zapísať ako
+\[
+    s_{t+1} = f_{\text{sim}}(s_t, a_t),
+\]
+kde $f_{\text{sim}}$ je prechodová funkcia simulácie. Deterministické prostredie je výhodné pri ladení, pretože rovnaký experiment možno presne zopakovať.
+
+V stochastickej simulácii je prechod opísaný pravdepodobnostne, podobne ako v Markovovom rozhodovacom procese:
+\[
+    s_{t+1} \sim P_{\text{sim}}(\cdot \mid s_t, a_t).
+\]
+Stochastickosť môže reprezentovať šum, neistotu, náhodné počiatočné podmienky alebo variabilitu prostredia. Takéto prostredie môže byť ťažšie na vyhodnocovanie, ale môže lepšie odhaliť, či je správanie agenta robustné voči zmenám.
+
+\paragraph{Doménová medzera.}
+Hlavným rizikom simulácie je, že nie je totožná s cieľovým prostredím. Rozdiel medzi simulovaným prostredím a prostredím, v ktorom chceme agenta nakoniec použiť, sa často označuje ako doménová medzera. Formálne môžeme tento rozdiel vyjadriť tak, že prechodové správanie simulácie nemusí byť rovnaké ako prechodové správanie cieľového prostredia:
+\[
+    P_{\text{sim}}(s' \mid s,a)
+    \neq
+    P_{\text{target}}(s' \mid s,a).
+\]
+Symbol $P_{\text{sim}}$ opisuje prechody v simulácii a $P_{\text{target}}$ prechody v cieľovom prostredí. Ak sa tieto prechody líšia, politika naučená v simulácii môže v cieľovom prostredí konať horšie, než naznačovali simulačné výsledky.
+
+Doménová medzera nemusí znamenať iba rozdiel vo fyzike. Môže ísť aj o rozdiel v pozorovaniach, časovaní, senzoroch, šume, presnosti modelu alebo v dostupných akciách. Agent sa navyše môže naučiť využívať chyby alebo zjednodušenia simulácie. Takéto správanie môže vyzerať dobre v simulácii, ale po prenose do cieľového prostredia zlyhať.
+
+\paragraph{Prenos zo simulácie do cieľového prostredia.}
+V robotike sa často používa pojem sim-to-real, teda prenos zo simulácie do reálneho sveta. V tejto práci je presnejšie uvažovať širší pojem prenos zo simulácie do cieľového prostredia, pretože cieľom nemusí byť fyzické auto, ale komplexnejšie prostredie hry. Rovnaký princíp však ostáva: výsledok zo zjednodušeného prostredia treba interpretovať opatrne a overovať v prostredí, pre ktoré je agent skutočne určený.
+
+Dobrý simulačný výsledok teda nie je automaticky dôkazom úspechu v cieľovom prostredí. Je to dôkaz, že daná myšlienka fungovala za podmienok simulácie. Čím viac sa simulácia líši od cieľového prostredia, tým opatrnejšie treba výsledok prenášať. Na druhej strane, simulácia môže stále veľmi dobre slúžiť na výber sľubných metód, ladenie hodnotenia alebo porovnávanie alternatív pred drahším testovaním.
+
+\paragraph{Simulácia ako výskumný nástroj.}
+Pre túto prácu je dôležité chápať simuláciu najmä ako výskumný nástroj. Umožňuje rýchlo skúšať nápady, porovnávať politiky, testovať hodnotiace funkcie a analyzovať správanie agenta. Nemá však nahradiť cieľové prostredie bez overenia. Najsilnejší argument vzniká vtedy, keď simulácia pomáha lacno nájsť dobré riešenia a následné testovanie ukáže, či sa tieto riešenia prenášajú aj ďalej.
+
+Po všeobecnom vysvetlení simulácií môžeme prejsť ku konkrétnemu typu cieľového prostredia, ktorým sa zaoberá táto práca. Trackmania je virtuálna pretekárska hra, ale z pohľadu agenta predstavuje reálne sekvenčné rozhodovanie s časom, akciami, trajektóriou a jasným cieľom.
+
+% TODO: doplniť schému vzťahu medzi simulovaným prostredím, cieľovým prostredím a doménovou medzerou.
+
+\section{Trackmania ako prostredie pre agenta}
+
+V tejto časti budeme Trackmaniu chápať najmä ako cieľové virtuálne prostredie, nie ešte ako technický systém našej implementácie. Ide o pretekársku hru, ktorej základom je prejazd trate v čo najlepšom čase \cite{ubisoft_trackmania2026}. Pre túto prácu je dôležitá najmä ako prostredie so sekvenčným rozhodovaním: hráč alebo agent v každom okamihu volí riadiace vstupy a ich dôsledky sa prejavia až v ďalšom pohybe auta.
+
+\paragraph{Základ hry.}
+Na rozdiel od mnohých pretekárskych hier nie je jadrom Trackmanie priamy kontakt so súpermi, ale opakované hľadanie čo najlepšej jazdnej stopy na trati. Hráč sa snaží prejsť od štartu do cieľa čo najrýchlejšie, pričom výsledkom jazdy je najmä čas a trajektória, ktorou sa auto po trati pohybovalo. Z pohľadu teórie agentov ide o prirodzený príklad úlohy, kde úspech nezávisí od jednej izolovanej akcie, ale od celej postupnosti rozhodnutí.
+
+\paragraph{Trať, bloky a pretekársky cieľ.}
+Trackmania je známa aj editorom tratí a stavebnicovým charakterom máp. Trate sú tvorené traťovými prvkami alebo blokmi, z ktorých môžu vzniknúť rovné úseky, zákruty, skoky, svahy, prekážky a časti s rôznym povrchom \cite{trackmania_wiki2026}. Pre agenta je preto dôležité nielen to, kde sa práve nachádza, ale aj to, aký tvar a charakter má trať pred ním. Aj keď v tejto časti ešte nehovoríme o konkrétnom spôsobe vnímania trate, už tu vidíme, že prostredie obsahuje geometrické aj dynamické vlastnosti.
+
+\paragraph{Sekvenčné rozhodovanie v reálnom čase.}
+Jazda v Trackmanii nie je statický problém typu „vyber najlepšiu odpoveď“. Auto sa pohybuje priebežne a hráč musí reagovať v čase. Akcia, ktorá je vhodná v jednom okamihu, môže byť o zlomok sekundy neskôr neskorá alebo príliš silná. V terminológii z predchádzajúcich častí ide o prostredie, v ktorom má časovanie rozhodnutí veľký význam. Rovnaký typ vstupu môže mať iný účinok podľa aktuálnej rýchlosti, smeru, polohy auta a fázy prejazdu zákrutou.
+
+\paragraph{Trajektória a citlivosť na malé odchýlky.}
+Výsledná jazda je trajektória, teda postupnosť stavov a akcií v čase. V pretekárskej hre sa malé odchýlky môžu rýchlo nahromadiť. O niečo skoršie brzdenie, iný nájazd do zákruty alebo malá zmena smeru môže spôsobiť, že auto sa po niekoľkých sekundách nachádza na úplne inom mieste trate. To je dôležité pri neskoršom hodnotení agentov: nestačí, aby jednotlivé akcie vyzerali lokálne rozumne, pretože rozhodujúci je celý prejazd trate.
+
+\paragraph{Prečo je Trackmania vhodná pre agenta.}
+Z pohľadu výskumu agentov má Trackmania niekoľko užitočných vlastností. Má jasný cieľ, ktorý sa dá prirodzene merať časom a dokončením trate. Zároveň však obsahuje konfliktné požiadavky: rýchla jazda často znamená vyššie riziko chyby, zatiaľ čo bezpečná jazda môže byť pomalšia. Takéto prostredie dobre nadväzuje na pojmy odmeny, fitness a viackriteriálneho hodnotenia. Pretekárske hry sa preto objavujú aj ako benchmarkové prostredia pre skúmanie učenia agentov a rozhodovania v jazdných úlohách \cite{offline_mania2024}.
+
+\paragraph{Hranice tejto časti.}
+Táto časť má iba predstaviť Trackmaniu ako cieľové virtuálne prostredie. Zatiaľ nerieši, akým spôsobom bude agent získavať informácie o hre, ako bude reprezentovaná trať, aké konkrétne akcie bude posielať do hry ani ako bude trénovaná jeho politika správania sa. Tieto otázky patria až do návrhu riešenia. Pre teoretickú časť stačí záver, že Trackmania poskytuje prirodzenú úlohu sekvenčného rozhodovania v reálnom čase, kde úspech závisí od trajektórie, časovania a kompromisu medzi rýchlosťou a stabilitou.
+
+% TODO: doplniť ilustračný obrázok Trackmania trate alebo vlastnú schému: trať, štart, cieľ, trajektória a čas.
+
+\section{Základné pojmy riadenia vozidla a pretekárskej jazdy}
+
+Trackmania je virtuálne prostredie, ale agent v ňom stále rieši úlohu riadenia vozidla. Preto je užitočné pomenovať niekoľko základných pojmov z jazdnej dynamiky. Nejde o úplný fyzikálny model auta. Cieľom je iba pripraviť slovník pre neskoršie časti práce, kde budeme hovoriť o rýchlosti, zatáčaní, stabilite jazdy, povrchoch a trajektóriách.
+
+\paragraph{Rýchlosť a zrýchlenie.}
+Rýchlosť vyjadruje, ako rýchlo sa mení poloha vozidla v čase. Ak polohu auta označíme $\mathbf{p}(t)$, potom vektor rýchlosti môžeme intuitívne chápať ako časovú zmenu polohy. Jeho veľkosť
+\[
+    v(t) = \|\dot{\mathbf{p}}(t)\|
+\]
+opisuje skalárnu rýchlosť vozidla. Zrýchlenie je zmena rýchlosti v čase. V pretekárskej jazde má význam nielen maximálna rýchlosť, ale aj to, kedy auto zrýchľuje, kedy brzdí a akú rýchlosť si nesie do ďalšieho úseku trate.
+
+\paragraph{Brzdenie a zatáčanie.}
+Brzdenie znižuje rýchlosť, ale zároveň pripravuje auto na bezpečnejší prejazd zákrutou. Zatáčanie mení smer pohybu vozidla, no jeho účinok závisí od aktuálnej rýchlosti, priľnavosti a polohy auta. Rovnaký zásah do riadenia teda nemusí mať rovnaký dôsledok pri nízkej a vysokej rýchlosti. Literatúra k dynamike vozidiel preto rozlišuje pozdĺžne správanie, napríklad zrýchľovanie a brzdenie, a bočné správanie, napríklad zatáčanie a stabilitu v zákrute \cite{rajamani2012vehicle_dynamics}.
+
+\paragraph{Smer auta a smer pohybu.}
+Dôležitý je rozdiel medzi tým, kam je auto natočené, a tým, kam sa skutočne pohybuje. Pri ideálnej pomalej jazde môžu byť tieto smery veľmi podobné. Pri rýchlej jazde, prudkom zatáčaní alebo strate priľnavosti sa však môžu rozchádzať. Tento rozdiel je podstatný pre riadenie, pretože vodič často potrebuje opraviť nielen polohu auta na trati, ale aj jeho orientáciu a ďalší predpokladaný smer pohybu.
+
+\paragraph{Trakcia, povrch a šmyk.}
+Trakcia opisuje schopnosť kolies preniesť akciu vodiča na zmenu pohybu auta. Ak je trakcia vysoká, plyn, brzda a zatáčanie sa prejavia predvídateľnejšie. Ak je nízka, auto môže horšie zrýchľovať, dlhšie brzdiť alebo sa dostať do šmyku. Povrch trate preto nie je iba vizuálna vlastnosť prostredia. Mení dynamiku vozidla a tým aj to, aká akcia je v danom stave vhodná.
+
+\paragraph{Pretekárska stopa a trajektória.}
+V pretekárskej jazde je dôležitá stopa, teda priestorový priebeh jazdy po trati. Dobrá stopa nemusí byť najkratšia geometrická čiara. Často ide o kompromis medzi dĺžkou dráhy, rýchlosťou, polohou pred ďalšou zákrutou a rizikom chyby. Preto sa kvalita správania agenta nedá vždy odhadnúť z jednej okamžitej akcie. Ukáže sa až na celej trajektórii, kde vidíme, ako skoršie rozhodnutia ovplyvnili neskorší prejazd trate.
+
+% TODO: doplniť jednoduchú schému pretekárskej stopy: nájazd do zákruty, apex, výjazd a rozdiel medzi smerom auta a smerom pohybu.
+
+\section{Základy počítačovej grafiky pre virtuálne senzory}
+
+V neskorších častiach práce budeme potrebovať vysvetliť, ako možno virtuálny svet reprezentovať geometricky a ako z tejto geometrie získať kompaktnú informáciu pre agenta. Táto časť preto stručne zavádza pojmy z počítačovej grafiky a 3D geometrie. Nejde o opis konkrétnej implementácie, ale o všeobecný základ: prostredie môže byť reprezentované bodmi, vektormi, transformáciami a plochami, s ktorými potom vieme robiť výpočty.
+
+\paragraph{3D priestor, body a vektory.}
+V trojrozmernom priestore opisujeme polohu bodu typicky pomocou troch súradníc. Vektor opisuje smer a veľkosť posunu. Rozdiel medzi bodom a vektorom je dôležitý: bod označuje miesto v priestore, zatiaľ čo vektor môže označovať napríklad smer pohybu, smer lúča alebo posunutie medzi dvoma bodmi. Základná 3D matematika, súradnicové systémy, vektory a matice patria medzi bežné nástroje grafiky a herného vývoja \cite{dunn2011mathprimer}.
+
+\paragraph{Lokálne a globálne súradnice.}
+Objekt môže mať vlastný lokálny súradnicový systém a zároveň polohu v globálnom súradnicovom systéme sveta. Transformácia potom určuje, ako sa body z lokálneho priestoru preložia do sveta. Typicky sa skladá z posunu, rotácie a mierky. V homogénnych súradniciach možno takúto transformáciu zapísať maticou $T$, ktorá bod $\mathbf{x}_{\text{local}}$ prevedie na bod vo svete:
+\[
+    \mathbf{x}_{\text{world}} = T \mathbf{x}_{\text{local}}.
+\]
+Tento zápis je užitočný preto, že umožňuje jednotne pracovať s viacerými objektmi, ktoré majú vlastnú polohu a natočenie v spoločnom virtuálnom priestore.
+
+\paragraph{Trojuholníková sieť.}
+Zložitejšie objekty vo virtuálnom svete sa často reprezentujú ako sieť vrcholov, hrán a plôch. V počítačovej grafike sú veľmi bežné trojuholníkové siete, pretože trojuholník je jednoduchá rovinná plocha a väčšie povrchy sa dajú aproximovať skladaním mnohých trojuholníkov \cite{hughes2014computer_graphics}. Takáto sieť môže reprezentovať cestu, stenu, prekážku alebo iný povrch. Čím presnejšia je geometrická reprezentácia, tým presnejšie možno z nej počítať priestorové vzťahy.
+
+\paragraph{Lúč a raycasting.}
+Lúč môžeme chápať ako polpriamku, ktorá začína v bode $\mathbf{o}$ a pokračuje v smere jednotkového vektora $\mathbf{d}$. Formálne ho možno zapísať ako
+\[
+    \mathbf{r}(t) = \mathbf{o} + t\mathbf{d}, \qquad t \ge 0.
+\]
+Hodnota $t$ určuje vzdialenosť pozdĺž lúča od jeho začiatku. Raycasting je výpočet, pri ktorom zisťujeme, či a kde takýto lúč pretína objekty v priestore. Pri trojuholníkových sieťach je základnou operáciou prienik lúča s trojuholníkom; známy algoritmus Möller--Trumbore rieši tento prienik bez potreby vopred ukladať rovnice rovín jednotlivých trojuholníkov \cite{moller1997raytriangle}.
+
+\paragraph{Virtuálne senzory.}
+Vo fyzickom svete senzor meria vlastnosť okolia. Vo virtuálnom prostredí môžeme podobný signál vypočítať z geometrie. Ak z určitého bodu alebo z okolia objektu vyšleme viac lúčov rôznymi smermi, výsledné vzdialenosti k najbližším prienikom môžu vytvoriť kompaktný opis okolia. Výhodou takého prístupu je, že agent nemusí spracúvať celý obraz. Dostane menší a ľahšie interpretovateľný vektor čísel. Nevýhodou je, že takýto senzor závisí od dostupnosti a presnosti geometrie a nezachytáva všetky informácie, ktoré by boli prítomné v obraze.
+
+% TODO: doplniť schému raycastingu na trojuholníkovú sieť: začiatok lúča, smer, prienik s najbližším trojuholníkom a výsledná vzdialenosť.
+
+\section{Metriky a experimentálne vyhodnotenie}
+
+Teoretickú časť je vhodné uzavrieť tým, ako budeme neskôr čítať výsledky. Pri autonómnom agentovi nestačí ukázať jednu úspešnú jazdu alebo jeden dobrý beh tréningu. Potrebujeme rozumieť tomu, čo metrika meria, v akých podmienkach bola nameraná a či výsledok opisuje stabilné správanie alebo iba ojedinelý úspech. Empirické vyhodnocovanie je v umelej inteligencii samostatná téma, pretože skúmané systémy bývajú zložité a ich správanie sa môže meniť podľa dát, prostredia aj náhodných počiatočných podmienok \cite{cohen1995empirical_ai}.
+
+\paragraph{Tréningové a testovacie metriky.}
+Tréningová metrika opisuje výkon počas učenia alebo v podmienkach, v ktorých sa politika optimalizuje. Testovacia alebo validačná metrika má ukázať, či sa správanie prenáša aj mimo týchto podmienok. Tento rozdiel je dôležitý najmä pri agentoch, ktorí sa môžu prispôsobiť konkrétnej trati, konkrétnemu rozdeleniu dát alebo konkrétnej konfigurácii prostredia. Dobrý tréningový výsledok preto ešte nemusí znamenať dobrú generalizáciu.
+
+\paragraph{Úspešnosť, kvalita a stabilita.}
+Metrika môže merať rôzne vlastnosti správania. Úspešnosť hovorí, či agent úlohu dokončil. Kvalita môže opisovať napríklad čas, plynulosť alebo bezpečnosť prejazdu. Stabilita hovorí, či agent dosahuje podobné výsledky opakovane. Pri sekvenčnom rozhodovaní je stabilita obzvlášť dôležitá, pretože jedna dobrá epizóda môže vzniknúť aj náhodou. V učení posilňovaním sa opakovane upozorňuje, že výsledky môžu mať vysokú variabilitu a bez jasného reportovania experimentálnych podmienok sa ťažko porovnávajú \cite{henderson2018deep_rl_matters}.
+
+\paragraph{Priemer, rozptyl a opakované behy.}
+Ak experiment zopakujeme $N$-krát a získame hodnoty $x_1, x_2, \ldots, x_N$, jednoduchý priemer môžeme zapísať ako
+\[
+    \bar{x} = \frac{1}{N}\sum_{i=1}^{N} x_i.
+\]
+Priemer však sám nestačí. Dve metódy môžu mať podobný priemerný výsledok, ale jedna môže byť stabilná a druhá môže striedať veľmi dobré a veľmi zlé behy. Preto je užitočné sledovať aj rozptyl, smerodajnú odchýlku, medián, percentily alebo intervaly medzi kvartilmi. Tieto hodnoty pomáhajú odlíšiť robustný výsledok od výsledku, ktorý závisí od šťastia alebo konkrétneho behu.
+
+\paragraph{Generalizácia.}
+Generalizácia znamená, že naučené správanie funguje aj v situáciách, ktoré neboli presne rovnaké ako počas učenia. Pri agentovi v pretekárskom prostredí môže ísť napríklad o inú trať, iný povrch, inú počiatočnú chybu alebo odlišné časovanie. Treba rozlišovať viac úrovní generalizácie: agent môže trať aspoň dokončiť, môže ju dokončiť stabilne alebo ju môže jazdiť aj rýchlo. Tieto tvrdenia nie sú rovnaké a vo výsledkoch by sa nemali zamieňať.
+
+\paragraph{Vizualizácia správania.}
+Tabuľkové metriky sú potrebné, ale pri riadení vozidla často neukazujú celý príbeh. Trajektória na mape môže odhaliť, kde agent brzdil, kde riskoval, kde opakovane opustil ideálnu stopu alebo kde sa jeho správanie líšilo od očakávania. Preto majú grafy trajektórií, miesta nárazov, rýchlostne zafarbené trasy alebo porovnanie viacerých prejazdov dôležitú interpretačnú úlohu. Nejde iba o ilustráciu, ale o dôkaz správania, ktorý dopĺňa číselné metriky.
+
+% TODO: doplniť schému experimentálneho vyhodnotenia: tréningové krivky, tabuľka metrík a trajektória ako tri rôzne pohľady na správanie agenta.

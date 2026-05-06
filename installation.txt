@@ -170,3 +170,6 @@ python SupervisedTraining.py --data-root logs\supervised_data\20260505_132438_ma
 
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_pretrain_ai5_single_flat_48x24_20260506.ps1
+
+
+python Driver.py --population-file night-ga --map-name single_surface_flat --end_max_time=inf

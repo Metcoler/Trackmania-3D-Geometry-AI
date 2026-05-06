@@ -1,0 +1,132 @@
+\chapter[Návrh reprezentácie prostredia]{Návrh reprezentácie prostredia a rozhodovacieho cyklu agenta}
+
+V predchádzajúcich kapitolách sme zaviedli základné pojmy umelej inteligencie, agenta, prostredia, politiky správania a hodnotenia. Súvisiace práce ukázali, že autonómne riadenie v hrách možno riešiť viacerými spôsobmi: pravidlami, obrazovým vstupom, učením napodobňovaním, učením posilňovaním alebo kombináciou explicitnej reprezentácie trate a učiacej sa politiky. Táto kapitola už prechádza k nášmu konkrétnemu návrhu. Nezačína však tréningom. Skôr odpovedá na jednoduchšiu, ale nevyhnutnú otázku: ako z bežiacej hry \Trackmania{} vytvoriť prostredie, v ktorom agent vôbec dokáže pozorovať stav sveta a vykonávať akcie.
+
+Základná myšlienka práce je oddeliť reprezentáciu prostredia od samotného učenia politiky. Agent nebude ako hlavný vstup dostávať obraz z obrazovky. Namiesto toho využijeme údaje o aute, rekonštruovanú geometriu trate a vlastné výpočty nad touto geometriou. Výsledkom má byť uzavretý rozhodovací cyklus: hra poskytne stav auta, náš systém z neho vytvorí pozorovanie, politika vyberie akciu a táto akcia sa aplikuje späť do hry.
+
+% TODO: doplniť celkový diagram toku dát: Trackmania -> herný skript -> Python runtime -> virtuálny svet -> pozorovanie -> politika -> akcia -> Trackmania.
+
+\section{Nadviazanie na bakalársku prácu}
+
+Táto diplomová práca priamo nadväzuje na bakalársku prácu \emph{Trénovanie autonómneho vozidla v hre Trackmania pomocou strojového učenia} \cite{melkovic2024bachelor}. Pôvodná práca mala prototypový charakter. Jej cieľom bolo preskúmať, či sa dá \Trackmania{} použiť ako virtuálne prostredie pre autonómneho agenta, ako možno reprezentovať stav sveta a či agent dokáže pomocou strojového učenia vykonávať jazdu bez priameho ľudského riadenia.
+
+Dôležitý prínos bakalárskej práce nebol iba v samotnom natrénovanom agentovi, ale najmä v technickej myšlienke, na ktorej stojí aj táto práca. Už v pôvodnej verzii sme sa nesnažili riešiť celú úlohu iba spracovaním obrazu. Namiesto toho sa použilo napojenie na stav hry, export mapových blokov, skladanie virtuálnej trate a výpočet lokálnych vzdialeností od prekážok pomocou lúčov. Táto kombinácia vytvorila prvý most medzi komerčnou hrou a výskumným prostredím pre agenta.
+
+Bakalárska práca teda ukázala, že smer je možný. Agent môže získavať údaje z hry, pohybovať sa v rekonštruovanom geometrickom modeli a aplikovať akcie späť do \Trackmania{}. Zároveň však mala viacero obmedzení. Experimentálne vyhodnotenie nebolo dostatočne systematické, odmeňovacia funkcia a metriky neboli opísané s potrebnou presnosťou a výsledky slúžili skôr ako ukážka realizovateľnosti než ako silný experimentálny dôkaz. Aj samotná reprezentácia okolia auta bola jednoduchšia a menej presná, najmä pri práci s rozmermi vozidla, kolíziami, časovaním a opakovateľnosťou pokusov.
+
+V tejto kapitole preto nepíšeme bakalársku prácu nanovo. Berieme ju ako prototyp, ktorý priniesol správny smer, ale potreboval presnejšie rozdelenie na časti: získanie stavu z hry, reprezentácia mapy, výpočet pozorovania, akčný priestor a samotný rozhodovací cyklus. Diplomová práca sa pokúša tieto časti formulovať tak, aby sa na ne dalo neskôr nadviazať systematickým tréningom a vyhodnotením.
+
+\section{Prečo nepoužiť obraz ako hlavný vstup}
+
+Obraz z hry je prirodzený vstup pre človeka. Hráč sleduje cestu, okraje, prekážky, horizont a podľa toho riadi vozidlo. Aj v autonómnom riadení existujú úspešné prístupy, ktoré sa učia riadenie priamo z obrazových dát, napríklad end-to-end modely mapujúce obraz z kamery na riadiacu akciu \cite{bojarski2016endtoend}. V súvisiacich prácach sme však videli, že takýto prístup spája do jedného modelu dve odlišné úlohy: rozpoznanie relevantných prvkov obrazu a výber vhodnej akcie.
+
+Pre náš cieľ to nie je najvhodnejší hlavný vstup. \Trackmania{} je rýchla hra, v ktorej aj malé oneskorenie alebo nepresná interpretácia okolia môže zmeniť ďalšiu trajektóriu vozidla. Ak by agent pracoval s obrazom, musel by sa najskôr naučiť, ktoré pixely predstavujú cestu, okraj, bariéru alebo budúci smer trate. Až potom by z tejto reprezentácie vyberal akciu. To môže byť výpočtovo náročnejšie a výsledné správanie sa ťažšie interpretuje.
+
+Naopak, Trackmania má vlastnosť, ktorú pri bežnom kamerovom riadení fyzického auta nemáme tak ľahko dostupnú: trať je digitálny objekt. Je zložená z blokov, jej geometria existuje v dátach hry a stav auta možno získať z runtime prostredia. Dokumentácia \OpenPlanet{} opisuje možnosti skriptovania a práce s dátami hry cez rozšírenia \cite{openplanet_wiki2026}. To nám umožňuje položiť si otázku inak: nemusíme sa pýtať, ako z pixelov zrekonštruovať svet, keď si vieme svet rekonštruovať priamo ako geometriu.
+
+Týmto netvrdíme, že obrazové prístupy sú zlé. Gran Turismo Sophy a ďalšie moderné pretekárske systémy ukazujú, že učenie v komplexných hrách môže byť veľmi úspešné, ak má vhodnú reprezentáciu stavu, tréningovú infraštruktúru a dobre navrhnuté hodnotenie \cite{wurman2022gt_sophy}. V tejto práci však cielene skúmame inú cestu. Chceme, aby agent dostal kompaktné, interpretovateľné a priamo jazdne významné pozorovanie. Preto najskôr vytvoríme vlastný opis sveta a až nad ním budeme hľadať politiku správania.
+
+\section{Získanie stavu z Trackmanie}
+
+Na začiatku máme bežiacu hru. \Trackmania{} interne pozná polohu auta, jeho orientáciu, rýchlosť a ďalšie fyzikálne údaje, ale neposkytuje ich automaticky ako štandardné výskumné rozhranie typu prostredie--agent. Hra bola navrhnutá pre hráča, nie ako učebnicový Markovov rozhodovací proces. Ak z nej chceme vytvoriť prostredie pre agenta, musíme najskôr dostať relevantné údaje mimo hry.
+
+Používame preto herný skript, ktorý priebežne číta dostupné údaje o aute a posiela ich do nášho programu. Na tejto úrovni nepotrebujeme ešte vedieť, ako bude agent trénovaný. Potrebujeme iba spoľahlivo preniesť informácie, ktoré opisujú aktuálny stav vozidla. Patria sem najmä poloha auta v hernom svete, smer vozidla, rýchlosť, bočná zložka pohybu, herný čas, informácie o fyzikálnom kroku a stav vstupov.
+
+Samotná telemetria však nestačí. Ak poznáme iba súradnice auta, vieme, kde sa auto nachádza v priestore, ale nevieme, čo táto poloha znamená vzhľadom na trať. Rovnaká rýchlosť môže byť bezpečná na rovinke a nebezpečná pred ostrou zákrutou. Rovnaký smer auta môže byť správny uprostred cesty, ale problematický pri výjazde zo zákruty. Preto musí byť stav auta spojený s mapovým kontextom.
+
+Toto je prvý dôležitý rozdiel medzi jednoduchou telemetriou a pozorovaním pre agenta. Telemetria hovorí, čo robí auto. Pozorovanie pre agenta musí hovoriť aj to, čo tento stav znamená v prostredí. Agent teda nepotrebuje iba čísla o aute, ale aj odpoveď na otázku, kde je cesta, kam pokračuje a aký priestor má vozidlo okolo seba.
+
+\section{Rekonštrukcia virtuálneho sveta}
+
+Z predchádzajúcej časti vyplýva, že údaje o aute musíme spojiť s reprezentáciou trate. \Trackmania{} je pre tento účel vhodná, pretože trate sú skladané z blokov. Oficiálny a komunitný opis hry zdôrazňuje tvorbu tratí a blokový editor ako jednu z jej základných vlastností \cite{ubisoft_trackmania2026, trackmania_wiki2026}. Z pohľadu agenta je to výhoda: trať nemusíme chápať ako neznámu scénu z obrazu, ale ako digitálnu geometriu, ktorú možno zrekonštruovať.
+
+V bakalárskej práci sme použili túto myšlienku v jednoduchej podobe. Z mapy sa získal zoznam blokov, ich pozície a otočenia. Ku blokom sa priradili trojrozmerné modely a tie sa umiestnili do spoločného súradnicového systému \cite{melkovic2024bachelor}. Tým vznikla virtuálna kópia trate, nad ktorou sa dali robiť geometrické výpočty. Diplomová práca tento princíp zachováva, ale používa ho ako súčasť jasnejšie oddelenej reprezentácie prostredia.
+
+Geometricky môžeme mapu chápať ako scénu zloženú z objektov, transformácií a trojuholníkových sietí. Práca s bodmi, vektormi, súradnicovými systémami a transformáciami patrí k základným nástrojom počítačovej grafiky \cite{dunn2011mathprimer, hughes2014computer_graphics}. Každý blok trate má vlastnú lokálnu geometriu, ale po umiestnení do mapy získava globálnu polohu a orientáciu. Ak potom poznáme globálnu polohu auta, vieme ju vyhodnotiť voči rovnakej geometrii.
+
+Výsledkom je virtuálny svet, ktorý je pre agenta užitočnejší než samotný obraz. Môžeme sa v ňom pýtať, čo je pred autom, kde sú steny, kde je prejazdná časť trate a ako pokračuje logická cesta k cieľu. Táto reprezentácia nie je cieľom sama o sebe. Je to preklad medzi hrou určenou pre človeka a výpočtovým prostredím, v ktorom vie agent dostať zmysluplné pozorovanie.
+
+% TODO: doplniť obrázok rekonštrukcie trate z blokov: blokový zápis mapy, transformované 3D bloky a výsledná virtuálna mapa.
+
+\section{Geometrické vnímanie prostredia}
+
+Keď máme stav auta a virtuálnu mapu v spoločnom súradnicovom systéme, môžeme vytvoriť virtuálne senzory. Najdôležitejším príkladom je raycasting, teda vysielanie lúčov z určitého bodu alebo oblasti a hľadanie ich prieniku s geometriou scény. V počítačovej grafike ide o bežnú techniku na zisťovanie prienikov lúča s objektmi; klasický algoritmus Möllera a Trumbora rieši efektívny prienik lúča s trojuholníkom \cite{moller1997raytriangle}.
+
+Intuitívne môžeme jeden lúč chápať ako otázku: ak by sme sa z aktuálnej pozície auta pozerali alebo merali v danom smere, ako ďaleko je prvá prekážka? Formálne možno lúč zapísať parametricky ako
+\[
+    \mathbf{r}(t) = \mathbf{p} + t\mathbf{d}, \quad t \geq 0,
+\]
+kde \(\mathbf{p}\) je počiatočný bod lúča, \(\mathbf{d}\) je jeho smerový vektor a \(t\) určuje vzdialenosť pozdĺž lúča. Ak hľadáme prienik lúča s geometriou trate, zaujíma nás najmenšie kladné \(t\), pri ktorom lúč narazí na stenu, okraj alebo inú relevantnú časť prostredia.
+
+V pôvodnom prototype boli lúče chápané jednoducho: vychádzali zo stredu auta a merali vzdialenosť k okoliu \cite{melkovic2024bachelor}. Tento prístup je ľahko pochopiteľný, ale má zásadné zjednodušenie. Auto nie je bod. Môže nastať situácia, že stred auta je ešte na bezpečnom mieste, ale jeho okraj už zasahuje do bariéry. Pri rýchlej jazde v úzkom priestore je práve táto vzdialenosť okraja auta od steny dôležitejšia než vzdialenosť stredu.
+
+Preto aktuálny návrh smeruje k interpretácii vzdialeností ako voľného priestoru vzhľadom na rozmery auta. Namiesto otázky \uv{ako ďaleko je stena od stredu auta} chceme odpovedať na otázku \uv{koľko priestoru má auto v danom smere, kým sa jeho pôdorys dotkne prekážky}. Takto získané hodnoty sú pre politiku správania bližšie k tomu, čo pri riadení skutočne potrebujeme. Ak je vzdialenosť nulová, znamená to kontakt alebo bezprostredný dotyk s prekážkou.
+
+Tento rozdiel je dôležitý aj metodicky. Pri obrazovom vstupe musí model sám zistiť, kde je okraj cesty a aká vzdialenosť je ešte bezpečná. Pri geometrickom vnímaní túto informáciu vypočítame explicitne. Neurónová sieť potom nemusí riešiť celú percepciu od pixelov, ale učí sa rozhodovať z už spracovaného pozorovania.
+
+% TODO: doplniť schému raycastingu: auto, lúče, stena, prienik lúča s geometriou a meraná vzdialenosť.
+% TODO: doplniť porovnanie center-lidar a hitbox-aware clearance lidar na rovnakom príklade pri stene.
+
+\section{Vektor pozorovania}
+
+Pozorovanie je vstup, ktorý dostane politika správania sa agenta. V tejto práci ho nechápeme ako náhodný zoznam čísel, ale ako usporiadaný opis aktuálnej situácie. Každá skupina príznakov má mať význam pre rozhodovanie vozidla. Cieľom je, aby pozorovanie bolo dostatočne bohaté na riadenie, ale zároveň kompaktnejšie a interpretovateľnejšie než obraz z obrazovky.
+
+Prvú skupinu tvoria geometrické informácie pred autom a okolo auta. Patria sem vzdialenosti získané virtuálnymi lúčmi alebo clearance hodnotami. Tieto príznaky hovoria politike, či má vozidlo priestor pokračovať, či sa blíži k stene a na ktorej strane je bezpečnejší priestor. Ide o lokálnu informáciu, podobnú zjednodušenému virtuálnemu lidarovému senzoru.
+
+Druhú skupinu tvoria informácie o orientácii voči trati. Samotné vzdialenosti k stenám nehovoria všetko. Auto môže byť uprostred širokej cesty, ale otočené zlým smerom. Preto je dôležité sledovať aj smer pokračovania trate, rozdiel medzi smerom auta a smerom logickej dráhy, prípadne zakrivenie najbližších úsekov. Takáto informácia dáva agentovi krátky horizont dopredu a zmierňuje problém čisto lokálneho vnímania, ktorý bol pomenovaný už v bakalárskej práci \cite{melkovic2024bachelor}.
+
+Tretiu skupinu tvoria pohybové veličiny. Rýchlosť, bočná rýchlosť, zrýchlenie alebo zmena smeru sú dôležité preto, že rovnaká geometrická situácia môže vyžadovať inú akciu pri inej rýchlosti. Zákruta, ktorá je bezpečná pri pomalej jazde, môže pri vysokej rýchlosti viesť k šmyku alebo nárazu. Pozorovanie preto nemá opisovať iba mapu, ale aj dynamický stav vozidla.
+
+Štvrtú skupinu tvorí časovanie. \Trackmania{} beží v reálnom čase a agent nemusí dostávať nové údaje v ideálne pravidelných intervaloch. Preto je užitočné, aby pozorovanie obsahovalo aj informáciu o tom, aký fyzikálny krok práve prebehol. Táto hodnota nie je predpoveď budúcnosti. Je to opis posledného pozorovaného kroku, ktorý pomáha politike interpretovať zmenu stavu.
+
+Napokon existujú rozšírenia, ktoré sa stanú dôležitými pri zložitejších tratiach. Výškové informácie pomáhajú pri svahoch a kopcoch, pretože rovnaký pôdorys trate nemusí znamenať rovnaké správanie auta. Informácie o povrchu sú dôležité tam, kde sa mení trakcia. V tejto kapitole ich uvádzame iba ako súčasť návrhu reprezentácie. Podrobné experimenty s výškovými rozdielmi a rôznymi povrchmi patria až do neskorších kapitol.
+
+% TODO: doplniť diagram štruktúry vektora pozorovania: geometria, orientácia, pohyb, časovanie, výška a povrch.
+
+\section{Akčný priestor}
+
+Ak politika dostane pozorovanie, musí vybrať akciu. V \Trackmania{} je základ akčného priestoru blízky ľudskému ovládaniu auta: plyn, brzda a zatáčanie. Agent teda nevyberá abstraktný plán typu \uv{prejdi nasledujúcu zákrutu}. Vyberá konkrétny vstup, ktorý sa aplikuje do hry.
+
+Pri návrhu akčného priestoru existuje viac možností. Klávesnicové ovládanie je prirodzene diskrétne: plyn je stlačený alebo nie, brzda je stlačená alebo nie a zatáčanie je doľava, doprava alebo žiadne. Takáto reprezentácia je jednoduchá, ale obmedzuje jemné korekcie. Analógové ovládanie umožňuje plynulejšie zatáčanie a presnejšie reakcie, najmä pri vyššej rýchlosti alebo pri potrebe udržať auto blízko optimálnej stopy.
+
+V bakalárskom prototype sa uvažovalo práve o výhode analógového ovládania, pretože pretekárske auto často nepotrebuje iba plné zatočenie, ale jemnú zmenu smeru \cite{melkovic2024bachelor}. V aktuálnom návrhu zachovávame túto myšlienku v praktickej forme. Plyn a brzda môžu byť reprezentované ako samostatné vstupy, zatiaľ čo zatáčanie ostáva spojitá hodnota. Takýto akčný priestor je stále pomerne jednoduchý, ale dáva agentovi možnosť jemnejšie ovládať smer vozidla.
+
+Z pohľadu rozhodovacieho modelu môžeme akciu zapísať ako vektor
+\[
+    a_t = (g_t, b_t, u_t),
+\]
+kde \(g_t\) reprezentuje plyn, \(b_t\) brzdu a \(u_t\) zatáčanie v čase \(t\). Presná interpretácia hodnôt závisí od konkrétneho režimu ovládania, ale význam je stabilný: politika vyberá priamu akciu, ktorú možno previesť na vstup do hry.
+
+Toto rozhodnutie má dôsledok pre celú prácu. Akcia je nízkoúrovňová, preto musí pozorovanie obsahovať dosť informácií na okamžité rozhodovanie. Agent nedostane hotovú optimálnu stopu ani príkaz vyššej úrovne. Dostane iba stavovo-geometrický opis situácie a musí z neho vybrať vstupy podobné tým, ktoré by použil hráč.
+
+% TODO: doplniť porovnanie diskrétneho klávesnicového ovládania a spojitého zatáčania na analógovom ovládači.
+
+\section{Rozhodovací cyklus agenta}
+
+Predchádzajúce časti teraz môžeme spojiť do jedného cyklu. Hra beží a auto sa nachádza v určitom stave. Herný skript odošle údaje o aute. Náš program ich spojí s virtuálnou mapou a vypočíta pozorovanie. Politika správania vypočíta akciu a tá sa pošle späť do hry. Po aplikovaní akcie vznikne nový stav a celý proces sa opakuje.
+
+Tento cyklus môžeme zapísať aj formálne. Nech \(s_t^{TM}\) označuje stav auta a hry v čase \(t\), \(\mathcal{G}\) geometrickú reprezentáciu trate a \(o_t\) pozorovanie, ktoré dostane agent. Potom možno tvorbu pozorovania chápať ako funkciu
+\[
+    o_t = h(s_t^{TM}, \mathcal{G}),
+\]
+kde \(h\) zahŕňa spracovanie telemetrie, výpočet geometrických príznakov a normalizáciu vstupu pre politiku. Politika správania následne vyberie akciu
+\[
+    a_t = \pi(o_t).
+\]
+Po aplikovaní akcie v hre sa prostredie presunie do ďalšieho stavu
+\[
+    s_{t+1}^{TM} = T(s_t^{TM}, a_t),
+\]
+kde \(T\) nepoznáme ako uzavretú matematickú funkciu. Je to samotná dynamika hry, jej fyzika, časovanie a reakcia vozidla na vstupy.
+
+Táto formulácia ukazuje, prečo je kapitola o reprezentácii prostredia dôležitá. Neoptimalizujeme priamo nad pixelmi ani nad interným stavom hry, ktorý nemáme celý k dispozícii. Optimalizujeme politiku nad pozorovaním, ktoré sami navrhujeme. Ak je toto pozorovanie chudobné alebo zavádzajúce, ani dobrý tréningový algoritmus nemusí nájsť dobré správanie. Ak je však pozorovanie dostatočne informatívne, môžeme sa v ďalšej kapitole sústrediť na otázku, ako nájsť vhodné parametre politiky.
+
+% TODO: doplniť rozhodovací loop diagram: stav hry -> pozorovanie -> politika -> akcia -> nový stav hry.
+
+\section{Hranice kapitoly a prechod k tréningu}
+
+Táto kapitola zámerne nekončí výberom najlepšieho tréningového algoritmu. Neopisujeme tu genetický algoritmus, odmeňovacie funkcie, ranking tuple, hyperparametre ani výsledky experimentov. Tie patria do kapitoly o hľadaní politiky a tréningu agenta. Rovnako tu neotvárame lokálne experimentálne sandboxy a zjednodušené prostredia. Tie majú význam pri rýchlom testovaní nápadov, ale nie sú jadrom tejto kapitoly.
+
+V tejto kapitole sme chceli postaviť základnú infraštruktúru pojmov a rozhraní. Máme spôsob, ako získať stav auta z hry. Máme rekonštruovanú geometriu trate. Máme virtuálne senzory a skupiny príznakov, z ktorých vzniká pozorovanie. Máme akčný priestor, ktorý možno previesť na vstupy do hry. A máme uzavretú slučku, v ktorej agent opakovane pozoruje, rozhoduje sa a koná.
+
+Tým sa dostávame k jadru práce. Ak už vieme spustiť rozhodovaciu funkciu v prostredí, ostáva nájsť takú politiku správania, ktorá bude jazdiť dobre. V teoretickej časti sme ukázali, že politika môže byť reprezentovaná neurónovou sieťou. V nasledujúcej kapitole preto budeme riešiť, ako takúto politiku hľadať: najskôr cez napodobňovanie človeka, potom cez hodnotenie správania v prostredí a nakoniec cez systematický tréning agentov.

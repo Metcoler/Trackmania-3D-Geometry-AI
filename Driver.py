@@ -1,5 +1,6 @@
 import argparse
 import glob
+import json
 import os
 import re
 import time
@@ -19,20 +20,61 @@ MAP_SPECIALIST_NAMES = (
     "single_surface_height",
 )
 PRACTICAL_INFINITY_TOUCHES = 1_000_000
+TM_REAL_POPULATION_PATTERNS = [
+    "logs/tm_finetune_runs/**/checkpoints/population_gen_*.npz",
+    "logs/tm_finetune_runs/**/final_population.npz",
+]
+DEFAULT_POPULATION_PATTERNS = [
+    *TM_REAL_POPULATION_PATTERNS,
+    "Cars Evolution Training Project/logs/mini_pretrain_runs/**/checkpoints/population_gen_*.npz",
+    "Cars Evolution Training Project/logs/mini_pretrain_runs/**/final_population.npz",
+    "logs/mini_pretrain_runs/**/checkpoints/population_gen_*.npz",
+    "logs/mini_pretrain_runs/**/final_population.npz",
+    "logs/ga_runs/**/checkpoints/population_gen_*.npz",
+    "logs/ga_runs/**/final_population.npz",
+    "logs/ga_last_population_*.npz",  # legacy
+]
+
+
+def normalize_map_name_arg(map_name: Optional[str]) -> Optional[str]:
+    if map_name is None:
+        return None
+    text = str(map_name).strip()
+    if not text:
+        return text
+    return text.replace("%", "_")
+
+
+def _population_checkpoint_sort_key(filename: str) -> Tuple[float, int, int]:
+    """Prefer newest run artifact; break equal mtimes by final flag and generation number."""
+    path = str(filename)
+    basename = os.path.basename(path)
+    match = re.search(r"population_gen_(\d+)\.npz$", basename)
+    generation = int(match.group(1)) if match else -1
+    final_flag = 1 if basename == "final_population.npz" else 0
+    return (os.path.getmtime(path), final_flag, generation)
+
+
+def _population_run_dir(filename: str) -> Path:
+    path = Path(filename)
+    if path.parent.name == "checkpoints":
+        return path.parent.parent
+    return path.parent
+
+
+def load_population_run_config(filename: str) -> Dict[str, Any]:
+    config_path = _population_run_dir(filename) / "config.json"
+    if not config_path.exists():
+        return {}
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, dict) else {}
 
 
 def find_latest_population(patterns: Optional[List[str]] = None) -> str:
     """Find newest population .npz checkpoint (mini pretrain or TM GA run)."""
     if patterns is None:
-        patterns = [
-            "Cars Evolution Training Project/logs/mini_pretrain_runs/**/checkpoints/population_gen_*.npz",
-            "Cars Evolution Training Project/logs/mini_pretrain_runs/**/final_population.npz",
-            "logs/mini_pretrain_runs/**/checkpoints/population_gen_*.npz",
-            "logs/mini_pretrain_runs/**/final_population.npz",
-            "logs/ga_runs/**/checkpoints/population_gen_*.npz",
-            "logs/ga_runs/**/final_population.npz",
-            "logs/ga_last_population_*.npz",  # legacy
-        ]
+        patterns = DEFAULT_POPULATION_PATTERNS
 
     files: List[str] = []
     for pattern in patterns:
@@ -40,10 +82,11 @@ def find_latest_population(patterns: Optional[List[str]] = None) -> str:
 
     if not files:
         raise FileNotFoundError(
-            "No population .npz found. Check logs/mini_pretrain_runs or logs/ga_runs."
+            "No population .npz found. Check logs/tm_finetune_runs, "
+            "logs/mini_pretrain_runs, or logs/ga_runs."
         )
 
-    return max(files, key=os.path.getmtime)
+    return max(files, key=_population_checkpoint_sort_key)
 
 
 def find_latest_supervised_model(
@@ -200,6 +243,15 @@ def _read_optional_str_tuple(data, key: str) -> Optional[Tuple[str, ...]]:
     return tuple(str(value) for value in arr)
 
 
+def _read_optional_scalar_str(data, key: str) -> Optional[str]:
+    if key not in data.files:
+        return None
+    arr = np.asarray(data[key]).reshape(-1)
+    if arr.size == 0:
+        return None
+    return str(arr[0])
+
+
 def load_population(
     filename: str,
 ) -> Tuple[np.ndarray, Dict[str, Optional[np.ndarray]], Dict[str, Any]]:
@@ -234,6 +286,7 @@ def load_population(
             "act_dim": _read_optional_scalar_int(data, "act_dim"),
             "vertical_mode": _read_optional_scalar_int(data, "vertical_mode"),
             "multi_surface_mode": _read_optional_scalar_int(data, "multi_surface_mode"),
+            "action_mode": _read_optional_scalar_str(data, "action_mode"),
         }
         hidden_dims = _read_optional_int_tuple(data, "hidden_dims")
         if hidden_dims is not None:
@@ -332,18 +385,18 @@ def replay_population(
     population_file: Optional[str] = None,
     episodes_per_individual: int = 1,
     max_steps: Optional[int] = None,
-    env_max_time: float = 60.0,
-    max_touches: int = 1,
+    env_max_time: Optional[float] = None,
+    max_touches: Optional[int] = None,
     never_quit: bool = True,
-    action_mode: str = "delta",
-    vertical_mode: bool = True,
-    multi_surface_mode: bool = True,
+    action_mode: Optional[str] = None,
+    vertical_mode: Optional[bool] = None,
+    multi_surface_mode: Optional[bool] = None,
     pause_between: bool = True,
     sort_by_fitness: bool = True,
     rank_start: int = 1,
     rank_end: Optional[int] = None,
     exact_indices: Optional[List[int]] = None,
-    target_steer_deadzone: float = 0.0,
+    target_steer_deadzone: Optional[float] = None,
     invert_steer: bool = False,
 ) -> None:
     """
@@ -356,7 +409,16 @@ def replay_population(
     if population_file is None:
         population_file = find_latest_population()
 
+    map_name = normalize_map_name_arg(map_name) or map_name
+    run_config = load_population_run_config(population_file)
+    if str(map_name).strip().lower() in {"auto", "all"}:
+        map_name = normalize_map_name_arg(run_config.get("map_name"))
+    if not map_name:
+        raise ValueError("Map name could not be inferred. Pass --map-name explicitly.")
+
     print(f"Loading population from: {population_file}")
+    if run_config:
+        print(f"Loaded run config from: {_population_run_dir(population_file) / 'config.json'}")
     genomes, metrics, meta = load_population(population_file)
     fitnesses = metrics.get("fitnesses")
     pop_size, genome_size = genomes.shape
@@ -368,15 +430,61 @@ def replay_population(
         print(f"Checkpoint vertical_mode: {bool(meta['vertical_mode'])}")
     if meta.get("multi_surface_mode") is not None:
         print(f"Checkpoint multi_surface_mode: {bool(meta['multi_surface_mode'])}")
+    if meta.get("action_mode") is not None:
+        print(f"Checkpoint action_mode: {meta['action_mode']}")
+
+    resolved_action_mode = action_mode or str(
+        meta.get("action_mode")
+        or run_config.get("policy_action_mode")
+        or run_config.get("action_mode")
+        or "target"
+    )
+    config_vertical_mode = run_config.get("vertical_mode")
+    config_multi_surface_mode = run_config.get("multi_surface_mode")
+    resolved_vertical_mode = (
+        bool(vertical_mode)
+        if vertical_mode is not None
+        else (
+            bool(meta["vertical_mode"])
+            if meta.get("vertical_mode") is not None
+            else (bool(config_vertical_mode) if config_vertical_mode is not None else True)
+        )
+    )
+    resolved_multi_surface_mode = (
+        bool(multi_surface_mode)
+        if multi_surface_mode is not None
+        else (
+            bool(meta["multi_surface_mode"])
+            if meta.get("multi_surface_mode") is not None
+            else (bool(config_multi_surface_mode) if config_multi_surface_mode is not None else True)
+        )
+    )
+    resolved_env_max_time = float(
+        env_max_time if env_max_time is not None else run_config.get("env_max_time", 60.0)
+    )
+    resolved_max_touches = int(
+        max_touches if max_touches is not None else run_config.get("max_touches", 1)
+    )
+    resolved_target_steer_deadzone = float(
+        target_steer_deadzone
+        if target_steer_deadzone is not None
+        else run_config.get("target_steer_deadzone", 0.0)
+    )
+    print(
+        f"Replay map: {map_name} | action_mode={resolved_action_mode}, "
+        f"vertical_mode={resolved_vertical_mode}, multi_surface_mode={resolved_multi_surface_mode}, "
+        f"env_max_time={resolved_env_max_time:g}, max_touches={resolved_max_touches}, "
+        f"target_steer_deadzone={resolved_target_steer_deadzone:g}"
+    )
 
     env = RacingGameEnviroment(
         map_name=map_name,
         never_quit=never_quit,
-        action_mode=action_mode,
-        vertical_mode=vertical_mode,
-        multi_surface_mode=multi_surface_mode,
-        max_time=env_max_time,
-        max_touches=max_touches,
+        action_mode=resolved_action_mode,
+        vertical_mode=resolved_vertical_mode,
+        multi_surface_mode=resolved_multi_surface_mode,
+        max_time=resolved_env_max_time,
+        max_touches=resolved_max_touches,
     )
     obs, info = env.reset()
     obs_dim = obs.shape[0]
@@ -398,13 +506,13 @@ def replay_population(
                 f"WARNING: checkpoint obs_dim={file_obs_dim} does not match env obs_dim={obs_dim}"
             )
         file_vertical_mode = meta.get("vertical_mode")
-        if file_vertical_mode is not None and bool(file_vertical_mode) != bool(vertical_mode):
+        if file_vertical_mode is not None and bool(file_vertical_mode) != bool(resolved_vertical_mode):
             print(
                 "WARNING: checkpoint vertical_mode does not match replay vertical_mode. "
                 "Set Driver.VERTICAL_MODE accordingly."
             )
         file_multi_surface_mode = meta.get("multi_surface_mode")
-        if file_multi_surface_mode is not None and bool(file_multi_surface_mode) != bool(multi_surface_mode):
+        if file_multi_surface_mode is not None and bool(file_multi_surface_mode) != bool(resolved_multi_surface_mode):
             print(
                 "WARNING: checkpoint multi_surface_mode does not match replay multi_surface_mode. "
                 "Set Driver.MULTI_SURFACE_MODE accordingly."
@@ -491,14 +599,14 @@ def replay_population(
                 hidden_dim=hidden_dim,
                 act_dim=act_dim,
                 genome=genome,
-                action_scale=np.ones(act_dim, dtype=np.float32) if str(action_mode).strip().lower() == "target" else None,
-                action_mode=action_mode,
+                action_scale=np.ones(act_dim, dtype=np.float32) if str(resolved_action_mode).strip().lower() == "target" else None,
+                action_mode=resolved_action_mode,
                 hidden_activation=hidden_activation,
             )
 
             for ep in range(episodes_per_individual):
                 obs, info = env.reset()
-                if str(action_mode).strip().lower() == "target":
+                if str(resolved_action_mode).strip().lower() == "target":
                     obs, info = _wait_for_positive_game_time(env)
                 total_reward = 0.0
 
@@ -507,8 +615,8 @@ def replay_population(
                     if max_steps is not None and step_count >= max_steps:
                         break
                     action = individual.act(obs)
-                    if str(action_mode).strip().lower() == "target":
-                        action = _apply_target_steer_deadzone(action, target_steer_deadzone)
+                    if str(resolved_action_mode).strip().lower() == "target":
+                        action = _apply_target_steer_deadzone(action, resolved_target_steer_deadzone)
                     action = _maybe_invert_steer(action, invert_steer)
                     obs, reward, done, truncated, info = env.step(action)
                     total_reward += float(reward)
@@ -542,18 +650,19 @@ def drive_model(
     map_name: Optional[str],
     model_file: str,
     max_steps: Optional[int] = None,
-    env_max_time: float = 60.0,
-    max_touches: int = 1,
+    env_max_time: Optional[float] = None,
+    max_touches: Optional[int] = None,
     never_quit: bool = True,
     action_mode: Optional[str] = None,
     vertical_mode: Optional[bool] = None,
     multi_surface_mode: Optional[bool] = None,
-    target_steer_deadzone: float = 0.0,
+    target_steer_deadzone: Optional[float] = None,
     invert_steer: Optional[bool] = None,
     wait_for_positive_time: bool = False,
     debug_actions: int = 0,
 ) -> None:
     policy, extra = NeuralPolicy.load(model_file, map_location="cpu")
+    map_name = normalize_map_name_arg(map_name)
     if map_name is None or str(map_name).strip().lower() == "auto":
         map_name = infer_map_name_from_model(model_file, extra)
     if not map_name:
@@ -572,12 +681,18 @@ def drive_model(
             multi_surface_mode = int(policy.obs_dim) >= 39
     if invert_steer is None:
         invert_steer = False
+    resolved_env_max_time = 60.0 if env_max_time is None else float(env_max_time)
+    resolved_max_touches = 1 if max_touches is None else int(max_touches)
+    resolved_target_steer_deadzone = (
+        0.05 if target_steer_deadzone is None else float(target_steer_deadzone)
+    )
 
     print(f"Loaded model from: {model_file}")
     print(f"Replay map: {map_name}")
     print(
         f"Replay config: action_mode={action_mode}, vertical_mode={vertical_mode}, "
-        f"multi_surface_mode={multi_surface_mode}, max_touches={max_touches}, "
+        f"multi_surface_mode={multi_surface_mode}, max_touches={resolved_max_touches}, "
+        f"env_max_time={resolved_env_max_time:g}, target_steer_deadzone={resolved_target_steer_deadzone:g}, "
         f"invert_steer={bool(invert_steer)}, wait_for_positive_time={bool(wait_for_positive_time)}"
     )
     print(f"Model config: {policy.get_config()}")
@@ -600,8 +715,8 @@ def drive_model(
         action_mode=action_mode,
         vertical_mode=vertical_mode,
         multi_surface_mode=multi_surface_mode,
-        max_time=env_max_time,
-        max_touches=max_touches,
+        max_time=resolved_env_max_time,
+        max_touches=resolved_max_touches,
     )
     obs, info = env.reset()
     if str(action_mode).strip().lower() == "target" and bool(wait_for_positive_time):
@@ -619,7 +734,7 @@ def drive_model(
             raw_action = policy.act(obs)
             action = raw_action
             if str(action_mode).strip().lower() == "target":
-                action = _apply_target_steer_deadzone(action, target_steer_deadzone)
+                action = _apply_target_steer_deadzone(action, resolved_target_steer_deadzone)
             action = _maybe_invert_steer(action, bool(invert_steer))
             if int(debug_actions) > 0 and step_count < int(debug_actions):
                 print(
@@ -670,10 +785,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="logs/supervised_runs_map_specialists_20260505",
         help="Root with map-specific supervised specialists.",
     )
-    parser.add_argument("--population-file", default=None, help="Replay a saved population instead of a .pt model.")
+    parser.add_argument(
+        "--population-file",
+        default=None,
+        help=(
+            "Replay a saved population instead of a .pt model. Use 'latest' for the newest known "
+            "population checkpoint, or 'latest-tm'/'night-ga' for the newest live Trackmania GA checkpoint."
+        ),
+    )
     parser.add_argument("--max-steps", type=int, default=None)
-    parser.add_argument("--env-max-time", type=float, default=60.0)
-    parser.add_argument("--max-touches", type=parse_max_touches, default=1)
+    parser.add_argument(
+        "--env-max-time",
+        type=float,
+        default=None,
+        help="Episode time limit. For population replay, omitted value is read from run config when available.",
+    )
+    parser.add_argument(
+        "--max-touches",
+        type=parse_max_touches,
+        default=None,
+        help="Maximum wall touches before termination. Omitted value is read from run config when available.",
+    )
     parser.add_argument("--never-quit", type=parse_bool, default=True)
     parser.add_argument("--action-mode", choices=("auto", "target", "delta"), default="auto")
     parser.add_argument("--vertical-mode", default="auto", help="auto|true|false")
@@ -686,7 +818,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "with an old mirrored observation convention."
         ),
     )
-    parser.add_argument("--target-steer-deadzone", type=float, default=0.05)
+    parser.add_argument(
+        "--target-steer-deadzone",
+        type=float,
+        default=None,
+        help="Deadzone for target steering. For population replay, omitted value is read from run config when available.",
+    )
     parser.add_argument(
         "--wait-for-positive-time",
         type=parse_bool,
@@ -723,21 +860,29 @@ def main() -> None:
     multi_surface_mode = parse_auto_bool_arg(args.multi_surface_mode)
     invert_steer = parse_auto_bool_arg(args.invert_steer)
     action_mode = None if args.action_mode == "auto" else args.action_mode
+    map_arg = normalize_map_name_arg(args.map_name)
 
     if args.population_file:
-        if args.map_name in {"auto", "all"}:
-            raise ValueError("--map-name must be explicit when replaying a population.")
+        population_file = args.population_file
+        population_selector = str(population_file).strip().lower()
+        if population_selector in {"latest", "auto"}:
+            population_file = None
+        elif population_selector in {"latest-tm", "latest-real", "latest-tm-ga", "night-ga", "nightly-ga"}:
+            population_file = find_latest_population(TM_REAL_POPULATION_PATTERNS)
+
+        if map_arg == "all":
+            raise ValueError("--map-name cannot be 'all' when replaying one saved population.")
         replay_population(
-            map_name=args.map_name,
-            population_file=args.population_file,
+            map_name=map_arg,
+            population_file=population_file,
             episodes_per_individual=args.episodes_per_individual,
             max_steps=args.max_steps,
             env_max_time=args.env_max_time,
             max_touches=args.max_touches,
             never_quit=args.never_quit,
-            action_mode=action_mode or "target",
-            vertical_mode=True if vertical_mode is None else vertical_mode,
-            multi_surface_mode=True if multi_surface_mode is None else multi_surface_mode,
+            action_mode=action_mode,
+            vertical_mode=vertical_mode,
+            multi_surface_mode=multi_surface_mode,
             pause_between=args.pause_between_individuals,
             sort_by_fitness=args.sort_by_fitness,
             rank_start=args.rank_start,
@@ -749,10 +894,10 @@ def main() -> None:
         return
 
     map_names: List[Optional[str]]
-    if str(args.map_name).strip().lower() == "all":
+    if str(map_arg).strip().lower() == "all":
         map_names = list(MAP_SPECIALIST_NAMES)
     else:
-        map_names = [None if str(args.map_name).strip().lower() == "auto" else str(args.map_name)]
+        map_names = [None if str(map_arg).strip().lower() == "auto" else str(map_arg)]
 
     for index, map_name in enumerate(map_names):
         model_file = args.model_file

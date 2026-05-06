@@ -1,0 +1,29 @@
+% Formálne nastavenia vychádzajú z lokálneho FMFI LaTeX vzoru.
+\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=3.5cm,right=2cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[slovak]{babel}
+
+\linespread{1.25}
+\raggedbottom
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{placeins}
+\usepackage{pdfpages}
+\usepackage{url}
+\usepackage[hidelinks,breaklinks]{hyperref}
+
+\usepackage{listings}
+\renewcommand{\lstlistingname}{Algoritmus}
+\lstset{
+  frame=lines,
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible
+}
+
+\graphicspath{{images/}}

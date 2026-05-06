@@ -29,10 +29,29 @@ Experiments/physics_research/gbx_py_probe/__pycache__/
 
 # Local-only folders
 Bakalárska práca/
+
+# Thesis workspace: keep only curated thesis assets in git.
 Diplomová práca/*
+!Diplomová práca/Latex/
+!Diplomová práca/Latex/**
+!Diplomová práca/Sources/
+!Diplomová práca/Sources/**
 !Diplomová práca/Experiments/
 !Diplomová práca/Experiments/**
 Cars Evolution Training Project/
+
+# LaTeX build artifacts
+Diplomová práca/Latex/*.aux
+Diplomová práca/Latex/*.bbl
+Diplomová práca/Latex/*.blg
+Diplomová práca/Latex/*.lof
+Diplomová práca/Latex/*.log
+Diplomová práca/Latex/*.lot
+Diplomová práca/Latex/*.out
+Diplomová práca/Latex/*.pdf
+Diplomová práca/Latex/*.toc
+Diplomová práca/Latex/images/**/_preview/
+Diplomová práca/Latex/images/**/_preview/**
 
 # Local SAC model checkpoints
 logs/sb3_runs/**/*.zip

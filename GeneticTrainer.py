@@ -2306,21 +2306,21 @@ if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
     # map dependend constants
-    map_name = "single_surface_flat"
-    env_max_time = 30
+    map_name = "single_surface_height"
+    env_max_time = 45
     
     # neural network architecture
     hidden_dim = [48, 24]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
-    vertical_mode = False
+    vertical_mode = True
     multi_surface_mode = False
 
     # Best-supported real-TM 2D asphalt lexicographic GA profile.
-    pop_size = 48
+    pop_size = 32
     elite_count = 2
-    parent_count = 14
-    generations_to_run = 300
+    parent_count = 10
+    generations_to_run = 200
     checkpoint_every = 10
 
     # Selection metric for the overnight GA experiment.

@@ -1,0 +1,95 @@
+
+
+===== PAGE 1 =====
+Trénovanie autonómneho 
+vozidla v hre Trackmania
+Timotej Melkovi č
+
+===== PAGE 2 =====
+Trackmania
+
+
+===== PAGE 3 =====
+Ciele práce
+•Vytvoriť čo nejlepšieho šoféra (agenta )
+•Agent –Umelá inteligencia (senzory + akcie )
+
+
+===== PAGE 4 =====
+Akcie
+•Plyn (0, 1)
+•Brzda (0, 1)
+•Zatáčanie (-1, 1)
+
+
+===== PAGE 5 =====
+Umelá inteligencia
+
+===== PAGE 6 =====
+Hlboká neurónová sieť
+
+
+===== PAGE 7 =====
+Strojové učenie
+•Učenie pod dohľadom
+•Vstupné dáta s požadovanou výstupnou akciou
+•Učenie bez dohľadu
+•Učenie posilňovaním
+•Agent sa učí ako maximalizovať odmenu
+
+
+===== PAGE 8 =====
+Senzory
+
+
+===== PAGE 9 =====
+Implementácia
+•Učenie pod dohľadom
+•Screenshoty z hry
+
+===== PAGE 10 =====
+Neznalosť trate
+
+
+===== PAGE 11 =====
+Riešenie
+
+
+===== PAGE 12 =====
+Pomalá odozva screenshotov
+•Veľa informácií
+•Šum
+•Lidar
+
+
+===== PAGE 13 =====
+Riešenie
+
+
+===== PAGE 14 =====
+3D Grafika
+
+
+===== PAGE 15 =====
+
+
+===== PAGE 16 =====
+Raycasting
+
+
+===== PAGE 17 =====
+Senzory znovu
+•N vzdialeností z raycastingu
+•X, Z pozícia auta
+•Dx, Dz otočenie auta
+•Rýchlosť auta
+•M nasledujúcich blokov trate
+
+
+===== PAGE 18 =====
+
+
+===== PAGE 19 =====
+Reinforcment learning
+•StableBaselines
+•Agent sasnaží maximalizovať reward fuction

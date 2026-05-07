@@ -1,423 +1,178 @@
 \chapter[Hľadanie politiky správania]{Hľadanie politiky správania a tréning agenta}
 
-Predchádzajúca kapitola uzavrela prvú polovicu problému: z hry vieme získať stav, vieme ho doplniť o geometrické pozorovanie, výstup agenta vieme preložiť na hernú akciu a po vykonaní akcie dostaneme nový stav. Tým vznikol rozhodovací cyklus, ale ešte nie vodič. Agent má oči a ruky, no nemá pravidlo, podľa ktorého by ich používal.
-
-V tejto kapitole hľadáme \emph{politiku správania} (angl.~\emph{policy}), teda funkciu, ktorá z pozorovania vyberá akciu. V deterministickom prípade ju môžeme zapísať ako
-\[
-    a_t = \pi_\theta(o_t),
-\]
-kde $o_t$ je pozorovanie v čase $t$, $a_t$ je zvolená akcia a $\theta$ označuje parametre politiky. V našej práci je táto politika reprezentovaná neurónovou sieťou. Ako bolo uvedené v teoretickej časti, neurónové siete sú parametrické funkcie vhodné na aproximáciu zložitých nelineárnych vzťahov \cite{goodfellow2016deep,cybenko1989approximation}. Zároveň však platí, že výber siete ešte nerieši tréning. Iba mení otázku z \uv{aké pravidlá napísať ručne} na \uv{aké parametre siete nájsť}.
-
-Kapitola je preto vedená ako postupné vyšetrovanie. Najprv overíme, či sieť vôbec dokáže napodobniť ľudské akcie. Potom ukážeme, prečo samotné napodobňovanie nestačí. Následne budeme skladať hodnotenie správania agenta, vyberieme praktický genetický tréningový rámec, porovnáme ho s krátkou vetvou učenia posilňovaním a nakoniec zhrnieme tréningové vylepšenia.
-
 \section{Problém: hľadáme politiku správania}
 
-Ak by bolo riadenie auta jednoduché, stačilo by napísať niekoľko pravidiel: na rovinke zrýchliť, pred zákrutou spomaliť a v zákrute zatočiť. Problém je v tom, že rovnaká lokálna situácia nemusí znamenať rovnakú akciu. Záleží na rýchlosti, orientácii auta, polohe voči trati, predchádzajúcej chybe, tvare ďalšej zákruty aj na tom, či cieľom je bezpečný prejazd alebo čo najlepší čas. Politika preto nie je iba tabuľka reakcií. Je to kompaktný rozhodovací model, ktorý má z pozorovania odvodiť akciu v uzavretej slučke.
-
-Neurónovú sieť volíme ako praktickú reprezentáciu politiky. V kontexte tejto kapitoly to znamená, že celú sieť môžeme chápať ako vektor parametrov
+Predchádzajúca kapitola pripravila rozhranie medzi hrou a agentom. Máme stav auta, virtuálnu geometriu trate, vektor pozorovania, akčný priestor a spôsob, ako akciu poslať späť do hry. Chýba už len samotné rozhodovacie pravidlo:
 \[
-    \theta = (w_1, w_2, \ldots, w_n),
+    \text{pozorovanie} \rightarrow \text{politika} \rightarrow \text{akcia} \rightarrow \text{nové pozorovanie}.
 \]
-kde jednotlivé zložky predstavujú váhy a biasy siete. Tréning potom znamená hľadanie takého vektora $\theta$, pri ktorom výsledná politika $\pi_\theta$ jazdí dobre. To prirodzene prepája túto kapitolu s genetickými algoritmami a neuroevolúciou: ak je politika vektor parametrov, môžeme jedinca v populácii chápať ako kandidátnu neurónovú sieť \cite{goldberg1989ga,stanley2002neat}.
+Agent teda vie vnímať aj konať, ale ešte nevieme, aká politika správania ho má riadiť.
 
-Už v tomto bode je však jasné, že problém bude mať viac vrstiev. Potrebujeme vybrať architektúru siete, spôsob inicializácie, hodnotenie správania a tréningový algoritmus. Každé z týchto rozhodnutí môže zmeniť výsledné správanie agenta, takže nejde o jeden izolovaný výber, ale o reťaz navzájom prepojených rozhodnutí.
+Politiku správania budeme chápať ako funkciu
+\[
+    \pi_{\theta}(o_t) = a_t,
+\]
+kde \(o_t\) je pozorovanie, \(a_t\) akcia a \(\theta\) parametre politiky. V tejto kapitole nás už nezaujíma všeobecná definícia politiky, ale jej nájdenie: aké parametre majú viesť k jazde, ktorá prejde trať rýchlo a stabilne?
+
+Ako reprezentáciu politiky použijeme viacvrstvovú neurónovú sieť. Tento výber nadväzuje na teoretickú časť: neurónová sieť je parametrická funkcia vhodná na aproximáciu nelineárnych vzťahov \cite{goodfellow2016deep} a dopredné siete s vhodnou nelinearitou majú silnú aproximačnú schopnosť \cite{cybenko1989approximation}. Pre nás je podstatné najmä to, že celá politika je potom určená konečným vektorom parametrov \(\theta\).
+
+Tým sa problém nestráca, iba sa spresní. Namiesto ručne písaných pravidiel hľadáme bod v priestore parametrov siete. Každý bod predstavuje inú rozhodovaciu funkciu a v uzavretej slučke aj inú trajektóriu auta.
+
+Postup kapitoly bude experimentálny. Najprv overíme, či sieť dokáže z navrhnutého pozorovania predikovať ľudskú akciu a aká architektúra na to stačí. Potom ukážeme limity samotného napodobňovania, navrhneme hodnotenie správania v prostredí a na ňom budeme stavať genetický tréning politiky. Vetvy učenia posilňovaním, Pareto optimalizácie a tréningových vylepšení zaradíme len tam, kde odpovedajú na konkrétny problém v tomto reťazci.
+
+Prvé experimenty robíme v zjednodušenej rovinnej verzii \Trackmania{} bez výšky a povrchových zmien. Tak oddelíme samotné hľadanie politiky od ďalších komplikácií prostredia. Úvodná praktická otázka preto znie: akú architektúru neurónovej siete má zmysel ďalej optimalizovať?
 
 \section{Výber architektúry neurónovej siete}
 
-Architektúra siete nie je v tejto práci iba implementačný detail. Väčšia sieť môže mať vyššiu reprezentačnú kapacitu, ale zároveň zväčšuje počet parametrov, teda aj dimenziu priestoru, ktorý neskôr prehľadáva genetický algoritmus. Príliš malá sieť môže byť rýchla a lacná, no nemusí zachytiť vzťah medzi pozorovaním a akciou. Príliš veľká sieť môže byť teoreticky silnejšia, ale jej tréning môže byť v našom experimentálnom rozpočte ťažší.
+Ak má politika tvar \(\pi_{\theta}(o_t)=a_t\), potom architektúra siete určuje, koľko parametrov bude mať vektor \(\theta\). Teória nám hovorí, že dopredné siete s nelineárnymi aktiváciami sú silné aproximátory funkcií \cite{cybenko1989approximation,goodfellow2016deep}. V tejto časti však neriešime všeobecnú aproximačnú vetu. Potrebujeme prakticky zistiť, či na naše pozorovania stačí malá sieť, alebo už supervised dáta ukazujú potrebu väčšej kapacity.
 
-Preto sme architektúru hľadali ako kompromis medzi kapacitou, rýchlosťou inferencie a trénovateľnosťou. Ako lacný experimentálny základ sa ukázala architektúra \texttt{32x16}; ako silnejší kandidát pre kvalitnejší tréning architektúra \texttt{48x24}. V oboch prípadoch ide o malé viacvrstvové perceptróny, ktoré sú dostatočne jednoduché na evolučné prehľadávanie, ale stále majú nelineárnu kapacitu.
+Na tento účel sme použili záznamy jazdy hráča v zjednodušenej rovinnej verzii \Trackmania{} na asfaltovej mape. Každý vzor tvorí dvojica
+\[
+    (o_i, a_i^{\mathrm{human}}),
+\]
+kde \(o_i\) je pozorovanie agenta a \(a_i^{\mathrm{human}}\) akcia vykonaná hráčom. Tréning preto odpovedá na úzku otázku: vie daná sieť predikovať ľudskú akciu na zaznamenaných dátach? Ešte neodpovedá na otázku, či táto sieť dokáže samostatne dokončiť trať.
 
-Dôležité boli aj aktivačné funkcie. V skrytých vrstvách sme porovnávali najmä kombinácie ReLU a hyperbolického tangensu, teda \texttt{relu,relu} a \texttt{relu,tanh}. ReLU je jednoduchá a bežne používaná v hlbokom učení \cite{goodfellow2016deep}; funkcia \texttt{tanh} je zaujímavá tým, že prirodzene obmedzuje výstup do intervalu $[-1,1]$, čo je intuitívne blízke riadeniu typu zatáčania. V našich uzavretých experimentoch v zjednodušenej 2D verzii Trackmanie kombinácia \texttt{relu,tanh} prekonala \texttt{relu,relu}. Architektúra \texttt{48x24} mala silnejší výkon, zatiaľ čo \texttt{32x16} ostala vhodná ako rýchly baseline.
-
-\begin{figure}
+\begin{table}[htbp]
     \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/architecture_ablation_bars.png}
-    \caption[Porovnanie architektúr siete]{Porovnanie architektúr a aktivačných funkcií v uzavretom tréningu. Graf používame ako dôkaz, že výber siete ovplyvňuje nielen supervised loss, ale aj správanie v prostredí. Vlastné spracovanie experimentu \texttt{ga\_architecture\_activation\_ablation\_20260504}.}
-    \label{fig:policy_architecture_ablation}
-\end{figure}
-
-Z experimentov vyplýva praktické rozdelenie rolí. Na rýchle testovanie používame menšiu sieť \texttt{32x16 relu,tanh}, pretože má menej parametrov a umožňuje lacnejšie porovnávanie rewardov, rankingov a hyperparametrov. Keď už chceme silnejší kandidátny model, používame \texttt{48x24 relu,tanh}. Väčšie siete v tejto fáze neberieme ako default, ale skôr ako možnú kapacitnú rezervu pre zložitejšie pozorovanie, napríklad pri výškových rozdieloch alebo povrchoch.
-
-\FloatBarrier
-
-\section{Učenie s učiteľom ako test kapacity siete}
-
-Prvá prirodzená otázka bola jednoduchá: ak človek jazdí trať a my ukladáme pozorovanie spolu s jeho akciou, dokáže sa neurónová sieť naučiť toto mapovanie? Takýto dataset môžeme zapísať ako
-\[
-    \mathcal{D} = \{(o_i, a_i^{\mathrm{human}})\}_{i=1}^{N},
-\]
-kde $o_i$ je pozorovanie a $a_i^{\mathrm{human}}$ je akcia človeka v rovnakej chvíli. Model potom trénujeme učením s učiteľom (angl.~\emph{supervised learning}) minimalizáciou stratovej funkcie, napríklad priemernej chyby medzi predikovanou a ľudskou akciou \cite{goodfellow2016deep}.
-
-Tento krok však treba interpretovať opatrne. Učenie s učiteľom v tejto kapitole nie je dôkaz, že agent vie optimálne jazdiť. Je to test kapacity siete a kvality reprezentácie pozorovania. Ak loss neklesá, sieť alebo vstupné dáta pravdepodobne nedokážu zachytiť ani ľudské rozhodnutia. Ak loss klesá, získavame aspoň prvý dôkaz, že pozorovanie obsahuje použiteľný signál a zvolená architektúra ho vie spracovať.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/supervised_loss_overview.png}
-    \caption[Supervised loss mapových špecialistov]{Priebeh supervised tréningu mapových špecialistov. Klesajúca chyba je dôkazom kapacity siete voči demonštračným dátam, nie dôkazom finálnej autonómnej politiky. Vlastné spracovanie experimentu \texttt{supervised\_map\_specialists\_20260505}.}
-    \label{fig:policy_supervised_loss}
-\end{figure}
-
-Supervised experimenty ukázali, že sieť typu \texttt{48x24 relu,tanh} sa vie naučiť predikovať ľudské akcie na pripravených dátach. To podporuje myšlienku, že zvolený observation vektor nie je prázdny šum a že malý MLP môže byť dostatočný nosič politiky. Zároveň však tento výsledok ešte nerozhoduje, či bude politika stabilná v uzavretej slučke.
-
-\FloatBarrier
-
-\section{Behaviorálne klonovanie a motýlí efekt}
-
-Behaviorálne klonovanie (angl.~\emph{behavior cloning}) je najjednoduchšia forma učenia napodobňovaním: sieť sa učí kopírovať správanie experta zo zaznamenaných dvojíc pozorovania a akcie. Tento prístup má dlhú históriu v riadení vozidiel, napríklad systém ALVINN sa učil riadiť vozidlo z demonštrácií vodiča \cite{pomerleau1989alvinn} a neskoršie end-to-end prístupy používali obrazové vstupy na predikciu riadenia \cite{bojarski2016endtoend}.
-
-Rozdiel medzi úspechom na datasete a úspechom počas jazdy je však zásadný. Na datasete model vidí pozorovania, do ktorých sa dostal človek. Počas autonómnej jazdy sa do ďalších pozorovaní dostáva sám svojimi akciami. Ak spraví malú chybu, auto sa posunie trochu inak, ďalšia zákruta príde pod iným uhlom a model dostane vstup, ktorý sa v ľudských dátach nemusel často vyskytovať. Tento problém akumulácie chýb a distribučného posunu je jedným z hlavných dôvodov, prečo čisté behaviorálne klonovanie nemusí stačiť \cite{ross2011dagger}.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/supervised_teacher_agent_paths.png}
-    \caption[Trajektórie učiteľa a supervised agenta]{Porovnanie trajektórií učiteľa a supervised agenta na jednej mape. Agent vie sledovať tvar trate, ale malé odchýlky sa v uzavretej slučke hromadia a vedú ku kontaktom so stenou. Vlastné spracovanie experimentu \texttt{supervised\_map\_specialists\_20260505}.}
-    \label{fig:policy_supervised_paths}
-\end{figure}
-
-Tento jav v texte označujeme ako motýlí efekt v uzavretej slučke. Nejde o formálnu novú metódu, ale o výstižnú intuíciu: malá odchýlka v riadení na začiatku jazdy môže o niekoľko sekúnd znamenať úplne inú trajektóriu. Preto supervised loss nemôže byť jediným meradlom kvality agenta. Model môže veľmi dobre predikovať ľudské akcie v známych stavoch, no stále zlyhať, keď vlastnými akciami vytvorí nové stavy.
-
-\FloatBarrier
-
-\section{Učenie napodobňovaním ako korekcia klonovania}
-
-Pri učení napodobňovaním (angl.~\emph{imitation learning}) môžeme tento problém zmierňovať tým, že agent počas zberu dát alebo tréningu nevystupuje iba ako pasívny študent. Časť akcií môže vykonať sám, človek môže správanie korigovať a do datasetu sa tak dostanú aj stavy vzniknuté z agentových vlastných chýb. Práve tento smer motivuje algoritmus DAgger, ktorý agreguje dáta zo stavov navštívených učiacou sa politikou \cite{ross2011dagger}.
-
-V našom kontexte je podstatná myšlienka miešania ľudskej a agentovej akcie. Na začiatku tréningu môže mať vyššiu váhu človek, pretože agent ešte nevie jazdiť. Postupne sa môže váha presúvať na agenta, aby sa učil zvládať vlastné stavy. Takýto postup neznamená, že agent optimalizuje najlepší čas. Stále sa učí najmä napodobňovať alebo opravovať správanie podľa ľudského signálu.
-
-\begin{center}
-\fbox{\parbox{0.86\textwidth}{\textbf{Plánovaný obrázok:} graf váhy miešania ľudskej a agentovej akcie počas učenia napodobňovaním. Obrázok má ukázať, ako sa v čase mení podiel zásahu človeka a podiel akcie navrhnutej agentom.}}
-\end{center}
-
-Pre túto prácu je výsledok imitation vetvy hlavne diagnostický. Potvrdzuje, že neurónová sieť dokáže prevziať časť rozhodovania z demonštrácií, ale zároveň ukazuje hranicu: ak je cieľom rýchla a stabilná jazda, nestačí iba znižovať chybu voči človeku. Samotné napodobňovanie tak ostáva skôr dôkazom realizovateľnosti než finálnym tréningovým cieľom.
-
-\section{Limity napodobňovania}
-
-Doterajšie kroky odpovedali na prvé otázky vyšetrovania. Pozorovanie obsahuje použiteľný signál. Malá neurónová sieť ho vie spracovať. Supervised agent dokáže jazdiť rozumne na častiach trate. Ale stále sme sa nenaučili hľadať najlepšiu jazdnú politiku.
-
-Hlavný problém je v tom, že behaviorálne klonovanie optimalizuje podobnosť s človekom, nie priamo cieľ pretekov. Ak človek jazdí pomaly, agent nemá dôvod jazdiť rýchlejšie. Ak dataset neobsahuje opravy z určitých chýb, agent ich nemusí vedieť zvládnuť. Ak sa model dostane mimo distribúciu dát, closed-loop správanie sa môže rozpadnúť. Hodnota lossu preto sama osebe nestačí na posúdenie kvality jazdy.
-
-Napodobňovanie nám teda ukázalo, že sieť vie konať rozumne. Neodpovedalo však na otázku, ako ju prinútiť jazdiť lepšie než dáta, z ktorých sa učila. Ak má agent jazdiť podľa cieľov pretekov, musíme posudzovať jeho správanie priamo počas jazdy.
-
-\section{Od napodobňovania k hodnoteniu správania}
-
-V Trackmanii je intuitívny cieľ jasný: dostať sa do cieľa a urobiť to čo najrýchlejšie. Keby všetci agenti dokončovali trať, stačilo by ich porovnať podľa času. V evolučnom tréningu však väčšina náhodne inicializovaných jedincov na začiatku nedokončí takmer nič. Ak by sme hodnotili iba finish a čas, populácia by dostala veľmi riedky signál.
-
-Najjednoduchší zápis cieľa je
-\[
-    (\mathrm{finished}, -\mathrm{time}).
-\]
-Prvá zložka hovorí, či agent dokončil trať, druhá preferuje kratší čas. Tento cieľ je z hľadiska hry správny, no pre počiatočné učenie je príliš hrubý. Ak dvaja agenti nedokončia trať, tuple ich nerozlíši podľa toho, či jeden prešiel tri metre a druhý polovicu mapy.
-
-Preto do hodnotenia pridávame \emph{progress}, teda plynulý geometrický postup po trati. Takto agent dostáva jemnejší signál aj pred prvým dokončením celej trate. Zároveň sa vyhýbame problému ľubovoľných váh. Namiesto jedného skalárneho rewardu typu
-\[
-    S = w_1 m_1 + w_2 m_2 + \cdots + w_k m_k
-\]
-pracujeme s lexikografickým poradím metrík. Vážená suma je použiteľná, ale vyžaduje obhájenie váh $w_i$ a môže skrývať priority medzi cieľmi. Lexikografické poradie je čitateľnejšie: najprv rozhoduje prvá metrika, pri zhode druhá, potom tretia a tak ďalej. Pri návrhu odmeny a jej tvarovania je všeobecne známe, že zle navrhnutý signál môže viesť k neželanému správaniu \cite{ng1999shaping}. Tu preto chceme, aby boli priority metrík čo najviditeľnejšie.
-
-\section{Postupné skladanie lexikografickej ranking funkcie}
-
-Ranking funkciu sme neskladali naraz. Každý ďalší člen tuple reagoval na problém, ktorý sa ukázal pri predchádzajúcej verzii.
-
-\subsection{Finish a progress}
-
-Prvý použiteľnejší krok bol
-\[
-    (\mathrm{finished}, \mathrm{progress}).
-\]
-Tento zápis už rozlišuje neúspešných agentov podľa toho, ako ďaleko sa dostali. V zjednodušenej 2D verzii Trackmanie na testovanej mape viedol k prvému finishu až v generácii 216 a najlepší čas bol 22{,}39 sekundy. Dôležitejšie než samotný čas však bolo, že progress umožnil populácii postupne sa posúvať ďalej po trati.
-
-Problémom bolo, že takto definovaný ranking netlačí agenta dostatočne na rýchlosť. Agent môže dostať dobré hodnotenie za to, že trať prejde alebo sa dostane ďaleko, no nemusí optimalizovať čas.
-
-\subsection{Pridanie času}
-
-Ďalšia verzia preto pridala čas:
-\[
-    (\mathrm{finished}, \mathrm{progress}, -\mathrm{time}).
-\]
-Tento krok lepšie zodpovedá hre, pretože Trackmania je časová výzva. V reward sweep-e našiel tento variant najlepší čas 17{,}84 sekundy, ale prvý finish prišiel až v generácii 247 a neskorá stabilita nebola taká silná ako pri crash-aware variantoch. Objavil sa aj očakávaný konflikt: ak agent maximalizuje progress a následne čas, môže sa mu oplatiť dostať sa rýchlo ďaleko aj za cenu riskantného konca.
-
-\subsection{Pridanie crash metriky}
-
-Preto sme do ranking tuple pridali počet nárazov. Porovnali sme dve prirodzené poradia:
-\[
-    (\mathrm{finished}, \mathrm{progress}, -\mathrm{time}, -\mathrm{crashes})
-\]
-a
-\[
-    (\mathrm{finished}, \mathrm{progress}, -\mathrm{crashes}, -\mathrm{time}).
-\]
-Rozdiel je malý v zápise, ale veľký v správaní. Prvé poradie pri rovnakom finishi a progresse preferuje rýchlosť a až potom bezpečnosť. Druhé poradie najprv preferuje menej nárazov a až potom čas. Tým sa ukázal skutočný konflikt cieľov: rýchla jazda môže byť riskantnejšia, bezpečná jazda môže byť pomalšia.
-
-\begin{table}
-    \centering
-    \caption[Porovnanie ranking tuple]{Zhrnutie lexikografického reward sweep-u. Používame skratky $F=\mathrm{finished}$, $P=\mathrm{progress}$, $T=\mathrm{time}$ a $C=\mathrm{crashes}$. Stĺpec stabilita znamená priemerný počet dokončujúcich jedincov na generáciu počas posledných 50 generácií.}
-    \label{tab:policy_reward_sweep}
     \small
-    \begin{tabular}{lrrrr}
+    \renewcommand{\arraystretch}{1.14}
+    \caption[Nastavenie sweep-u architektúr]{Nastavenie experimentu učenia s učiteľom použitého na porovnanie architektúr. Rovnaké dáta, stratová funkcia a tréningový rozpočet umožňujú porovnať siete podľa validačnej chyby a počtu parametrov.}
+    \label{tab:supervised_architecture_setup}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{0.34\textwidth}
+                    >{\raggedright\arraybackslash}p{0.56\textwidth}}
         \toprule
-        Ranking & Prvý finish & Spolu finish & Stabilita & Čas [s] \\
+        Položka & Hodnota \\
         \midrule
-        $(F,P)$ & 216 & 501 & 6{,}62 & 22{,}39 \\
-        $(F,P,-T)$ & 247 & 389 & 7{,}64 & 17{,}84 \\
-        $(F,P,-T,-C)$ & 137 & 2209 & 15{,}46 & 17{,}33 \\
-        $(F,P,-C,-T)$ & 136 & 2246 & 14{,}70 & 17{,}97 \\
+        Tréningové vzorky & \(43\,898\) po filtrovaní a zrkadlení \\
+        Validačné vzorky & \(10\,858\), bez zrkadlenia \\
+        Vstup a výstup & \(34\) príznakov pozorovania, \(3\) akčné hodnoty \\
+        Optimalizátor & Adam \\
+        Stratová funkcia & \texttt{SmoothL1Loss}, váhy akcií \([1,1,3]\) \\
+        Tréningový rozpočet & \(120\) epoch, batch size \(4096\) \\
+        Učenie & learning rate \(0{,}001\), weight decay \(10^{-5}\) \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-\begin{figure}
+Do porovnania sme zaradili jednovrstvové aj dvojvrstvové siete, malé architektúry vhodné pre lacné experimenty a väčšie siete ako kapacitnú referenciu. Skúšali sme kombinácie aktivácií ReLU, \(\tanh\) a sigmoid. Sigmoid v skrytých vrstvách tu slúži najmä ako kontrolná vetva; pri tomto datasete dával výrazne horšie validačné straty než ReLU alebo kombinácie ReLU a \(\tanh\).
+
+\begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/reward_progress_curves.png}
-    \caption[Progress pri reward sweep-e]{Vývoj najlepšieho progressu pri porovnaní lexikografických ranking funkcií. Progress poskytuje hustejší signál než samotný finish. Vlastné spracovanie experimentu \texttt{lex\_reward\_aabb\_lidar\_fixed100\_20260503}.}
-    \label{fig:policy_reward_progress}
+    \includegraphics[width=\textwidth]{training_policy/supervised_architecture_training_curves_all.pdf}
+    \caption[Priebeh učenia všetkých architektúr]{Priebeh validačnej straty počas učenia všetkých porovnávaných architektúr. Ľavý panel ukazuje celý tréning, pravý panel približuje posledné epochy. Graf slúži na posúdenie stability učenia, nie na hodnotenie samostatnej jazdy agenta.}
+    \label{fig:supervised_architecture_training_curves_all}
 \end{figure}
 
-\begin{figure}
+Obrázok~\ref{fig:supervised_architecture_training_curves_all} ukazuje, že väčšina sietí sa neučila náhodne alebo nestabilne. Strata prudko klesla v prvých epochách a potom sa zlepšovanie spomaľovalo. Priblíženie konca tréningu zároveň ukazuje, že silnejšie modely sa ešte mierne zlepšovali aj ku koncu fixného rozpočtu. Výsledok preto čítame ako porovnanie pri rovnakom tréningovom rozpočte, nie ako dôkaz, že každá sieť už dosiahla svoje teoretické optimum.
+
+\begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/reward_best_finish_time.png}
-    \caption[Najlepší čas pri reward sweep-e]{Najlepší dosiahnutý čas pri jednotlivých ranking funkciách. Crash-aware variant s poradím \texttt{finished, progress, -time, -crashes} dosiahol najlepší praktický kompromis medzi časom a stabilitou. Vlastné spracovanie experimentu \texttt{lex\_reward\_aabb\_lidar\_fixed100\_20260503}.}
-    \label{fig:policy_reward_best_time}
+    \includegraphics[width=0.92\textwidth]{training_policy/supervised_architecture_training_curves_practical.pdf}
+    \caption[Priebeh učenia praktických kandidátov]{Detail praktických kandidátov po úvodnom poklese straty. Pri menších sieťach má ReLU,ReLU mierne nižšiu validačnú stratu než ReLU,\(\tanh\), no kapacitná referencia \(128\times64\) dosahuje najlepší výsledok práve s kombináciou ReLU,\(\tanh\).}
+    \label{fig:supervised_architecture_training_curves_practical}
 \end{figure}
 
-Ako praktický základ sme zvolili \texttt{(finished, progress, -time, -crashes)}. Nevyberáme ho iba preto, že mal najlepší jednotlivý čas. Dôležitejšie je, že kombinoval skorší prvý finish, vysoký počet finisherov, dobrú neskorú finish stabilitu a najlepší čas v tomto porovnaní.
+Detail na obrázku~\ref{fig:supervised_architecture_training_curves_practical} ukazuje, že samotné dáta nerozhodujú jednoducho v prospech jednej aktivačnej kombinácie. Pri \(32\times16\) a \(48\times24\) vyšla o niečo lepšie kombinácia ReLU,ReLU. Pri väčšej referenčnej sieti \(128\times64\) však lepší výsledok dosiahla kombinácia ReLU,\(\tanh\). Preto by bolo prehnané tvrdiť, že supervised sweep sám dokazuje optimálnosť ReLU,\(\tanh\). Berieme ju ako pracovnú voľbu: kombinuje dve odlišné nelinearity a pri väčšej referencii nebola horšia, pričom skutočné rozhodnutie musí neskôr potvrdiť správanie v uzavretej slučke.
 
-\begin{figure}
+\begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.74\textwidth]{images/training_policy/reward_finish_stability_vs_time.png}
-    \caption[Stabilita a čas reward sweep-u]{Vzťah medzi stabilitou dokončovania a najlepším časom pri ranking variantoch. Graf ukazuje, prečo nestačí vybrať iba najnižší čas bez pohľadu na stabilitu populácie. Vlastné spracovanie experimentu \texttt{lex\_reward\_aabb\_lidar\_fixed100\_20260503}.}
-    \label{fig:policy_reward_stability_time}
+    \includegraphics[width=\textwidth]{training_policy/supervised_architecture_val_loss_vs_params.pdf}
+    \caption[Sweep architektúr pri učení s učiteľom]{Porovnanie architektúr podľa najlepšej validačnej straty a počtu parametrov. Nižšia strata znamená lepšiu predikciu ľudskej akcie na validačných dátach, nie lepšiu samostatnú jazdu. Zvýraznené sú praktické kandidátske siete \(32\times16\) a \(48\times24\) s aktiváciami ReLU,\(\tanh\), väčšia sieť \(128\times64\) slúži ako kapacitná referencia.}
+    \label{fig:supervised_architecture_val_loss_vs_params}
 \end{figure}
 
-Globálne grafy ukazujú, ktorý ranking vyšiel najlepšie v celom sweep-e. Aby sme však videli aj spôsob učenia, pre dva najsilnejšie varianty sme dopočítali detailné grafy z per-individual metrík. Tienené pásma v nasledujúcich obrázkoch nepredstavujú rozptyl medzi viacerými seedmi, ale rozptyl jedincov v populácii v rámci jednej generácie. Pri grafoch času rátame priemerný čas populácie penalizovane: ak jedinec nedokončil trať, narazil alebo skončil timeoutom, do priemeru vstupuje maximálny čas epizódy 30 sekúnd. Tak priemer neignoruje neúspešných agentov.
+Obrázok~\ref{fig:supervised_architecture_val_loss_vs_params} ukazuje očakávaný tradeoff: väčšie siete majú nižšiu validačnú stratu, ale rastie aj počet parametrov. Najnižšiu stratu dosiahla architektúra \(128\times64\) s aktiváciami ReLU,\(\tanh\), ale tá má \(12\,931\) parametrov. Pri neskoršej neuroevolúcii je každý parameter súčasťou prehľadávaného genómu, preto väčšia sieť neznamená automaticky lepšiu voľbu pre tréning agenta.
 
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/lex_top1_training_detail.png}
-    \caption[Detail tréningu vybraného ranking tuple]{Detailný priebeh tréningu pre \texttt{(finished, progress, -time, -crashes)}. Horný panel ukazuje najlepší a priemerný progress spolu s populačným rozptylom, dolný panel počet dokončení, nárazov a timeoutov v generácii. Vlastné spracovanie experimentu \texttt{lex\_reward\_aabb\_lidar\_fixed100\_20260503}.}
-    \label{fig:policy_lex_top1_training_detail}
-\end{figure}
+Pre praktické experimenty nás preto viac zaujímal kompromis okolo menších sietí. Architektúra \(32\times16\) má \(1\,699\) parametrov a ostáva lacným baseline modelom. Architektúra \(48\times24\) má \(2\,931\) parametrov a prináša lepšiu validačnú stratu bez toho, aby sa veľkosť genómu zväčšila rádovo.
 
-\begin{figure}
+\begin{table}[htbp]
     \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/lex_top1_population_finish_time.png}
-    \caption[Čas populácie vybraného ranking tuple]{Čas populácie pre \texttt{(finished, progress, -time, -crashes)}. Modrá krivka zobrazuje najlepší dosiahnutý finish time, oranžová krivka penalizovaný priemer populácie, kde neúspešná jazda vstupuje ako maximálny čas epizódy. Vlastné spracovanie experimentu \texttt{lex\_reward\_aabb\_lidar\_fixed100\_20260503}.}
-    \label{fig:policy_lex_top1_population_time}
-\end{figure}
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Vybrané architektúry zo sweep-u]{Vybrané architektúry z porovnania učenia s učiteľom. Tabuľka ukazuje, že väčší model znižuje validačnú stratu, ale zároveň zväčšuje priestor parametrov.}
+    \label{tab:supervised_architecture_candidates}
+    \begin{tabular}{llrrr}
+        \toprule
+        Architektúra & Aktivácie & Parametre & Val. strata & Steer MAE \\
+        \midrule
+        \(32\times16\) & ReLU, ReLU & \(1\,699\) & \(0{,}0659\) & \(0{,}2218\) \\
+        \(32\times16\) & ReLU, \(\tanh\) & \(1\,699\) & \(0{,}0669\) & \(0{,}2247\) \\
+        \(48\times24\) & ReLU, ReLU & \(2\,931\) & \(0{,}0606\) & \(0{,}2161\) \\
+        \(48\times24\) & ReLU, \(\tanh\) & \(2\,931\) & \(0{,}0618\) & \(0{,}2163\) \\
+        \(128\times64\) & ReLU, ReLU & \(12\,931\) & \(0{,}0578\) & \(0{,}2012\) \\
+        \(128\times64\) & ReLU, \(\tanh\) & \(12\,931\) & \(0{,}0563\) & \(0{,}1993\) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/lex_top2_training_detail.png}
-    \caption[Detail tréningu bezpečnejšieho ranking tuple]{Detailný priebeh tréningu pre \texttt{(finished, progress, -crashes, -time)}. Variant našiel prvý finish podobne skoro a mal mierne vyšší neskorý priemerný progress, ale najlepší čas bol slabší než pri poradí s časom pred počtom nárazov. Vlastné spracovanie experimentu \texttt{lex\_reward\_aabb\_lidar\_fixed100\_20260503}.}
-    \label{fig:policy_lex_top2_training_detail}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/lex_top2_population_finish_time.png}
-    \caption[Čas populácie bezpečnejšieho ranking tuple]{Čas populácie pre \texttt{(finished, progress, -crashes, -time)}. Penalizovaný priemer ukazuje, že samotné dokončovanie trate nestačí; zaujíma nás aj to, koľko neúspešných jedincov populácia stále produkuje. Vlastné spracovanie experimentu \texttt{lex\_reward\_aabb\_lidar\_fixed100\_20260503}.}
-    \label{fig:policy_lex_top2_population_time}
-\end{figure}
+Z tohto experimentu si berieme dve pracovné architektúry. \(32\times16\) ReLU,\(\tanh\) používame ako lacný model na široké experimentovanie, kde je dôležitá rýchlosť porovnania metód. \(48\times24\) ReLU,\(\tanh\) používame ako silnejšieho kandidáta pre dlhšie behy. Porovnanie tým vyriešilo iba prvú časť problému: ukázalo, že navrhnuté pozorovanie a malá MLP sieť vedia napodobniť ľudskú akciu na dátach. Či sa takáto politika udrží aj pri vlastnej jazde, musí ukázať až správanie v prostredí.
 
 \FloatBarrier
 
-\section{Kontrolný návrat k učeniu posilňovaním}
+\section{Behaviorálne klonovanie v uzavretej slučke}
 
-V tomto bode už máme lepší jazyk na opis hodnotenia správania. To je vhodné miesto krátko sa vrátiť k učeniu posilňovaním (angl.~\emph{reinforcement learning}). V bakalárskej práci bol smer s PPO prítomný, ale výsledky neboli dostatočne presvedčivé \cite{melkovic2024bachelor}. Spätne je dôležité povedať, že problém nemusel byť iba v algoritme. Veľká časť zlyhania mohla pochádzať z nevhodne formulovaného rewardu.
+Ďalší test preto neprebiehal na validačnej množine, ale priamo na trati. Vybranú supervised politiku sme spustili v zjednodušenej rovinnej verzii \Trackmania{} na mape \texttt{single\_surface\_flat} a porovnali jej prejazd s desiatimi zaznamenanými jazdami učiteľa.
 
-Preto sme spravili kontrolný reward-equivalent sweep. Nepoužili sme ho ako hlavný smer práce, ale ako spätnú kontrolu: čo sa stane, ak moderným RL algoritmom dáme odmenu postavenú na rozumnejších metrikách auta, teda na dokončení, progresse, čase a nárazoch? Porovnávali sme PPO, SAC a TD3, ktoré predstavujú známe prístupy v hlbokom učení posilňovaním \cite{schulman2017ppo,haarnoja2018sac,fujimoto2018td3}. Teoretický rámec RL vychádza z odmien získaných interakciou s prostredím \cite{sutton_barto2018rl}.
-
-\begin{figure}
+\begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/rl_cumulative_best_progress.png}
-    \caption[RL progress porovnanie]{Kumulatívny najlepší progress v reward-equivalent RL sweep-e. PPO sa ako jediný algoritmus v tomto nastavení naučil dokončiť trať, SAC a TD3 ostali pod 8~\% progressu. Vlastné spracovanie experimentu \texttt{rl\_reward\_equivalent\_sweep\_20260505}.}
-    \label{fig:policy_rl_progress}
+    \includegraphics[width=\textwidth]{training_policy/supervised_behavior_cloning_teacher_agent_paths.pdf}
+    \caption[Trajektória supervised agenta oproti učiteľovi]{Porovnanie zaznamenaných jázd učiteľa a deterministického prejazdu politiky naučenej behaviorálnym klonovaním. Farba trajektórie vyjadruje rýchlosť v \(\mathrm{km/h}\). Agent trať dokončí, ale jeho trajektória je menej plynulá, odchyľuje sa od učiteľských prejazdov a obsahuje viac kontaktov so stenou.}
+    \label{fig:supervised_behavior_cloning_teacher_agent_paths}
 \end{figure}
 
-\begin{figure}
+Obrázok~\ref{fig:supervised_behavior_cloning_teacher_agent_paths} je dôležitý práve preto, že výsledok nie je ani úplné zlyhanie, ani hotové riešenie. Agent sa už z naučených dát dokáže dostať do cieľa. Zároveň však jazdí výrazne horšie než učiteľské prejazdy: na tejto mape dokončil jazdu za \(43{,}39\,\mathrm{s}\) a počas nej nazbieral \(32\) kontaktov so stenou, zatiaľ čo učiteľské jazdy v použitom datasete boli približne v rozsahu \(23{,}81\) až \(24{,}65\,\mathrm{s}\). Supervised strata teda zachytila schopnosť predikovať ľudskú akciu, ale sama o sebe nezaručila dobré správanie v uzavretej slučke.
+
+Toto je presne miesto, kde sa behaviorálne klonovanie láme. Pri učení dostáva sieť pozorovania, ktoré vznikli počas ľudskej jazdy. Väčšina dobrých ľudských prejazdov však prirodzene vedie podobnou časťou trate: hráč sa snaží držať rýchlu stopu a vyhýba sa stavom, v ktorých by už musel prudko zachraňovať chybu. Dataset preto obsahuje veľa príkladov bežnej jazdy, ale málo príkladov zriedkavých opravných situácií.
+
+Pri samostatnej jazde si agent svoje budúce pozorovania vytvára vlastnými akciami. Malá chyba v jednej zákrute posunie auto na inú stopu, tým zmení vzdialenosti k okrajom trate a ďalšie rozhodnutia už prebiehajú v stave, ktorý nemusel byť dobre pokrytý trénovacími dátami. Tento problém distribučného posunu je známy aj v literatúre k napodobňovaniu a motivuje interaktívne metódy typu DAgger \cite{ross2011dagger}.
+
+Citlivosť na zásah do akcie sme si overili aj krátkou diagnostickou perturbáciou: na niekoľko krokov sme politike prepísali riadenie a sledovali sme, ako sa zmení zvyšok trajektórie. Tento beh nepoužívame ako samostatný kvantitatívny dôkaz, ale dobre ilustruje praktický problém: v sekvenčnej jazde sa odchýlka neuzavrie v jednom kroku. Mení budúcu polohu auta, a tým aj celé ďalšie rozhodovanie politiky.
+
+\begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/rl_episode_outcomes.png}
-    \caption[Výsledky RL epizód]{Výsledky epizód v RL sweep-e. PPO vytvoril finishere, zatiaľ čo SAC a TD3 v rovnakom nastavení končili nárazom. Vlastné spracovanie experimentu \texttt{rl\_reward\_equivalent\_sweep\_20260505}.}
-    \label{fig:policy_rl_outcomes}
+    \includegraphics[width=\textwidth]{training_policy/supervised_behavior_cloning_butterfly_p04_left_120.pdf}
+    \caption[Diagnostická zmena akcie pri supervised politike]{Diagnostická zmena akcie pri politike naučenej behaviorálnym klonovaním. Modrá čiara ukazuje pôvodný prejazd, oranžová prejazd po krátkom nanútenom zatočení doľava. Červený úsek označuje trvanie zásahu a čierne body kontakty so stenou. Zásah v tomto behu neviedol k horšiemu času, ale zmenil ďalšiu trajektóriu auta, čo ilustruje citlivosť jazdy na malé odchýlky v minulosti.}
+    \label{fig:supervised_behavior_cloning_butterfly}
 \end{figure}
 
-Výsledok bol zaujímavý, ale nemení hlavnú líniu práce. PPO vo fixed100 profile dosiahol 43 finishov a najlepší čas 26{,}91 sekundy; vo variabilnejšom profile dosiahol 33 finishov a najlepší čas 25{,}04 sekundy. SAC a TD3 v tomto nastavení nedokončili trať. Tento experiment ukazuje, že lepší reward signál dokáže zmeniť aj výsledky RL vetvy. Zároveň však GA ostal pre našu prácu praktickejším hlavným nástrojom, pretože prirodzene pracuje s vyhodnotením celej epizódy a s lexikografickým rankingom kandidátnych politík.
+Obrázok~\ref{fig:supervised_behavior_cloning_butterfly} používame ako analógiu k známej myšlienke citlivosti dynamických systémov na malé zmeny počiatočných podmienok, ktorá sa často označuje ako butterfly efekt \cite{lorenz1963deterministic}. Netvrdíme, že týmto diagnostickým behom dokazujeme chaotickosť nášho prostredia. Podstatná je jednoduchšia praktická pointa: v uzavretej slučke môže aj malá odchýlka dávno pred aktuálnym rozhodnutím dostať auto do inej časti stavového priestoru. Politika naučená iba na učiteľských dátach tam nemusí mať dostatok príkladov.
+
+Z behaviorálneho klonovania si teda berieme pozitívny aj negatívny výsledok. Pozitívny výsledok je, že navrhnuté pozorovanie obsahuje dosť informácií na to, aby sieť vytvorila použiteľné akcie a prešla trať. Negatívny výsledok je, že samotné napodobňovanie nestačí na stabilného pretekárskeho agenta. Aby sme zachytili špecifické a opravné situácie, potrebovali by sme veľa variabilných vzoriek, alebo musíme dáta zbierať aj zo stavov, do ktorých sa agent dostane vlastnými chybami. Druhá možnosť vedie k interaktívnemu učeniu napodobňovaním.
 
 \FloatBarrier
 
-\section{Konflikt cieľov a Pareto/NSGA-II}
+\section{Interaktívne učenie napodobňovaním}
 
-Lexikografický ranking je čitateľný, ale zároveň vopred určuje poradie priorít. Pri riadení auta však ciele nie sú nezávislé. Rýchlosť môže zvyšovať riziko, bezpečnosť môže znižovať rýchlosť a agresívna explorácia môže pomôcť nájsť prvý finish, ale zhoršiť stabilitu. Preto bolo prirodzené vyskúšať aj viackriteriálny prístup.
+Prirodzená oprava behaviorálneho klonovania je nezbierať iba ideálne jazdy človeka. Ak problém vzniká tým, že agent počas vlastnej jazdy navštívi iné stavy než učiteľ, potom má zmysel zbierať dáta práve v týchto stavoch. Tento smer nadväzuje na myšlienku DAgger: dataset sa postupne rozširuje o pozorovania, do ktorých sa dostáva aktuálna politika, zatiaľ čo expert poskytuje správnu akciu \cite{ross2011dagger}.
 
-Pareto dominancia a NSGA-II ponúkajú spôsob, ako udržiavať množinu kompromisných riešení namiesto jednej pevnej váženej alebo lexikografickej funkcie \cite{coello1999survey,deb2002nsga2}. Z teoretického pohľadu to vyzerá vhodne: ak sa ciele bijú, nemusíme hneď vybrať jedno poradie. Môžeme hľadať front riešení, ktoré nie sú dominované inými kandidátmi.
-
-Experimentálne však táto vetva neprebila lexikografický baseline. Pôvodné MOO pokusy boli slabé alebo nestabilné. Opravený variant \texttt{trackmania\_racing} už mal signál, dosiahol najlepší čas 18{,}55 sekundy a prvý finish v generácii 204, ale stále sa nestal novým defaultom. Preto ho v práci interpretujeme ako dôležitý negatívny a diagnostický výsledok, nie ako zlyhanie.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.82\textwidth]{images/training_policy/training_moo_best_time_front.png}
-    \caption[NSGA-II diagnostika]{Diagnostický pohľad na MOO/NSGA-II vetvu. Revidovaný variant mal užitočný signál, ale neprebil lexikografický baseline. Vlastné spracovanie experimentu \texttt{training\_improvements\_20260505}.}
-    \label{fig:policy_moo_front}
-\end{figure}
-
-\FloatBarrier
-
-\section{Hyperparametre genetického algoritmu}
-
-Keď ranking tuple stabilizoval hodnotenie jazdy, ostalo nastaviť samotný genetický algoritmus. V našej úlohe jedinec reprezentuje neurónovú sieť, populácia obsahuje viacero kandidátnych politík a nová generácia vzniká výberom rodičov, elitizmom a mutáciou. Takéto hľadanie je typickým príkladom evolučnej optimalizácie \cite{goldberg1989ga}.
-
-Najdôležitejšie parametre boli veľkosť populácie, počet rodičov, počet elít, pravdepodobnosť mutácie a veľkosť mutačného šumu. Populácia určuje, koľko kandidátov vyhodnotíme v jednej generácii. Počet rodičov ovplyvňuje selekčný tlak. Elity prenášajú najlepších jedincov bez mutácie. Parametre mutácie zas určujú, ako ďaleko sa nová generácia odváži od už nájdených riešení.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.82\textwidth]{images/training_policy/ga_selection_finish_rate_heatmap.png}
-    \caption[Selekčný tlak GA]{Heatmapa neskorej finish rate pri rôznych nastaveniach rodičov a elít. Najsilnejší screeningový výsledok mal \texttt{parent\_count=14} a \texttt{elite\_count=1}. Vlastné spracovanie experimentu \texttt{ga\_hyperparam\_refinement\_20260504}.}
-    \label{fig:policy_ga_selection_heatmap}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.82\textwidth]{images/training_policy/ga_mutation_finish_rate_heatmap.png}
-    \caption[Mutácia GA]{Heatmapa neskorej finish rate pri rôznych pravdepodobnostiach a veľkostiach mutácie. Stabilný vnútorný bod bol \texttt{mutation\_prob=0.10} a \texttt{mutation\_sigma=0.25}. Vlastné spracovanie experimentu \texttt{ga\_hyperparam\_refinement\_20260504}.}
-    \label{fig:policy_ga_mutation_heatmap}
-\end{figure}
-
-Refined grid podporil ako najlepší screeningový selection bod túto konfiguráciu:
+V našom interaktívnom režime preto človek a agent nejazdia oddelene. V každom kroku máme ľudskú akciu \(a_t^{\mathrm{human}}\) a akciu aktuálnej politiky \(a_t^{\mathrm{agent}}\). Do hry pošleme vykonanú akciu \(a_t^{\mathrm{exec}}\), ale ako trénovací cieľ ukladáme ľudskú korekciu. Pri režime miešania akcií môžeme vykonanú akciu zapísať ako
 \[
-    \mathrm{population}=48,\quad
-    \mathrm{parent\_count}=14,\quad
-    \mathrm{elite\_count}=1.
+    a_t^{\mathrm{exec}}
+    =
+    (1-\lambda_t)a_t^{\mathrm{human}}
+    +
+    \lambda_t a_t^{\mathrm{agent}},
 \]
-Pre mutáciu bol najbezpečnejší vnútorný bod
+kde \(\lambda_t \in [0,1]\) určuje, akú časť riadenia v danom pokuse preberá agent. Na začiatku je \(\lambda_t\) malé a jazdu drží najmä človek. Postupne sa zvyšuje, takže agent vytvára čoraz väčšiu časť stavov, na ktorých sa bude po prejazde ďalej učiť.
+
+Praktický cyklus jedného pokusu je krátky:
 \[
-    \mathrm{mutation\_prob}=0{,}10,\quad
-    \mathrm{mutation\_sigma}=0{,}25.
+\begin{array}{l}
+\text{spusti aktuálnu politiku a nastav podiel agenta,}\\
+\text{počas jazdy miešaj akciu človeka a agenta,}\\
+\text{ukladaj pozorovanie a ľudskú korekčnú akciu,}\\
+\text{po dokončení prejazdu krátko douč sieť na nových dátach,}\\
+\text{zvýš podiel agenta a opakuj.}
+\end{array}
 \]
-Praktický baseline preto držíme okolo tejto oblasti; pri niektorých behoch používame dve elity, aby sa zachovala väčšia diverzita užitočných riešení, hoci samotný refined grid papierovo najviac podporil jednu elitu.
+Tým sa od behaviorálneho klonovania líši najmä zdroj dát. Už nejde iba o stavy, do ktorých sa dostal dobrý ľudský prejazd. Do datasetu pribúdajú aj stavy vzniknuté tým, že agent zatáčal trochu inak, spomalil na inom mieste alebo vyšiel zo stopy. Práve tam sú korekčné akcie najcennejšie.
 
-\begin{figure}
-    \centering
-    \includegraphics[width=0.82\textwidth]{images/training_policy/ga_mutation_regime_role_map.png}
-    \caption[Roly mutačných režimov]{Interpretácia mutačných režimov. Väčšia mutácia podporuje exploráciu, menšia mutácia je vhodnejšia na dolaďovanie. Vlastné spracovanie experimentu \texttt{ga\_hyperparam\_refinement\_20260504}.}
-    \label{fig:policy_ga_mutation_roles}
-\end{figure}
+% TODO: doplniť graf priebehu interaktívneho učenia napodobňovaním: na osi x pokus alebo čas, na osi y podiel riadenia agenta \(\lambda\), doplnený o krátke doučenia po prejazdoch.
 
-\FloatBarrier
+% TODO: doplniť obrázok trajektórií po interaktívnom učení napodobňovaním: aktuálny agent a predchádzajúce prejazdy/korekcie na rovnakej mape.
 
-\section{Tréningové vylepšenia}
+Tento krok však stále nemení cieľ učenia. Sieť sa učí napodobniť ľudskú korekciu v širšej množine stavov, nie priamo minimalizovať čas alebo počet kontaktov. Interaktívne napodobňovanie preto môže zlepšiť správanie oproti čisto statickému behaviorálnemu klonovaniu, ale ostáva závislé od kvality človeka, ktorý korekcie poskytuje. Ak hráč reaguje pomaly, volí slabú stopu alebo nevie ukázať dostatočne pestrú množinu opravných manévrov, agent sa bude učiť práve z týchto obmedzení.
 
-Po výbere ranking funkcie a základných hyperparametrov sme už neriešili iba otázku, či sa agent niečo naučí. Začali sme testovať hypotézy, ktoré mali tréning zrýchliť, stabilizovať alebo zlepšiť kvalitu výslednej politiky.
-
-\subsection{Zrkadlenie}
-
-Zrkadlenie vychádza zo symetrie časti pozorovania a akčného priestoru. Ak je situácia zrkadlovo otočená, očakávame, že vhodná akcia bude tiež zrkadlová, najmä pri zatáčaní. Hypotéza bola, že takýto tréning môže znížiť preferenciu jednej strany a zlepšiť robustnosť.
-
-Výsledok zatiaľ nie je pozitívnym dôkazom. Both-mirror evaluácia sa síce vedela trénovať, ale stála približne dvojnásobný evaluačný čas a holdout test nepotvrdil jasnú generalizáciu. Lacnejšia verzia cez pravdepodobnosť zrkadlenia sa tiež neukázala presvedčivo. Preto zrkadlenie uvádzame ako rozumnú, ale zatiaľ diagnostickú vetvu.
-
-\begin{center}
-\fbox{\parbox{0.86\textwidth}{\textbf{Plánovaný obrázok alebo tabuľka:} porovnanie zrkadleného tréningu s bežným tréningom a holdout vyhodnotením. Má ukázať, či zrkadlenie zlepšuje robustnosť alebo iba zvyšuje evaluačný čas.}}
-\end{center}
-
-\subsection{Vyrovnávacia pamäť elity}
-
-Vyrovnávacia pamäť elity rieši praktickú otázku: ak najlepšieho jedinca prenášame do ďalšej generácie, musíme ho zakaždým znova vyhodnocovať? Pri deterministickom prostredí by rovnaký jedinec mal dostať rovnaký výsledok. Pri variabilnom fyzikálnom kroku však môže rovnaká politika dopadnúť trochu inak, čo vytvára riziko, že náhodne slabší rollout zničí inak dobrého kandidáta.
-
-Pred experimentom existovala aj opačná obava. Cache môže chrániť jedinca, ktorému sa raz náhodne podaril riskantný beh, a tým šíriť zlé gény. Výsledky však v našich dátach hovorili opačne. Pri variabilnom ticku bez cache neboli žiadni finisheri; s elite cache sa objavilo 572 finishov a najlepší čas 18{,}71 sekundy.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/training_variable_tick_cache.png}
-    \caption[Elite cache pri variabilnom ticku]{Porovnanie tréningu s vyrovnávacou pamäťou elity a bez nej pri variabilnom fyzikálnom kroku. Cache bola najsilnejším pozitívnym tréningovým vylepšením v tomto balíku. Vlastné spracovanie experimentu \texttt{training\_improvements\_20260505}.}
-    \label{fig:policy_elite_cache}
-\end{figure}
-
-Tento výsledok berieme ako thesis-grade pozitívny signál. Cache nebola iba optimalizácia času vyhodnocovania, ale aj stabilizačný mechanizmus pre šumovejšie vyhodnotenie.
+Praktický problém je aj množstvo dát. Čím viac stavov chceme pokryť, tým viac prejazdov a korekcií potrebujeme. Pri krátkej mape sa to dá zvládnuť ručne, ale pri všeobecnejšom agentovi by sa počet potrebných vzoriek rýchlo zväčšoval. Po tejto časti teda vieme, že sieť vie konať a že vieme získavať lepšie korekčné dáta. Stále však potrebujeme spôsob, ako politiku hodnotiť podľa toho, čo na trati skutočne dosiahla.
 
 \FloatBarrier
-
-\subsection{Pokles mutácie}
-
-Z hyperparametrických experimentov vyplýva, že rôzne mutačné režimy majú rôzne úlohy. Väčšia mutácia pomáha explorácii, menšia mutácia dolaďovaniu. Fixná hodnota je preto kompromisom. Pokles mutácie (angl.~\emph{mutation decay}) sa snaží začať viac exploračne a postupne prejsť do jemnejšieho dolaďovania.
-
-Prvá verzia však môže znížiť mutácie príliš skoro, ešte pred tým, než populácia nájde prvého finishera. Preto vznikla verzia s first-finish triggerom: pred prvým dokončením držíme exploračnejšie hodnoty, po prvom finishi začneme plynule znižovať mutáciu.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/training_decay_focus.png}
-    \caption[Pokles mutácie po prvom finishi]{Porovnanie baseline a first-finish mutation decay. Výsledok je užitočný tradeoff, ale nie jednoznačný nový default. Vlastné spracovanie experimentu \texttt{training\_improvements\_20260505}.}
-    \label{fig:policy_decay}
-\end{figure}
-
-Výsledok je zmiešaný. First-finish decay je obhájiteľný nápad a v niektorých metrikách pomáha, ale neprekonal jednoznačne stabilitu baseline. V práci ho preto uvádzame ako rozumný optimalizačný pokus, nie ako finálne pravidlo.
-
-\FloatBarrier
-
-\subsection{Viac dotykov a počet nárazov}
-
-Pôvodný crash model je prísny: náraz znamená koniec epizódy. V reálnej jazde však malý kontakt nemusí nutne znamenať úplné zlyhanie. Experiment s viacerými povolenými dotykmi preto rozlišoval medzi nárazom ako chybou a nárazom ako okamžitým koncom jazdy. Agent mohol po kontakte pokračovať, ale počet dotykov sa započítal do hodnotenia.
-
-Táto vetva bola diagnostická. Pomohla lepšie pomenovať, čo vlastne crash metrika znamená, ale nepriniesla jasný finálny tréningový zisk. Pri nastavení s tromi dotykmi bol progress vysoký, no neskorý crash profil ostal príliš hlučný. Preto túto myšlienku nepoužívame ako hlavné vylepšenie, ale ponechávame ju ako nástroj na skúmanie robustnosti správania.
-
-\begin{center}
-\fbox{\parbox{0.86\textwidth}{\textbf{Plánovaný obrázok alebo tabuľka:} diagnostika experimentu s viacerými povolenými dotykmi, ideálne progress, počet nárazov a typ ukončenia epizódy. Obrázok má odlíšiť \uv{náraz ako koniec} od \uv{náraz ako chyba v jazde}.}}
-\end{center}
-
-\subsection{Supervised-seeded GA}
-
-Po behaviorálnom klonovaní vznikla prirodzená otázka: ak supervised model už vie jazdiť aspoň čiastočne rozumne, prečo začínať GA úplne náhodne? Myšlienka hybridu je vložiť supervised politiku do prvej populácie a vytvoriť okolo nej mutované varianty.
-
-Ukázalo sa však, že dôležitý je spôsob mutácie. Sparse seeded verzia zachovala behaviorálne klonovanie príliš silno a našla finishery veľmi neskoro. Dense weight-noise verzia mutovala váhy širšie, zachovala časť štruktúry supervised politiky, ale vytvorila dostatočnú diverzitu pre evolučnú selekciu.
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/ga_supervised_seeded_progress.png}
-    \caption[Supervised-seeded progress]{Porovnanie random baseline, sparse supervised seeding a dense supervised seeding. Dense-noise inicializácia využila supervised model ako užitočný štart, ale nechala GA dostatočný priestor na zmenu. Vlastné spracovanie experimentu \texttt{ga\_supervised\_seeded\_20260505}.}
-    \label{fig:policy_seeded_progress}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.92\textwidth]{images/training_policy/ga_supervised_seeded_best_time.png}
-    \caption[Supervised-seeded najlepší čas]{Najlepší čas pri supervised-seeded GA porovnaní. Dense-noise variant dosiahol najlepší čas 17{,}28 sekundy, ale používa dodatočné ľudské dáta, preto ho interpretujeme ako hybridný výsledok. Vlastné spracovanie experimentu \texttt{ga\_supervised\_seeded\_20260505}.}
-    \label{fig:policy_seeded_best_time}
-\end{figure}
-
-Dense-noise supervised seeding je silný pozitívny hybrid: prvý finisher prišiel v generácii 116 a najlepší čas bol 17{,}28 sekundy. Zároveň ho neprezentujeme ako čistý GA trik, pretože využíva dodatočné ľudské dáta. Jeho prínos je v spojení dvoch svetov: behaviorálne klonovanie dá počiatočný smer a evolúcia ho vie ďalej zmeniť podľa hodnotenia v prostredí.
-
-\FloatBarrier
-
-\section{Zloženie najlepšieho 2D asfaltového agenta}
-
-Po týchto krokoch už nejde o jeden náhodný úspech. Máme reťaz rozhodnutí, z ktorých každé reagovalo na predchádzajúci problém. Supervised experimenty ukázali, že sieť vie spracovať pozorovanie. Closed-loop architektonická ablácia podporila \texttt{relu,tanh} a malé MLP architektúry. Reward sweep vybral crash-aware lexikografický ranking. Hyperparametrický grid našiel rozumnú oblasť pre selekciu a mutáciu. Tréningové vylepšenia odlíšili pozitívne výsledky od diagnostických vetiev.
-
-Finálny 2D asfaltový tréning preto skladáme z viacerých podporených zistení: malá MLP politika, lexikografické hodnotenie \texttt{(finished, progress, -time, -crashes)}, primeraný GA baseline okolo populácie 48 jedincov, rodičov približne 14, malej elity a mutácie v oblasti \texttt{prob=0.10}, \texttt{sigma=0.25}. Pri šumovejšom alebo variabilnejšom vyhodnotení pridávame vyrovnávaciu pamäť elity. Ako hybridnú alternatívu používame dense-noise supervised seeding.
-
-Toto zloženie je vrcholom 2D časti práce. Neznamená, že sme našli absolútne optimálne nastavenie, ale znamená, že máme obhájiteľný postup, ktorý nevznikol jedným odhadom. Každý prvok má za sebou experimentálny dôvod alebo negatívny výsledok, ktorý vysvetľuje, prečo ho nepoužívame.
-
-\begin{center}
-\fbox{\parbox{0.86\textwidth}{\textbf{Plánovaný obrázok:} finálny 2D asfaltový agent. Vhodný je focus progress plot, krivka najlepšieho času a trajektória/path nad mapou po uzamknutí finálneho runu.}}
-\end{center}
-
-\section{Výškové rozdiely}
-
-Rovinná asfaltová trať je dôležitý prvý prípad, ale Trackmania nie je iba rovina. Keď sa objavia kopce, svahy alebo skoky, 2D interpretácia okolia prestáva byť úplná. Lúč premietaný iba do roviny môže prehliadnuť, že cesta stúpa, klesá alebo sa mení sklon bloku.
-
-Z tréningového hľadiska nechceme zahodiť všetko, čo sme zistili v 2D časti. Ranking, GA baseline aj všeobecná logika hodnotenia ostávajú použiteľné. Mení sa však observation space a pravdepodobne aj potrebná kapacita siete. Výškové informácie zvyšujú množstvo vstupných dát a môžu vyžadovať silnejšiu architektúru než lacný baseline.
-
-Pri výškovej variante bude potrebné overiť, ako reprezentovať výšku, ako ju dostať do virtuálneho senzora a či architektúry \texttt{32x16} a \texttt{48x24} stále postačujú. Detaily geometrie a projekcie lúča patria do implementačného opisu a experimentov; pre tréning je podstatné najmä to, že po vyriešení roviny sa objavuje tretí rozmer.
-
-\begin{center}
-\fbox{\parbox{0.86\textwidth}{\textbf{Plánovaný obrázok:} výškový modul observation. Porovnanie pozorovania bez výšky a s výškovými príznakmi, prípadne trajektória agenta na mape s výškovým gradientom.}}
-\end{center}
-
-\section{Rôzne povrchy}
-
-Druhým rozšírením sú povrchy. Rovnaká akcia auta nemusí mať rovnaký účinok na asfalte, tráve, plastovom povrchu alebo ľade. Z pohľadu agenta teda nestačí vedieť, kde je cesta. Potrebuje aj informáciu o tom, aký charakter má podklad.
-
-Aj tu je cieľom preniesť čo najviac z 2D asfaltovej časti. Ranking funkcia, základný GA a spôsob porovnávania politík ostávajú rovnakým rámcom. Mení sa observation vektor, pretože k geometrii pridávame informáciu o povrchu. Podobne ako pri výške bude potrebné znova overiť veľkosť siete a jej schopnosť využiť nové vstupy.
-
-Ukázali sme, že výsledkom tréningovej časti nie je iba jeden natrénovaný model, ale postup, ako sa k nemu dopracovať: od reprezentácie politiky cez hodnotenie správania až po experimentálne podporené tréningové rozhodnutia. Rovnaký postup potom prirodzene vytvára základ aj pre bohatší svet, v ktorom sa mení výška trate alebo povrch pod autom.
-
-\begin{center}
-\fbox{\parbox{0.86\textwidth}{\textbf{Plánovaný obrázok:} surface modul. Mapa povrchov s odlíšenými typmi podkladu a trajektória agenta, aby bolo vidieť, ako sa správanie mení pri rôznej trakcii.}}
-\end{center}

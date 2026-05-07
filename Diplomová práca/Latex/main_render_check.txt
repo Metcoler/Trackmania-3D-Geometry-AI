@@ -1,0 +1,4018 @@
+Univerzita Komenského v Bratislave
+Fakulta matematiky, fyziky a informatiky
+
+Autonómne jazdiaci agent pre hru
+Trackmania
+Diplomová práca
+
+2026
+Bc. Timotej Melkovič
+
+Univerzita Komenského v Bratislave
+Fakulta matematiky, fyziky a informatiky
+
+Autonómne jazdiaci agent pre hru
+Trackmania
+Diplomová práca
+
+Študijný program:
+
+Aplikovaná informatika
+
+Študijný odbor:
+
+Informatika
+
+Školiace pracovisko:
+
+FMFI.KAI - Katedra aplikovanej informatiky
+
+Školiteľ:
+
+Ing. Alexander Šimko, PhD.
+
+Bratislava, 2026
+Bc. Timotej Melkovič
+
+Univerzita Komenského v Bratislave
+Fakulta matematiky, fyziky a informatiky
+ZADANIE ZÁVEREČNEJ PRÁCE
+Meno a priezvisko študenta:
+Študijný program:
+Študijný odbor:
+Typ záverečnej práce:
+Jazyk záverečnej práce:
+Sekundárny jazyk:
+
+Bc. Timotej Melkovič
+aplikovaná informatika (Jednoodborové štúdium,
+magisterský II. st., denná forma)
+informatika
+diplomová
+slovenský
+anglický
+
+Názov:
+
+Autonómne jazdiaci agent pre hru Trackmania
+Autonomous artificial driver for Trackmania
+
+Anotácia:
+
+Trackmania je počítačová hra, v ktorej hráči súťažia, kto dokáže zadanú dráhu
+prejsť v najkratšom čase. Hra ponúka API, ktoré umožňuje vytvárať umelých
+autonómne jazdiacich agentov. Tvorbe takéhoto agenta bola venovaná práca [1].
+
+Cieľ:
+
+Cieľom tejto práce je nadviazať na dosiahnuté výsledky a navrhnúť
+a implementovať lepšiu verziu autonómne jazdiaceho agenta. K zlepšeniu má
+dôjsť vo viacerých aspektoch. Samotná jazda agenta sa má zlepšiť a agent
+sa má časom jazdy priblížiť ľudským hráčom. Proces trénovania agenta má
+byť plne automatizovaný a nemá vyžadovať zásahy človeka. Agent má byť
+schopný jazdiť niele na dráhach, ktoré ležia v jednej rovine, ale aj na takých,
+ktoré obsahujú vertikálne zmeny, ako sú kopce a svahy. Agent má vedieť
+jazdiť na rôznych povrchoch ako asfalt, hlina a tráva. Súčasťou práce bude
+empirické vyhodnotenia kvality jazdy agenta na vhodne zvolenej metrike a jeho
+porovnanie s pôvodnou verziou agenta.
+
+Literatúra:
+
+1. Timotej Melkovič. Trénovanie autonómneho vozidla v hre Trackmania
+pomocou strojového učenia. Bakalárska práca. FMFI UK. 2024.
+2. Geoff Skinner and Toby Walmsley. Artificial Intelligence and Deep Learning
+in Video Games A Brief Review. In 2019 IEEE 4th International Conference on
+Computer and Communication Systems (ICCCS). Pages 404–408. IEEE, 2019.
+3. Tuomas Haarnoja, et al. Soft Actor-Critic Algorithms and Applications. arXiv
+preprint. arXiv:1812.05905, 2018.
+
+Vedúci:
+Katedra:
+Vedúci katedry:
+
+Ing. Alexander Šimko, PhD.
+FMFI.KAI - Katedra aplikovanej informatiky
+doc. RNDr. Tatiana Jajcayová, PhD.
+
+Dátum zadania:
+
+28.11.2024
+
+Dátum schválenia: 04.12.2024
+
+prof. RNDr. Roman Ďurikovič, PhD.
+garant študijného programu
+
+študent
+
+vedúci práce
+
+Poďakovanie: Chcel by som srdečne poďakovať svojmu školiteľovi, Ing. Alexandrovi
+Šimkovi, PhD., najmä za trpezlivosť, venovaný čas a odborné vedenie pri riešení diplomovej práce.
+iv
+
+Abstrakt
+Tu pôjde slovenský abstrakt v rozsahu približne 100 až 500 slov. Text stručne zhrnie
+cieľ práce, použitý prístup, hlavné výsledky a význam práce.
+Kľúčové slová: Trackmania, autonómny agent, neuroevolúcia, genetický algoritmus,
+neurónová sieť
+
+v
+
+Abstract
+This page will contain the English version of the abstract. It will summarize the goal of
+the thesis, the proposed approach, the main results, and the contribution of the work.
+Keywords: Trackmania, autonomous agent, neuroevolution, genetic algorithm, neural network
+
+vi
+
+Obsah
+Úvod
+
+1
+
+1 Teoretické východiská
+
+3
+
+1.1
+
+Umelá inteligencia a autonómne rozhodovanie . . . . . . . . . . . . . .
+
+3
+
+1.2
+
+Agent, prostredie a politika správania sa agenta . . . . . . . . . . . . .
+
+4
+
+1.3
+
+Hodnotenie správania agenta . . . . . . . . . . . . . . . . . . . . . . . .
+
+8
+
+1.4
+
+Neurónové siete ako aproximátory funkcií . . . . . . . . . . . . . . . . .
+
+11
+
+1.5
+
+Techniky strojového učenia . . . . . . . . . . . . . . . . . . . . . . . . .
+
+16
+
+1.6
+
+Učenie posilňovaním . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+1.7
+
+Genetické algoritmy a neuroevolúcia . . . . . . . . . . . . . . . . . . . .
+
+21
+
+1.8
+
+Viackriteriálna optimalizácia . . . . . . . . . . . . . . . . . . . . . . . .
+
+26
+
+1.9
+
+Simulácie a virtuálne prostredia . . . . . . . . . . . . . . . . . . . . . .
+
+28
+
+1.10 Trackmania ako prostredie pre agenta . . . . . . . . . . . . . . . . . . .
+
+29
+
+1.11 Základné pojmy riadenia vozidla a pretekárskej jazdy . . . . . . . . . .
+
+30
+
+1.12 Základy počítačovej grafiky pre virtuálne senzory . . . . . . . . . . . .
+
+30
+
+2 Súvisiace práce
+
+33
+
+2.1
+
+Umelá inteligencia v hrách: od pravidiel k učeniu . . . . . . . . . . . .
+
+33
+
+2.2
+
+Reprezentácia vodiča a sveta v pretekárskych úlohách . . . . . . . . . .
+
+34
+
+2.3
+
+Autonómne pretekanie v simulátoroch . . . . . . . . . . . . . . . . . . .
+
+35
+
+2.4
+
+Gran Turismo Sophy . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+36
+
+2.5
+
+Trackmania a existujúce AI prístupy . . . . . . . . . . . . . . . . . . .
+
+36
+
+2.6
+
+Problémy existujúcich prístupov . . . . . . . . . . . . . . . . . . . . . .
+
+38
+
+2.7
+
+Zhrnutie pre našu úlohu . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+38
+
+3 Návrh reprezentácie prostredia
+
+39
+
+3.1
+
+Nadviazanie na bakalársku prácu . . . . . . . . . . . . . . . . . . . . .
+
+40
+
+3.2
+
+Prečo nepoužiť obraz ako hlavný vstup . . . . . . . . . . . . . . . . . .
+
+41
+
+3.3
+
+Získanie stavu z Trackmanie . . . . . . . . . . . . . . . . . . . . . . . .
+
+41
+
+3.4
+
+Rekonštrukcia virtuálneho sveta . . . . . . . . . . . . . . . . . . . . . .
+
+43
+
+3.5
+
+Geometrické vnímanie prostredia . . . . . . . . . . . . . . . . . . . . .
+
+46
+
+vii
+
+3.6
+
+Vektor pozorovania . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+47
+
+3.7
+
+Akčný priestor . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+48
+
+3.8
+
+Rozhodovací cyklus agenta . . . . . . . . . . . . . . . . . . . . . . . . .
+
+48
+
+3.9
+
+Zhrnutie návrhu . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+49
+
+4 Hľadanie politiky správania
+
+51
+
+4.1
+
+Problém: hľadáme politiku správania . . . . . . . . . . . . . . . . . . .
+
+51
+
+4.2
+
+Výber architektúry neurónovej siete . . . . . . . . . . . . . . . . . . . .
+
+52
+
+4.3
+
+Učenie s učiteľom ako test kapacity siete . . . . . . . . . . . . . . . . .
+
+53
+
+4.4
+
+Behaviorálne klonovanie a motýlí efekt . . . . . . . . . . . . . . . . . .
+
+54
+
+4.5
+
+Učenie napodobňovaním ako korekcia klonovania . . . . . . . . . . . . .
+
+56
+
+4.6
+
+Limity napodobňovania . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+56
+
+4.7
+
+Od napodobňovania k hodnoteniu správania . . . . . . . . . . . . . . .
+
+57
+
+4.8
+
+Postupné skladanie lexikografickej ranking funkcie . . . . . . . . . . . .
+
+57
+
+4.8.1
+
+Finish a progress . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+57
+
+4.8.2
+
+Pridanie času . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+58
+
+4.8.3
+
+Pridanie crash metriky . . . . . . . . . . . . . . . . . . . . . . .
+
+58
+
+Kontrolný návrat k učeniu posilňovaním . . . . . . . . . . . . . . . . .
+
+63
+
+4.10 Konflikt cieľov a Pareto/NSGA-II . . . . . . . . . . . . . . . . . . . . .
+
+65
+
+4.11 Hyperparametre genetického algoritmu . . . . . . . . . . . . . . . . . .
+
+67
+
+4.12 Tréningové vylepšenia
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+70
+
+4.12.1 Zrkadlenie . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+70
+
+4.12.2 Vyrovnávacia pamäť elity
+
+. . . . . . . . . . . . . . . . . . . . .
+
+70
+
+4.12.3 Pokles mutácie . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+71
+
+4.12.4 Viac dotykov a počet nárazov . . . . . . . . . . . . . . . . . . .
+
+72
+
+4.12.5 Supervised-seeded GA . . . . . . . . . . . . . . . . . . . . . . .
+
+72
+
+4.13 Zloženie najlepšieho 2D asfaltového agenta . . . . . . . . . . . . . . . .
+
+74
+
+4.14 Výškové rozdiely . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+75
+
+4.15 Rôzne povrchy
+
+75
+
+4.9
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+5 Vyhodnotenie výsledného agenta
+
+77
+
+5.1
+
+Cieľ finálneho vyhodnotenia . . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.2
+
+Výber agentov na porovnanie . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.3
+
+Výber testovacích tratí . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.4
+
+Metriky finálneho hodnotenia . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.5
+
+Trajektórie a správanie na mape . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.6
+
+Vyhodnotenie generalizácie . . . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.7
+
+Vyhodnotenie výškových rozdielov . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.8
+
+Vyhodnotenie rôznych povrchov . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+viii
+
+5.9
+
+Časové porovnanie . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.10 Diskusia správania agenta . . . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+5.11 Prechod do záveru . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+77
+
+Záver
+
+79
+
+Príloha A
+
+87
+
+ix
+
+x
+
+Zoznam obrázkov
+1.1
+
+Interakcia agenta s prostredím . . . . . . . . . . . . . . . . . . . . . . .
+
+7
+
+1.2
+
+Skalárne a lexikografické hodnotenie . . . . . . . . . . . . . . . . . . . .
+
+10
+
+1.3
+
+Aktivačné funkcie . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+13
+
+1.4
+
+Neurónová sieť . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+14
+
+1.5
+
+Model ako aproximácia funkcie . . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+1.6
+
+Inicializácia populácie
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+22
+
+1.7
+
+Selekcia jedincov . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+23
+
+1.8
+
+Kríženie a elitizmus . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+23
+
+1.9
+
+Mutácia potomkov . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+24
+
+1.10 Parametre siete ako genóm . . . . . . . . . . . . . . . . . . . . . . . . .
+
+25
+
+1.11 Trojuholníková sieť modelu . . . . . . . . . . . . . . . . . . . . . . . . .
+
+31
+
+1.12 Raycasting na trojuholníkovej sieti . . . . . . . . . . . . . . . . . . . .
+
+32
+
+2.1
+
+Typy vstupu pre vodiaceho agenta
+
+. . . . . . . . . . . . . . . . . . . .
+
+35
+
+3.1
+
+Tok dát medzi hrou a agentom . . . . . . . . . . . . . . . . . . . . . . .
+
+39
+
+3.2
+
+Trackmania ako prostredie pre agenta . . . . . . . . . . . . . . . . . . .
+
+40
+
+3.3
+
+Samostatné bloky v editore
+
+. . . . . . . . . . . . . . . . . . . . . . . .
+
+43
+
+3.4
+
+Mapa zložená z blokov . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+43
+
+3.5
+
+Prejazd trate ako trajektória . . . . . . . . . . . . . . . . . . . . . . . .
+
+44
+
+3.6
+
+Povrchy a výškové bloky . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+45
+
+3.7
+
+Mesh reprezentácia blokov . . . . . . . . . . . . . . . . . . . . . . . . .
+
+45
+
+3.8
+
+Zložená mesh mapa . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+46
+
+3.9
+
+Pohľad hry a virtuálna reprezentácia . . . . . . . . . . . . . . . . . . .
+
+47
+
+3.10 Diskrétne a spojité ovládanie . . . . . . . . . . . . . . . . . . . . . . . .
+
+48
+
+4.1
+
+Porovnanie architektúr siete . . . . . . . . . . . . . . . . . . . . . . . .
+
+53
+
+4.2
+
+Supervised loss mapových špecialistov . . . . . . . . . . . . . . . . . . .
+
+54
+
+4.3
+
+Trajektórie učiteľa a supervised agenta . . . . . . . . . . . . . . . . . .
+
+55
+
+4.4
+
+Progress pri reward sweep-e . . . . . . . . . . . . . . . . . . . . . . . .
+
+59
+
+4.5
+
+Najlepší čas pri reward sweep-e . . . . . . . . . . . . . . . . . . . . . .
+
+59
+
+4.6
+
+Stabilita a čas reward sweep-u . . . . . . . . . . . . . . . . . . . . . . .
+
+60
+
+xi
+
+4.7
+
+Detail tréningu vybraného ranking tuple . . . . . . . . . . . . . . . . .
+
+61
+
+4.8
+
+Čas populácie vybraného ranking tuple . . . . . . . . . . . . . . . . . .
+
+61
+
+4.9
+
+Detail tréningu bezpečnejšieho ranking tuple . . . . . . . . . . . . . . .
+
+62
+
+4.10 Čas populácie bezpečnejšieho ranking tuple . . . . . . . . . . . . . . . .
+
+62
+
+4.11 RL progress porovnanie
+
+. . . . . . . . . . . . . . . . . . . . . . . . . .
+
+64
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+64
+
+4.13 NSGA-II diagnostika . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+66
+
+4.14 Selekčný tlak GA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+68
+
+4.15 Mutácia GA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+69
+
+4.16 Roly mutačných režimov . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+69
+
+4.17 Elite cache pri variabilnom ticku . . . . . . . . . . . . . . . . . . . . . .
+
+71
+
+4.18 Pokles mutácie po prvom finishi . . . . . . . . . . . . . . . . . . . . . .
+
+72
+
+4.19 Supervised-seeded progress . . . . . . . . . . . . . . . . . . . . . . . . .
+
+73
+
+4.20 Supervised-seeded najlepší čas . . . . . . . . . . . . . . . . . . . . . . .
+
+74
+
+4.12 Výsledky RL epizód
+
+xii
+
+Zoznam tabuliek
+2.1
+
+Prehľad vybraných súvisiacich prác . . . . . . . . . . . . . . . . . . . .
+
+37
+
+3.1
+
+Orientačný rozsah programovej časti . . . . . . . . . . . . . . . . . . .
+
+41
+
+4.1
+
+Porovnanie ranking tuple . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+58
+
+xiii
+
+xiv
+
+Úvod
+Tu pôjde úvod práce.
+
+Motivácia
+Ciele práce
+Štruktúra práce
+
+1
+
+2
+
+Úvod
+
+Kapitola 1
+Teoretické východiská
+Táto kapitola zavádza pojmy, ktoré budú použité v ďalších častiach práce. Cieľom ešte
+nie je opisovať konkrétnu implementáciu agenta ani výsledky experimentov. Najprv potrebujeme spoločný slovník: čo je agent, prostredie, pozorovanie, akcia, politika správania sa agenta, odmena, neurónová sieť a optimalizačný algoritmus. Až potom má
+zmysel ukázať, ako sa tieto pojmy spájajú v konkrétnom riešení autonómneho vodiča.
+Teoretická časť je preto písaná od všeobecného k špecifickejšiemu. Najprv sa pozrieme na umelú inteligenciu ako na problém rozhodovania v prostredí. Následne zavedieme formálny model agenta a jeho politiky správania sa. Na tento základ potom
+nadviaže hodnotenie správania, neurónové siete a metódy učenia, ktoré hľadajú vhodné
+parametre rozhodovacej funkcie.
+
+1.1
+
+Umelá inteligencia a autonómne rozhodovanie
+
+Umelá inteligencia je široký pojem a v rôznych obdobiach sa na ňu kládol iný dôraz.
+Historicky sa často spájala s otázkou, či stroj dokáže prejavovať správanie, ktoré by
+sme u človeka označili za inteligentné [38]. Pre potreby tejto práce je však užitočnejší
+praktickejší pohľad: inteligentný systém budeme chápať ako systém, ktorý vníma svoje
+prostredie a volí akcie tak, aby dosahoval zadaný cieľ. Podobne definujú inteligentného
+agenta aj Russell a Norvig, ktorí zdôrazňujú dvojicu vnímanie prostredia a konanie v
+prostredí [30].
+Riadenie ako sekvenčné rozhodovanie. Tento pohľad je vhodný najmä pri autonómnom riadení. Agent nemusí mať vedomie ani rozumieť svetu tak ako človek. Stačí,
+aby mal informácie o aktuálnej situácii, vedel zvoliť akciu a jeho správanie bolo možné
+hodnotiť podľa toho, či sa približuje k cieľu. Pri riadení vozidla môže byť cieľom napríklad bezpečne pokračovať po ceste, dostať sa do cieľa alebo prejsť trať za čo najkratší
+čas. Dôležité je, že agent nerieši jeden izolovaný výpočet. Rozhoduje sa postupne a
+
+3
+
+4
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+každá jeho akcia ovplyvní situáciu, v ktorej sa bude rozhodovať neskôr.
+Pravidlový systém a učiaci sa systém. Z tohto dôvodu je vhodné odlíšiť pravidlový systém od systému, ktorý sa učí. Pravidlový systém má správanie ručne opísané
+vopred. Autor systému doň zapíše podmienky a reakcie, napríklad čo má agent urobiť,
+ak sa pred ním nachádza prekážka. Takýto prístup môže byť čitateľný a dobre kontrolovateľný, ale pri zložitejšom prostredí môže byť krehký. Systém učený zo skúsenosti
+má namiesto pevne napísaných pravidiel parametre, ktoré sa menia podľa dát alebo
+podľa hodnotenia správania. Výhodou je, že takéto správanie nemusí byť celé ručne
+navrhnuté. Nevýhodou je, že potrebujeme vhodný spôsob učenia a vhodné hodnotenie,
+inak sa systém môže naučiť niečo iné, než sme zamýšľali.
+Autonómne rozhodovanie je preto prirodzene sekvenčný problém. Agent v čase
+pozoruje prostredie, zvolí akciu, prostredie sa zmení a proces pokračuje. Rovnaká akcia
+nemusí mať vždy rovnaký význam, pretože závisí od stavu, v ktorom bola vykonaná.
+V riadiacich úlohách je táto vlastnosť obzvlášť výrazná. Jemná korekcia smeru môže
+byť pri nízkej rýchlosti bezpečná, ale pri vysokej rýchlosti môže zásadne zmeniť budúcu
+trajektóriu. Už na tejto úrovni teda vzniká hlavná otázka práce: ako nájsť rozhodovaciu
+funkciu, ktorá v každom kroku z dostupných informácií vyberie vhodnú akciu.
+
+1.2
+
+Agent, prostredie a politika správania sa agenta
+
+Základný model sekvenčného rozhodovania pozostáva z agenta a prostredia. Prostredie
+označuje časť sveta, v ktorej sa agent nachádza a ktorú môže svojimi akciami ovplyvňovať. Agent je systém, ktorý z prostredia získava informácie a na ich základe volí
+akcie. Tento opis je zámerne všeobecný. Agentom môže byť robot, program ovládajúci
+postavu v hre, model obchodujúci na trhu alebo vodič vo virtuálnom pretekárskom
+prostredí.
+Stav, pozorovanie a akcia. V diskrétnom čase môžeme interakciu zapísať nasledovne. V kroku t sa prostredie nachádza v stave
+st ∈ S,
+kde S je množina všetkých možných stavov. Agent nemusí mať prístup k celému skutočnému stavu. Často dostáva iba pozorovanie
+ot ∈ O,
+kde O je množina pozorovaní. Na základe tohto pozorovania zvolí akciu
+at ∈ A,
+
+1.2. AGENT, PROSTREDIE A POLITIKA SPRÁVANIA SA AGENTA
+
+5
+
+kde A je množina akcií, ktoré môže agent vykonať. Prostredie potom prejde do nového
+stavu. V stochastickom prípade tento prechod opisujeme pravdepodobnosťou
+st+1 ∼ P (· | st , at ),
+teda nový stav sa vyberá podľa prechodového rozdelenia podmieneného aktuálnym
+stavom a akciou. V deterministickom prípade môžeme prechod zapísať jednoduchšie
+ako
+st+1 = f (st , at ).
+Rovnakú myšlienku môžeme čítať aj ako prechod zo stavu st do stavu st+1 po vykonaní
+akcie at :
+a
+
+t
+st+1 .
+st −→
+
+Prvý zápis zdôrazňuje, že nasledujúci stav je výsledkom funkcie prechodu, druhý zápis
+zdôrazňuje samotný krok interakcie. Takýto formalizmus je základom mnohých modelov učenia posilňovaním a sekvenčného rozhodovania [34].
+Rozdiel medzi stavom a pozorovaním je dôležitý. Stav je úplný opis prostredia z
+pohľadu teoretického modelu. Pozorovanie je to, čo agent skutočne dostane ako vstup.
+Ak agent vidí celý stav, môžeme uvažovať ot = st . V mnohých praktických úlohách však
+agent vidí iba časť sveta alebo spracovanú reprezentáciu. Potom sa musí rozhodovať z
+neúplnej informácie. To neznamená, že úloha je neriešiteľná, ale znamená to, že kvalita
+reprezentácie pozorovania je súčasťou návrhu celého systému.
+Epizóda a trajektória. Jedna postupnosť interakcií agenta s prostredím sa nazýva
+epizóda. Epizóda začína v počiatočnom stave a končí po splnení koncovej podmienky,
+napríklad po dosiahnutí cieľa, po zlyhaní alebo po vypršaní časového limitu. Postupnosť
+stavov, pozorovaní a akcií počas epizódy označujeme ako trajektóriu. Práve trajektória
+je pri riadiacich úlohách často dôležitejšia než jedna samostatná akcia, pretože ukazuje,
+ako sa rozhodnutia agenta hromadili v čase.
+Politika správania sa agenta. Správanie agenta opisuje politika správania sa agenta
+(angl. policy). V ďalšom texte budeme používať aj kratší pojem politika. Politika je
+pravidlo, podľa ktorého agent vyberá akciu na základe dostupnej informácie. V deterministickom prípade má politika tvar
+at = π(ot ),
+teda pre každé pozorovanie určí jednu konkrétnu akciu. V stochastickom prípade politika neurčuje priamo akciu, ale pravdepodobnostné rozdelenie nad akciami:
+π(a | o) = Pr(At = a | Ot = o).
+
+6
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+Stochastická politika teda hovorí, s akou pravdepodobnosťou agent vyberie akciu a,
+keď pozoruje o. Takýto zápis je bežný najmä v učení posilňovaním, kde náhodnosť
+politiky pomáha prieskumu prostredia [34].
+Akčný priestor. Akčný priestor môže byť diskrétny alebo spojitý. Pri diskrétnom
+akčnom priestore si agent vyberá z konečnej množiny možností, napríklad vľavo, vpravo
+alebo nič. Pri spojitom akčnom priestore môže mať akcia hodnotu z intervalu, napríklad
+mieru natočenia volantu. V niektorých úlohách sa tieto typy kombinujú. Dôležité je,
+že politika musí produkovať akcie, ktoré sa dajú v prostredí skutočne vykonať. Ak
+je výstup modelu mimo povoleného rozsahu, musí byť buď vhodne obmedzený, alebo
+samotná politika musí byť navrhnutá tak, aby neplatné akcie nevytvárala.
+Typ prostredia a časovanie. Prostredie môže byť deterministické alebo nedeterministické. V deterministickom prostredí rovnaký stav a rovnaká akcia vždy vedú k
+rovnakému ďalšiemu stavu. V nedeterministickom prostredí môže do výsledku vstupovať náhodnosť, šum, neúplné pozorovanie alebo vonkajšie vplyvy. Podobne môžeme
+rozlišovať synchrónne a asynchrónne prostredia. V synchrónnom prostredí sa rozhodovanie deje v pravidelných krokoch. V asynchrónnom alebo realtime prostredí môže
+mať čas medzi rozhodnutiami rôznu dĺžku a rovnaká akcia môže pôsobiť dlhšie alebo
+kratšie. Pri riadení je preto časovanie súčasťou problému, nie iba technický detail.
+Uzavretá slučka riadenia. Napokon je dôležité rozlíšiť otvorenú a uzavretú slučku
+riadenia. Pri otvorenej slučke model iba predikuje akcie pre vopred dané vstupy. Pri
+uzavretej slučke riadenia (angl. closed-loop control ) sa jeho vlastné akcie premietajú
+do budúcich stavov a pozorovaní. Malá chyba sa preto nemusí prejaviť hneď, ale môže
+posunúť agenta do situácie, v ktorej sa bude rozhodovať horšie. Tento fakt bude neskôr
+dôležitý pri učení s učiteľom a učení napodobňovaním: dobrá predikcia na uložených
+dátach ešte automaticky neznamená dobré samostatné správanie v prostredí [29].
+Základnú uzavretú slučku medzi agentom a prostredím schematicky znázorňuje obrázok 1.1. Schéma nadväzuje na všeobecný model inteligentného agenta, ktorý vníma
+prostredie cez senzory a pôsobí naň pomocou akčných členov [30].
+
+1.2. AGENT, PROSTREDIE A POLITIKA SPRÁVANIA SA AGENTA
+
+Agent
+
+7
+
+Prostredie
+pozorovanie ot
+odmena rt
+
+senzory
+
+st + 1
+
+politika
+πθ
+
+at
+
+akcia
+at
+
+aktuátory
+
+st
+
+Obr. 1.1: Základná interakcia agenta s prostredím. Senzory sprostredkujú agentovi
+pozorovanie a odmenu, politika správania vyberá akciu a akčné členy ju prenášajú späť
+do prostredia. V prostredí sa akcia prejaví prechodom zo stavu st do ďalšieho stavu
+st+1 . Schéma vychádza zo všeobecného modelu agenta a prostredia u Russella a Norviga
+[30].
+
+8
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+1.3
+
+Hodnotenie správania agenta
+
+V predchádzajúcej časti sme opísali agenta ako systém, ktorý pozoruje prostredie a
+vyberá akcie. Samotný opis rozhodovacieho cyklu však ešte nehovorí, ktoré správanie
+je dobré a ktoré zlé. Ak chceme agenta učiť alebo porovnávať viacerých kandidátov,
+potrebujeme pravidlo, ktoré správanie ohodnotí. Bez takéhoto hodnotenia by sme vedeli
+iba zaznamenať, čo agent urobil, ale nevedeli by sme rozhodnúť, či sa zlepšil.
+V sekvenčných úlohách nie je hodnotenie vždy priamočiare. Jedna akcia môže vyzerať lokálne správne, ale po niekoľkých krokoch viesť k horšej trajektórii. Naopak,
+akcia, ktorá sa v jednom okamihu javí ako nevýhodná, môže byť súčasťou dlhodobo
+dobrého správania. Hodnotenie agenta preto zvyčajne nehodnotí iba jeden okamih, ale
+celú postupnosť rozhodnutí.
+Odmena a návrat epizódy. V učení posilňovaním sa spätná väzba často zapisuje
+pomocou odmeny (angl. reward ). Odmena je číselná hodnota, ktorú agent získa za stav,
+akciu alebo prechod medzi stavmi. Pre jeden krok môžeme okamžitú odmenu zapísať
+ako
+rt = R(st , at , st+1 ),
+kde rt je odmena v čase t, st je aktuálny stav, at vykonaná akcia a st+1 nový stav
+prostredia. Funkcia R teda vyjadruje, ako hodnotíme konkrétny prechod v prostredí
+[34].
+Keďže agent koná počas celej epizódy, zaujíma nás aj súčet budúcich odmien. Tento
+súčet sa nazýva návrat (angl. return). Pre konečnú epizódu dĺžky T ho môžeme zapísať
+napríklad ako
+Gt =
+
+TX
+−t−1
+
+γ k rt+k ,
+
+k=0
+
+kde Gt je návrat od času t, rt+k sú budúce odmeny a γ ∈ [0, 1] je diskontný faktor.
+Diskontný faktor určuje, akú váhu majú budúce odmeny oproti okamžitej odmene.
+Ak je γ blízke nule, agent uprednostňuje krátkodobý zisk. Ak je γ blízke jednej, väčší
+význam majú aj neskoršie dôsledky rozhodnutí [34].
+Optimalizačný cieľ. Ak máme definované hodnotenie správania, učenie agenta môžeme zapísať ako optimalizačný problém. Cieľom je nájsť takú politiku správania sa
+agenta, ktorá dosahuje čo najvyššie očakávané hodnotenie. Formálne môžeme písať
+π ∗ = arg max J(π),
+π
+
+kde π ∗ je optimálna politika, π je kandidátna politika a J(π) je funkcia, ktorá priraďuje
+politike jej očakávanú kvalitu. V učení posilňovaním môže byť J(π) očakávaný návrat.
+
+1.3. HODNOTENIE SPRÁVANIA AGENTA
+
+9
+
+V iných optimalizačných prístupoch môže ísť o inú funkciu, ktorá hodnotí výslednú
+trajektóriu alebo celé správanie kandidáta.
+Táto formulácia je dôležitá, pretože oddeľuje dve veci. Prvá otázka je, ako správanie
+meriame. Druhá otázka je, akým algoritmom hľadáme politiku, ktorá toto meranie
+maximalizuje. Ak je hodnotenie zle navrhnuté, ani veľmi silný optimalizačný algoritmus
+nemusí nájsť správanie, ktoré naozaj chceme.
+Odmena, hodnotenie vhodnosti a stratová funkcia. Rôzne metódy strojového
+učenia používajú pre hodnotenie podobnú myšlienku, ale odlišný jazyk. V učení posilňovaním hovoríme o odmene a návrate. V genetických algoritmoch sa často používa
+pojem hodnotenie vhodnosti kandidáta (angl. fitness). Kandidátom môže byť napríklad
+konkrétna politika alebo sada jej parametrov. Ak označíme trajektóriu agenta ako
+τ = (s0 , a0 , s1 , a1 , . . . , sT ),
+potom fitness môžeme chápať ako funkciu
+F (τ ),
+ktorá celej trajektórii priradí jedno hodnotenie.
+Pri učení s učiteľom sa naopak častejšie minimalizuje stratová funkcia (angl. loss).
+Stratová funkcia meria rozdiel medzi výstupom modelu a požadovaným cieľom v dátach. Kým odmena alebo fitness býva formulovaná tak, aby väčšia hodnota znamenala
+lepšie správanie, stratová funkcia sa zvyčajne minimalizuje. Napriek rozdielnemu znamienku ide stále o rovnaký typ otázky: ako číselne vyjadriť, že jeden kandidát je lepší
+než iný.
+Jedno číslo a viac cieľov. Ak je hodnotenie vyjadrené jedným číslom, porovnávanie
+agentov je jednoduché. Kandidát s vyššou hodnotou je lepší, kandidát s nižšou hodnotou je horší. To je praktické pre optimalizačné algoritmy, ktoré potrebujú jedincov
+zoradiť, vybrať najlepších alebo vypočítať gradient.
+Problém vznikne vtedy, keď správanie nechceme hodnotiť iba jednou vlastnosťou.
+V riadiacich úlohách môže agent sledovať viac cieľov naraz: má sa dostať do cieľa,
+má byť rýchly, má byť stabilný a nemá riskovať nežiaduce stavy. Tieto ciele sa môžu
+navzájom biť. Rýchle správanie môže byť riskantnejšie a bezpečné správanie môže byť
+pomalšie.
+Jedna možnosť je spojiť viac metrík do jedného skalárneho hodnotenia. Ak máme
+metriky m1 , m2 , . . . , mn , môžeme ich normalizovať a zapísať napríklad
+S=
+
+n
+X
+i=1
+
+wi mi ,
+
+10
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+kde S je výsledné skalárne skóre a wi sú váhy jednotlivých metrík. Pri vhodnom návrhu môžu váhy vyjadrovať priority. Niekedy sa priority dajú zosilniť aj tak, že normalizované metriky násobíme veľkými rozdielnymi koeficientmi, napríklad mocninami
+desiatky. Takéto riešenie je však citlivé na voľbu váh. Ak váhy nevyjadrujú skutočnú
+prioritu cieľov, agent môže optimalizovať nesprávny kompromis.
+Lexikografické porovnávanie. Druhá možnosť je nepremiešať všetky ciele do jedného čísla, ale porovnávať ich v pevnom poradí priorít. Takýto prístup sa nazýva lexikografické porovnávanie a patrí medzi známe spôsoby práce s viacerými kritériami [9].
+Namiesto skaláru priradíme kandidátovi vektor metrík
+m(τ ) = (m1 (τ ), m2 (τ ), . . . , mn (τ )).
+Dve trajektórie potom porovnávame od prvej metriky. Ak sa líšia v m1 , rozhoduje m1 .
+Ak sú v prvej metrike rovnaké, pokračujeme druhou metrikou. Až keď sú rovnaké aj v
+nej, rozhoduje ďalšia metrika.
+Výhodou lexikografického poradia je, že priority sú čitateľné. Nehovoríme, že jedna
+metrika má nejakú nejasnú číselnú váhu voči druhej. Hovoríme, že prvá metrika je
+dôležitejšia a druhá rozhoduje až vtedy, keď prvá nerozlíši kandidátov. Nevýhodou je,
+že poradie priorít musíme zvoliť veľmi opatrne. Ak je poradie zlé, algoritmus bude
+dôsledne optimalizovať práve toto zlé poradie.
+Rozdiel medzi spojením metrík do jedného čísla a ich lexikografickým porovnávaním
+zhŕňa obrázok 1.2.
+Skalárne hodnotenie
+
+Lexikografické poradie
+
+metrika m1
+
+w1
+
+m(τ) = (m1, m2, m3)
+
+metrika m2
+
+w2
+
+m1
+
+metrika m3
+
+w3
+
+S = ∑wimi
+i
+
+m2
+
+m3
+
+porovnaj
+postupne najprv m1
+potom m2
+potom m3
+
+1. priorita 2. priorita 3. priorita
+
+všetky ciele sa zmiešajú
+do jedného čísla
+
+ciele ostávajú oddelené,
+poradie vyjadruje priority
+
+Obr. 1.2: Dva pohľady na hodnotenie s viacerými metrikami. Skalárny prístup mieša
+metriky pomocou váh do jedného čísla, zatiaľ čo lexikografické poradie necháva metriky
+oddelené a porovnáva ich podľa pevne určených priorít.
+
+Riziko zle navrhnutého hodnotenia. Návrh hodnotenia je preto jednou z najdôležitejších častí práce s autonómnym agentom. Agent sa nesnaží naplniť náš zámer
+tak, ako ho máme v hlave. Snaží sa optimalizovať to, čo sme mu formálne zadali. Ak
+sa formálne hodnotenie líši od skutočného cieľa, agent môže nájsť správanie, ktoré je
+
+1.4. NEURÓNOVÉ SIETE AKO APROXIMÁTORY FUNKCIÍ
+
+11
+
+podľa vzorca dobré, ale prakticky nežiaduce. Tento problém sa objavuje pri návrhu
+odmien aj pri tvarovaní odmeny (angl. reward shaping), teda pri dopĺňaní pomocných
+odmien, ktoré majú uľahčiť učenie [24]. Moderná literatúra o nesprávne navrhnutých
+odmenách zároveň upozorňuje, že chyba v odmeňovaní môže viesť k správaniu, ktoré
+vyzerá optimalizované, ale neplní pôvodný zámer návrhára [17].
+Hodnotenie správania je teda iba jedna časť problému. Aby sme ho mohli optimalizovať, potrebujeme aj vhodnú reprezentáciu rozhodovacej funkcie. Politika správania
+sa agenta môže byť zapísaná rôznymi spôsobmi; v tejto práci ju budeme chápať ako
+parametrizovanú funkciu, ktorej parametre určujú, akú akciu agent zvolí pre dané pozorovanie.
+
+1.4
+
+Neurónové siete ako aproximátory funkcií
+
+V predchádzajúcej časti sme zaviedli hodnotenie správania agenta. Tým však ešte nemáme povedané, ako bude samotné správanie reprezentované. Potrebujeme funkciu,
+ktorá z pozorovania agenta vytvorí akciu. Takúto funkciu by bolo možné napísať ručne
+ako súbor pravidiel, ale pri zložitejšom riadení by počet výnimiek rýchlo rástol. V
+tejto práci preto budeme uvažovať neurónovú sieť ako parametrickú funkciu, ktorej
+parametre sa dajú učiť alebo optimalizovať.
+Neurónové siete sú výpočtové modely zložené z jednoduchých jednotiek a vrstiev.
+V modernom strojovom učení sa používajú práve preto, že dokážu reprezentovať nelineárne vzťahy medzi vstupom a výstupom [13]. Pre túto prácu nie je dôležité opisovať
+všetky typy neurónových sietí. Stačí nám viacvrstvová dopredná sieť, teda model, v
+ktorom informácia postupuje od vstupu cez skryté vrstvy až k výstupu.
+Neurón a vrstva. Základnou výpočtovou operáciou v neurónovej sieti je vážený
+súčet vstupov. Ak vstup označíme ako vektor x, jedna vrstva siete môže byť zapísaná
+ako
+h = σ(W x + b),
+kde W je matica váh, b je vektor posunov, často označovaný aj anglickým pojmom
+bias, σ je aktivačná funkcia a h je výstup vrstvy. Váhy určujú, ktoré vstupné hodnoty
+majú byť pre výpočet dôležité. Posun umožňuje vrstve meniť výstup aj vtedy, keď je
+vstup nulový. Celý výraz teda predstavuje jednu transformáciu vstupného vektora na
+nový vektor príznakov.
+Ak sa na vrstvu pozrieme po jednotlivých neurónoch, potom prvok wji matice W
+predstavuje váhu spojenia z i-tej vstupnej hodnoty do j-teho neurónu. Výstup jedného
+
+12
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+neurónu môžeme zapísať ako
+!
+hj = σ
+
+X
+
+wji xi + bj
+
+.
+
+i
+
+Tento zápis ukazuje, že konkrétne nastavenie vrstvy nie je abstraktný objekt, ale množina čísel: váh spojení a posunov neurónov. Keď tieto čísla zmeníme, zmení sa aj
+funkcia, ktorú vrstva počíta.
+Ak má vrstva viac neurónov, každý z nich počíta vlastnú kombináciu vstupov. Maticový zápis je preto praktický: namiesto samostatného opisovania každého neurónu
+vieme celú vrstvu zapísať jednou lineárnou transformáciou a jednou nelineárnou aktivačnou funkciou.
+Aktivačné funkcie. Aktivačná funkcia zavádza do siete nelinearitu. Bez nej by skladanie viacerých lineárnych vrstiev bolo stále iba jednou lineárnou transformáciou. Sieť
+by potom vedela modelovať iba jednoduché lineárne závislosti, čo je pre riadenie v
+nelineárnom prostredí príliš slabé. Medzi základné nelineárne funkcie patria napríklad
+sigmoid,
+1
+,
+1 + e−z
+ktorý výstup obmedzuje do intervalu [0, 1], ReLU,
+σ(z) =
+
+ReLU(z) = max(0, z),
+alebo hyperbolický tangens tanh(z), ktorý výstup obmedzuje do intervalu [−1, 1]. Výber aktivačnej funkcie ovplyvňuje, aké transformácie vie sieť ľahko vyjadriť a ako sa
+jej parametre počas učenia menia [13]. V tejto teoretickej časti stačí zapamätať si
+hlavne to, že aktivačné funkcie dávajú sieti schopnosť skladať jednoduché výpočty do
+nelineárnej rozhodovacej funkcie.
+
+1.4. NEURÓNOVÉ SIETE AKO APROXIMÁTORY FUNKCIÍ
+Sigmoid
+
+1.0
+
+Hyperbolický tangens
+
+výstup
+
+ReLU
+
+1.00
+
+3.0
+
+0.75
+
+0.8
+
+2.5
+
+0.50
+
+0.6
+
+0.25
+
+0.4
+
+−0.25
+
+2.0
+
+0.00
+
+1.5
+1.0
+
+−0.50
+
+0.2
+
+0.0
+−3
+
+13
+
+0.5
+
+−0.75
+
+0.0
+
+−1.00
+−2
+
+−1
+
+0
+vstup z
+σ(z) = 1 +1e −z
+
+1
+
+2
+
+3
+
+−3
+
+−2
+
+−1
+
+0
+vstup z
+
+1
+
+2
+
+3
+
+−3
+
+−2
+
+tanh(z)
+
+−1
+
+0
+vstup z
+
+1
+
+2
+
+3
+
+ReLU(z) = max(0, z)
+
+Obr. 1.3: Príklady základných aktivačných funkcií. Sigmoid obmedzuje výstup do intervalu [0, 1], hyperbolický tangens do intervalu [−1, 1] a ReLU zachováva kladné vstupy,
+zatiaľ čo záporné hodnoty potláča na nulu.
+Viacvrstvová sieť a dopredný výpočet. Viacvrstvová neurónová sieť vznikne
+tak, že výstup jednej vrstvy použijeme ako vstup ďalšej vrstvy. Dopredný výpočet
+(angl. forward pass) potom znamená postupné aplikovanie všetkých vrstiev od vstupu
+po výstup. Pri sieti s L vrstvami môžeme jej parametre označiť ako
+θ = {Wi , bi }Li=1 ,
+kde Wi a bi sú váhy a posuny i-tej vrstvy. Celú sieť potom môžeme chápať ako funkciu
+fθ , ktorej tvar je daný architektúrou a ktorej konkrétne správanie určujú parametre θ.
+Každá matica Wi obsahuje váhy spojení medzi neurónmi dvoch susedných vrstiev
+a každý vektor bi obsahuje posuny neurónov v danej vrstve. Ak architektúru siete
+zafixujeme, počet týchto hodnôt je konečný. Všetky matice a vektory preto môžeme
+formálne sploštiť do jedného dlhého vektora
+θ̃ = vec(W1 , b1 , W2 , b2 , . . . , WL , bL ) ∈ Rd ,
+kde vec označuje operáciu sploštenia parametrov do jedného vektora a d je celkový
+počet všetkých váh a posunov siete. Jedno konkrétne nastavenie siete je teda jeden bod
+vo vektorovom priestore Rd . Učenie alebo optimalizácia siete potom znamená hľadanie
+takého bodu v tomto priestore, pri ktorom sieť produkuje vhodné výstupy.
+Táto formulácia je dôležitá, pretože oddeľuje dve otázky. Prvá otázka je, aký tvar
+modelu zvolíme: koľko vrstiev, aké veľké vrstvy a aké aktivačné funkcie. Druhá otázka
+je, ako nájdeme vhodné hodnoty parametrov. Samotná neurónová sieť ešte nie je naučené správanie. Je to iba rodina funkcií, z ktorej tréning vyberá jednu konkrétnu
+funkciu.
+
+14
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+Jeden neurón
+
+Jedna vrstva
+
+x1
+x2
+
+h
+
+σ
+
+h
+
+x3
+
+h = σ(w⊤x + b)
+
+h = σ(Wx + b)
+
+Viacvrstvová sieť
+
+vstup
+
+skryté vrstvy
+
+výstup
+
+Obr. 1.4: Od jedného neurónu cez vrstvu až po viacvrstvovú doprednú sieť. Jednotlivé
+vrstvy postupne transformujú vstupný vektor na výstup, ktorý môže reprezentovať
+napríklad akciu agenta.
+
+1.4. NEURÓNOVÉ SIETE AKO APROXIMÁTORY FUNKCIÍ
+
+15
+
+Sieť ako aproximátor funkcie. Neurónové siete sú často opisované ako aproximátory funkcií. Intuitívne to znamená, že namiesto ručného zápisu neznámej funkcie
+hľadáme sieť, ktorá sa jej správa dostatočne podobne. Univerzálna aproximačná veta
+ukazuje, že dopredné siete s vhodnou nelineárnou aktivačnou funkciou dokážu za určitých podmienok aproximovať širokú triedu spojitých funkcií [5]. Tento výsledok je
+dôležitý, ale treba ho čítať opatrne.
+Univerzálna aproximácia nehovorí, že vhodnú sieť vieme ľahko nájsť. Nehovorí ani
+to, že malá sieť bude stačiť na každú úlohu, ani to, že sieť bude dobre fungovať na
+situáciách, ktoré pri učení nevidela. Hovorí iba to, že neurónová sieť má silnú reprezentačnú schopnosť. Pre praktické použitie preto stále musíme riešiť veľkosť siete, kvalitu
+dát, spôsob učenia a spôsob hodnotenia výsledného správania.
+Tento pohľad môžeme zjednodušene znázorniť ako parametrický model na obrázku 1.5. Model dostane vstupný vektor, vykoná výpočet určený svojou architektúrou
+a parametrami a vytvorí výstupný vektor. Pri riadení agenta môže byť takým vstupom
+pozorovanie a výstupom akcia.
+Parametrický model ako mapovanie vstupov na výstupy
+x1
+
+y1
+
+x2
+x3
+
+model
+
+⋅
+
+fθ
+
+⋅
+⋅
+
+y2
+⋅
+⋅
+yn
+
+xm
+vstupný vektor x
+
+výstupný vektor y
+
+Obr. 1.5: Zjednodušený pohľad na parametrický model ako funkciu, ktorá mapuje
+vstupný vektor na výstupný vektor. Z vonkajšieho pohľadu ho môžeme chápať aj ako
+čiernu skrinku, ktorej vnútorné parametre určujú výsledné mapovanie.
+
+Parametre siete ako priestor hľadania. Ak všetky váhy a posuny siete spojíme
+do jedného dlhého vektora, dostaneme bod vo vysokorozmernom priestore parametrov.
+Učenie neurónovej siete potom môžeme chápať ako hľadanie takého bodu v tomto priestore, pri ktorom sieť dáva vhodné výstupy. Pri učení s učiteľom sa vhodnosť výstupu
+meria stratovou funkciou nad dátami. Pri učení posilňovaním alebo pri evolučných
+metódach sa vhodnosť často prejaví až po tom, ako sieť riadi agenta v prostredí.
+
+16
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+Tento pohľad bude v práci užitočný najmä pri neuroevolúcii. Ak kandidátom nie je
+
+priamo jedna akcia, ale celý vektor parametrov neurónovej siete, optimalizačný algoritmus nehľadá najlepšiu akciu pre jeden stav. Hľadá celú rozhodovaciu funkciu, ktorá
+sa má správať dobre počas celej epizódy.
+Politika reprezentovaná neurónovou sieťou. Politiku správania sa agenta môžeme reprezentovať neurónovou sieťou tak, že vstupom siete je pozorovanie a výstupom
+je akcia. Formálne môžeme deterministickú politiku zapísať ako
+at = πθ (ot ),
+kde ot je pozorovanie v čase t, at je akcia zvolená agentom a θ sú parametre neurónovej
+siete. V takomto zápise je politika stále pravidlo výberu akcie, ale toto pravidlo už nie
+je ručne napísané. Je ukryté v parametroch siete.
+Tým sa problém neposúva k ručnému písaniu pravidiel, ale k hľadaniu vhodných
+hodnôt parametrov θ. Môžeme ich učiť z príkladov človeka, meniť podľa odmeny získanej v prostredí alebo vyhľadávať evolučným algoritmom. Rozdiel medzi týmito prístupmi je najmä v tom, odkiaľ berú informáciu o tom, ktoré parametre sú lepšie.
+
+1.5
+
+Techniky strojového učenia
+
+V predchádzajúcej časti sme politiku správania sa agenta opísali ako parametrickú
+funkciu. Neurónová sieť nám dáva tvar tejto funkcie, ale sama osebe ešte neurčuje, aké
+hodnoty majú mať jej parametre. Strojové učenie môžeme v tomto kontexte chápať ako
+súbor metód, ktoré tieto parametre nehľadajú ručným písaním pravidiel, ale menia ich
+podľa dát, spätnej väzby alebo hodnotenia správania. Rôzne prístupy sa líšia najmä
+tým, odkiaľ berú informáciu o tom, čo je dobrý výstup.
+Učenie s učiteľom. Učenie s učiteľom (angl. supervised learning) vychádza z dát,
+v ktorých ku každému vstupu poznáme požadovaný výstup. Takýto dataset môžeme
+zapísať ako
+D = {(xi , yi )}N
+i=1 ,
+kde xi je vstupný príklad, yi je cieľová hodnota a N je počet príkladov v datasete.
+Model fθ s parametrami θ vytvorí pre vstup xi predikciu fθ (xi ) a cieľom učenia je, aby
+sa táto predikcia čo najviac podobala cieľovej hodnote yi .
+Túto podobnosť vyjadruje stratová funkcia. Priemernú stratu na datasete môžeme
+zapísať napríklad ako
+N
+
+1 X
+ℓ(fθ (xi ), yi ),
+L(θ) =
+N i=1
+
+1.5. TECHNIKY STROJOVÉHO UČENIA
+
+17
+
+kde ℓ je strata jedného príkladu a L(θ) je celková priemerná chyba modelu. Učenie s
+učiteľom potom znamená hľadanie takých parametrov θ, ktoré túto chybu minimalizujú
+[13]. Tento prístup je prirodzený vtedy, keď máme k dispozícii dostatočne kvalitné
+dvojice vstupov a správnych výstupov.
+Učenie napodobňovaním. Učenie napodobňovaním (angl. imitation learning) je
+špeciálny prípad, v ktorom sa model učí správanie od experta. Expertom môže byť
+človek alebo iný systém, ktorý v danom prostredí vykonáva požadované akcie. V jednoduchom variante, ktorý sa nazýva behaviorálne klonovanie (angl. behavior cloning),
+zbierame demonštrácie experta a model trénujeme podobne ako pri učení s učiteľom.
+Dataset expertných ukážok môžeme zapísať ako
+N
+DE = {(oi , aE
+i )}i=1 ,
+
+kde oi je pozorovanie a aE
+i je akcia experta v tomto pozorovaní.
+V úlohách riadenia to znamená, že model sa učí mapovanie z pozorovania na akciu
+experta. Tento smer má dlhú históriu, napríklad systém ALVINN sa učil riadiť vozidlo
+z ľudských ukážok [26] a neskoršie end-to-end prístupy ukazovali podobnú myšlienku
+pri neurónových sieťach pre riadenie z obrazu [2]. Dôležité obmedzenie však spočíva v
+tom, že model sa učí najmä zo stavov, ktoré navštívil expert. Ak po spustení v uzavretej
+slučke urobí malú chybu, môže sa dostať do stavov mimo trénovacej distribúcie. Tento
+problém distribučného posunu je jednou z motivácií metód ako DAgger, ktoré postupne
+pridávajú dáta zo stavov navštívených samotným agentom [29].
+Učenie bez učiteľa. Učenie bez učiteľa (angl. unsupervised learning) pracuje s dátami, pri ktorých nemáme priamo zadaný správny výstup. Cieľom nie je naučiť sa
+konkrétne mapovanie zo vstupu na label, ale nájsť štruktúru v dátach. Môže ísť napríklad o zhlukovanie podobných príkladov, redukciu dimenzie alebo učenie skrytých
+príznakov. V tejto práci nejde o hlavný spôsob trénovania agenta, ale je užitočné ho
+spomenúť, pretože ukazuje širší kontext strojového učenia: nie všetky metódy potrebujú
+explicitné správne odpovede ku každému vstupu.
+Učenie posilňovaním. Učenie posilňovaním (angl. reinforcement learning) rieši inú
+situáciu. Agent nedostáva správnu akciu pre každý stav. Namiesto toho koná v prostredí
+a získava spätnú väzbu vo forme odmeny. Cieľom je nájsť politiku, ktorá maximalizuje
+dlhodobý návrat, teda nie iba okamžitú odmenu za jeden krok [34]. Tento prístup
+priamo zodpovedá sekvenčnému rozhodovaniu: agent skúša akcie, prostredie reaguje a
+kvalita správania sa prejaví až cez celú trajektóriu.
+Výhodou učenia posilňovaním je, že optimalizuje správanie v prostredí, nie iba
+podobnosť s uloženými príkladmi. Nevýhodou je, že učenie môže byť citlivé na návrh
+
+18
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+odmeny, množstvo potrebných interakcií a prieskum prostredia. Ak agent nedostáva
+dostatočne informatívnu spätnú väzbu, môže byť ťažké zistiť, ktoré rozhodnutia boli
+zodpovedné za neskorší úspech alebo zlyhanie.
+Genetické algoritmy. Genetický algoritmus (angl. genetic algorithm) je optimalizačná metóda inšpirovaná evolúciou. Namiesto toho, aby upravoval jeden model postupným gradientným učením, pracuje s populáciou kandidátov. Každý kandidát sa
+vyhodnotí pomocou fitness, najlepší kandidáti sa vyberú ako rodičia a z nich vzniká
+nová generácia pomocou kríženia a mutácie [12]. Tento proces sa opakuje, až kým
+populácia nenájde dostatočne dobré riešenie alebo sa nevyčerpá výpočtový rozpočet.
+Pri riadiacich úlohách môže kandidátom byť aj celá politika správania sa agenta,
+napríklad vektor parametrov neurónovej siete. Genetický algoritmus potom nevyžaduje
+gradient cez prostredie. Stačí, že vieme kandidáta spustiť, zaznamenať jeho správanie
+a priradiť mu hodnotenie. To je výhodné vtedy, keď je prostredie zložité, nediferencovateľné alebo keď chceme hodnotiť celú epizódu ako jeden výsledok.
+Spoločný pohľad na optimalizáciu politiky. Tieto prístupy sa líšia zdrojom
+spätnej väzby, ale spája ich rovnaká hlavná otázka: ako nájsť parametre politiky, ktorá
+sa bude v prostredí správať dobre. Učenie s učiteľom minimalizuje chybu voči známym
+cieľovým hodnotám. Učenie napodobňovaním sa snaží priblížiť správaniu experta. Učenie posilňovaním optimalizuje politiku cez odmenu získanú interakciou s prostredím.
+Genetický algoritmus vyhľadáva dobrých kandidátov podľa fitness hodnotenia.
+Pre túto prácu sú najdôležitejšie najmä tie prístupy, ktoré vedia hodnotiť správanie
+v prostredí alebo priamo hľadať parametre politiky: učenie posilňovaním, genetické
+algoritmy, neuroevolúcia a viackriteriálna optimalizácia.
+
+1.6
+
+Učenie posilňovaním
+
+V učení s učiteľom poznáme požadovaný výstup pre každý trénovací príklad. Pri riadení
+agenta však často nevieme povedať, aká akcia je v každom stave jednoznačne správna.
+Vieme skôr posúdiť dôsledky správania: či agent dosiahol cieľ, ako rýchlo postupoval,
+koľko riskoval alebo aký návrat získal počas epizódy. Učenie posilňovaním (angl. reinforcement learning) sa zaoberá práve takouto situáciou. Agent sa učí cez interakciu s
+prostredím a spätnú väzbu dostáva vo forme odmien [34].
+Markovov rozhodovací proces. Základný cyklus agent–prostredie sme už zaviedli
+všeobecne. V učení posilňovaním sa tento cyklus často špecializuje na Markovov rozhodovací proces, ktorý explicitne opisuje prechodové správanie prostredia, odmenu a
+
+1.6. UČENIE POSILŇOVANÍM
+
+19
+
+význam budúcich dôsledkov rozhodnutí. Formálne ho môžeme zapísať ako päticu
+M = (S, A, P, R, γ),
+kde S je množina stavov, A je množina akcií, P (s′ | s, a) je pravdepodobnosť prechodu
+do stavu s′ po vykonaní akcie a v stave s, R(s, a, s′ ) je odmena za tento prechod a
+γ ∈ [0, 1] je diskontný faktor. Oproti všeobecnému opisu v predchádzajúcej časti je tu
+dôležitá najmä Markovova vlastnosť: rozdelenie ďalšieho stavu závisí od aktuálneho
+stavu a akcie, nie od celej histórie predchádzajúcich stavov [34].
+Tento model je idealizáciou, ale je užitočný, pretože oddelí jednotlivé časti problému:
+čo agent vie urobiť, ako sa prostredie mení, akú spätnú väzbu dostáva a ako veľmi má
+brať do úvahy budúce následky aktuálnych rozhodnutí.
+Politika a návrat. Politika správania sa agenta určuje, ako agent vyberá akcie. V
+učení posilňovaním je cieľom nájsť politiku, ktorá maximalizuje očakávaný návrat.
+Návrat sme už zaviedli ako súčet budúcich odmien, často diskontovaný faktorom γ. V
+tomto kontexte môžeme optimalizačný cieľ opísať ako hľadanie parametrov politiky
+πθ , ktoré maximalizujú funkciu kvality
+max J(πθ ).
+θ
+
+Symbol θ označuje parametre politiky a J(πθ ) vyjadruje očakávanú kvalitu správania
+pri tejto politike. Dôležité je, že spätná väzba neprichádza ako správna akcia pre jeden
+stav, ale ako dôsledok celej postupnosti rozhodnutí.
+Hodnotová funkcia. Na opis kvality správania sa často používajú hodnotové funkcie. Hodnotová funkcia stavu pri politike π hovorí, aký návrat môžeme očakávať, ak
+začneme v stave s a ďalej sa budeme riadiť politikou π:
+V π (s) = Eπ [Gt | St = s].
+Podobne akčná hodnotová funkcia vyjadruje očakávaný návrat po tom, čo v stave s
+vykonáme akciu a a potom pokračujeme podľa politiky π:
+Qπ (s, a) = Eπ [Gt | St = s, At = a].
+Tieto funkcie sú dôležité preto, lebo agentovi umožňujú porovnávať nielen okamžitú
+odmenu, ale aj dlhodobejší význam stavov a akcií [34].
+Prieskum a využívanie znalostí. Pri učení posilňovaním vzniká prirodzený konflikt medzi prieskumom a využívaním znalostí. Prieskum znamená, že agent skúša akcie,
+ktorých dôsledky ešte dobre nepozná. Využívanie znalostí znamená, že agent volí akcie,
+
+20
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+ktoré sa podľa doterajšej skúsenosti javia ako dobré. Ak agent iba využíva známe správanie, môže zostať uviaznutý v lokálne dobrom riešení. Ak naopak príliš veľa skúša,
+môže sa učiť pomaly a často robiť zlé rozhodnutia. Tento konflikt patrí medzi základné
+praktické problémy učenia posilňovaním [34].
+Riedka odmena a tvarovanie odmeny. Ďalším dôležitým problémom je riedka
+odmena. Ak agent dostane významnú odmenu až na konci epizódy, napríklad iba po
+dosiahnutí cieľa, potom môže byť veľmi ťažké zistiť, ktoré predchádzajúce akcie k
+úspechu prispeli. Tento problém sa často označuje ako problém priradenia zásluhy.
+Jedným z možných riešení je tvarovanie odmeny (angl. reward shaping), teda pridanie
+pomocných odmien, ktoré majú agentovi poskytovať hustejší signál počas učenia.
+Tvarovanie odmeny však treba navrhovať opatrne. Pomocná odmena môže učenie
+výrazne zrýchliť, ale môže tiež zmeniť to, čo agent skutočne optimalizuje. Klasická
+práca Ng, Harada a Russell ukazuje, že nie každý spôsob tvarovania odmeny zachová
+optimálnu politiku pôvodného problému [24]. Preto je pri návrhu odmien dôležité rozlišovať medzi tým, čo má byť konečný cieľ, a tým, čo má byť iba pomocný signál počas
+učenia.
+Policy-gradient a actor-critic prístup. Jedna skupina metód učenia posilňovaním optimalizuje politiku priamo. Takéto metódy sa nazývajú policy-gradient metódy,
+pretože upravujú parametre politiky v smere, ktorý má zvýšiť očakávaný návrat [34].
+Všeobecne si ich môžeme predstaviť tak, že politika πθ opakovane koná v prostredí,
+získané trajektórie sa použijú na odhad zlepšenia a parametre θ sa aktualizujú.
+Actor-critic prístup kombinuje dve časti. Actor je politika, ktorá vyberá akcie. Critic
+odhaduje hodnotu stavov alebo akcií a tým pomáha actorovi zistiť, ktoré rozhodnutia
+boli výhodné. Tento pohľad je praktický najmä preto, že samotný návrat z celej epizódy
+môže byť hlučný a ťažko priraditeľný jednotlivým rozhodnutiam [34].
+PPO, SAC a TD3 v kontexte práce. V modernej literatúre existuje viacero algoritmov učenia posilňovaním, ktoré stavajú na týchto princípoch. PPO obmedzuje príliš
+veľké zmeny politiky počas aktualizácie, aby bolo učenie stabilnejšie [31]. SAC je offpolicy actor-critic metóda, ktorá do cieľa zahŕňa aj entropiu politiky a tým podporuje
+prieskum [14]. TD3 je actor-critic metóda pre spojité akcie, ktorá rieši niektoré problémy nadhodnocovania akčných hodnôt pomocou dvojice critic modelov a oneskorených
+aktualizácií politiky [11]. Praktické implementácie týchto algoritmov sú dostupné napríklad v knižnici Stable-Baselines3 [27].
+Pre túto prácu nie je potrebné odvádzať tieto algoritmy do detailov. Dôležité je,
+že predstavujú rôzne spôsoby, ako optimalizovať politiku na základe odmien získaných
+v prostredí. Neskôr ich môžeme použiť ako porovnávaciu vetvu, ale hlavná myšlienka
+
+1.7. GENETICKÉ ALGORITMY A NEUROEVOLÚCIA
+
+21
+
+ostáva rovnaká: agent sa neučí kopírovať správne akcie z dát, ale hľadá správanie, ktoré
+vedie k vyššiemu hodnoteniu.
+Učenie posilňovaním teda hľadá politiku pomocou spätnej väzby z prostredia. Stále
+však väčšinou predpokladá určitý spôsob postupnej aktualizácie politiky alebo hodnotových odhadov. Existuje aj iný pohľad: namiesto toho, aby sme politiku menili krok
+po kroku podľa odhadovaného gradientu, môžeme vytvoriť populáciu kandidátnych
+politík, každú z nich nechať konať v prostredí a vybrať tie, ktoré sa správali najlepšie.
+Tento prístup prirodzene vedie ku genetickým algoritmom a neuroevolúcii.
+
+1.7
+
+Genetické algoritmy a neuroevolúcia
+
+V predchádzajúcej časti sme opísali učenie posilňovaním ako prístup, v ktorom sa politika zlepšuje pomocou spätnej väzby z prostredia. Genetické algoritmy ponúkajú iný
+pohľad na rovnaký problém optimalizácie. Namiesto postupnej úpravy jednej politiky
+pracujú s populáciou kandidátnych riešení. Každý kandidát sa vyhodnotí, úspešnejšie
+riešenia majú väčšiu šancu ovplyvniť ďalšiu generáciu a menej úspešné riešenia postupne zanikajú. Tento proces je inšpirovaný evolúciou, ale v kontexte optimalizácie
+ide predovšetkým o všeobecný algoritmus pre prehľadávanie priestoru riešení [12].
+Populácia kandidátov. V genetickom algoritme nepracujeme iba s jedným riešením,
+ale s celou populáciou. Populáciu v generácii g môžeme zapísať ako
+(g)
+
+(g)
+
+(g)
+
+P (g) = {x1 , x2 , . . . , xM },
+(g)
+
+kde M je veľkosť populácie a xi
+
+je i-ty kandidát v generácii g. Kandidát sa často
+
+označuje aj ako jedinec. Jeho konkrétna podoba závisí od riešeného problému. Môže
+ísť o reťazec bitov, vektor čísel, sadu parametrov alebo inú reprezentáciu riešenia.
+Dôležité je, že kandidát musí byť vyhodnotiteľný. Algoritmus nemusí rozumieť vnútornému významu každého prvku kandidáta, ale musí vedieť zistiť, či je daný kandidát
+lepší alebo horší než ostatní. Tým sa genetické algoritmy líšia od metód, ktoré potrebujú priamo derivovať stratovú funkciu podľa parametrov.
+Fitness funkcia. Kvalitu kandidáta vyjadruje hodnotenie vhodnosti (angl. fitness).
+(g)
+
+Pre kandidáta xi
+
+môžeme fitness zapísať ako
+(g)
+
+F (xi ).
+Funkcia F priraďuje kandidátovi číselné hodnotenie. Vyššia hodnota zvyčajne znamená
+lepšie riešenie, hoci konkrétna interpretácia závisí od úlohy. V riadiacich úlohách môže
+fitness hodnotiť celú trajektóriu agenta, nie iba jeden izolovaný krok. To je praktické,
+pretože kvalita správania sa často ukáže až po dlhšej postupnosti rozhodnutí.
+
+22
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+Návrh fitness funkcie je rovnako dôležitý ako návrh odmeny v učení posilňovaním.
+
+Ak fitness nevyjadruje skutočný cieľ úlohy, algoritmus bude dôsledne vyberať kandidátov, ktorí sú dobrí podľa nesprávneho kritéria. Genetický algoritmus teda nerieši
+problém definície cieľa. Poskytuje spôsob, ako cieľ optimalizovať, keď ho už vieme
+vyhodnotiť.
+Obrázok 1.6 ukazuje zjednodušenú predstavu populácie. Farba štvorca tu nereprezentuje kvalitu jedinca, ale iba jeho vlastnosti alebo genotyp. Kvalitu správania vyjadruje až samostatné fitness hodnotenie nad štvorcom.
+Náhodne vytvorená populácia
+
+73 %
+
+28 %
+
+91 %
+
+44 %
+
+15 %
+
+66 %
+
+52 %
+
+84 %
+
+x1
+
+x2
+
+x3
+
+x4
+
+x5
+
+x6
+
+x7
+
+x8
+
+fitness
+
+jedinec
+
+Obr. 1.6: Inicializácia populácie genetického algoritmu.
+
+Selekcia rodičov. Po vyhodnotení populácie nasleduje výber kandidátov, ktorí budú
+slúžiť ako rodičia ďalšej generácie. Selekcia môže mať rôzne podoby. Najjednoduchšia
+predstava je vybrať najlepších kandidátov podľa fitness, ale často sa používa aj pravdepodobnostný výber, aby mali šancu aj slabší jedinci. Takýto prístup môže pomôcť
+udržať diverzitu populácie a znížiť riziko, že algoritmus príliš skoro uviazne v jednej
+oblasti priestoru riešení.
+Selekcia určuje selekčný tlak. Silný selekčný tlak rýchlo posúva populáciu k aktuálne
+najlepším riešeniam, ale môže znižovať rozmanitosť. Slabší selekčný tlak ponecháva viac
+priestoru na prieskum, ale učenie môže byť pomalšie. Tento kompromis bude neskôr
+dôležitý pri nastavovaní evolučného tréningu.
+Kríženie. Nové riešenia vznikajú z vybraných rodičov pomocou operátorov kríženia
+a mutácie. Kríženie (angl. crossover ) kombinuje časti dvoch alebo viacerých rodičov.
+Cieľom je vytvoriť potomka, ktorý môže zdediť užitočné vlastnosti z rôznych riešení. V
+zjednodušenej predstave môžeme rodičov chápať ako už vybrané jedince a výsledkom
+kríženia je nová generácia potomkov.
+
+1.7. GENETICKÉ ALGORITMY A NEUROEVOLÚCIA
+
+23
+
+Selekcia podľa hodnotenia
+vybraní rodičia
+
+vyradení jedinci
+
+91 %
+
+84 %
+
+73 %
+
+66 %
+
+52 %
+
+44 %
+
+28 %
+
+15 %
+
+x3
+
+x8
+
+x1
+
+x6
+
+x7
+
+x4
+
+x2
+
+x5
+
+Obr. 1.7: Selekcia jedincov podľa fitness hodnotenia.
+Elitizmus. Elitizmus znamená, že najlepší kandidáti z aktuálnej generácie sa prenesú
+do ďalšej generácie priamo alebo s mimoriadnou ochranou. Výhodou je, že algoritmus
+nestratí už nájdené dobré riešenia náhodnou mutáciou alebo krížením. Nevýhodou
+môže byť zníženie diverzity, ak elita príliš silno dominuje ďalším generáciám. Elitizmus
+preto zlepšuje stabilitu hľadania, ale treba ho používať s rozumnou mierou.
+Obrázok 1.8 ukazuje tieto dve myšlienky spolu. Najlepší jedinci môžu prejsť do
+ďalšej generácie priamo, zatiaľ čo zvyšok novej populácie vzniká krížením vybraných
+rodičov.
+Elitizmus a kríženie
+91 %
+
+84 %
+
+73 %
+
+66 %
+
+p3
+
+p4
+
+vybraní rodičia
+
+p1
+
+p2
+
+elitizmus
+
+x01
+
+kríženie rodičov
+
+x02
+
+x03
+
+x04
+
+x05
+
+x06
+
+nová generácia
+
+Obr. 1.8: Kríženie rodičov a elitizmus.
+
+x07
+
+x08
+
+24
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+Mutácia. Mutácia zavádza náhodnú zmenu kandidáta. V jednoduchej číselnej reprezentácii ju môžeme zapísať napríklad ako
+x′′ = x′ + ϵ,
+kde x′ je potomok pred mutáciou, x′′ je potomok po mutácii a ϵ je náhodná zmena.
+Kríženie a mutácia majú rozdielnu úlohu. Kríženie využíva už nájdené čiastkové
+riešenia, zatiaľ čo mutácia umožňuje objavovať nové oblasti priestoru riešení. Ak je
+mutácia príliš malá, populácia sa môže prestať výrazne meniť. Ak je príliš veľká, potomkovia môžu strácať dobré vlastnosti rodičov. Aj tu teda vzniká kompromis medzi
+prieskumom a jemným dolaďovaním.
+Mutácia potomkov
+
+x01
+
+x02
+
+x03
+
+x04
+
+x05
+
+x06
+
+x07
+
+x08
+
+ε = + 0.16
+
+ε = − 0.13
+
+ε = + 0.10
+
+ε = + 0.18
+
+ε = − 0.20
+
+ε = + 0.08
+
+ε = − 0.14
+
+ε = + 0.12
+
+x 00 1
+
+x 00 2
+
+x 00 3
+
+x 00 4
+
+x 00 5
+
+x 00 6
+
+x 00 7
+
+x 00 8
+
+pred
+
+po
+
+Obr. 1.9: Mutácia potomkov.
+
+Explorácia a dolaďovanie. Pri genetických algoritmoch sa často hovorí o explorácii
+a dolaďovaní. Explorácia znamená hľadanie nových oblastí priestoru riešení. Dolaďovanie znamená menšie úpravy už sľubných riešení. Veľká populácia, vyššia mutácia
+alebo slabší selekčný tlak môžu podporovať exploráciu. Menšia mutácia a silnejší výber najlepších kandidátov môžu podporovať dolaďovanie.
+Tieto pojmy sú dôležité, pretože evolučný algoritmus sa zvyčajne nespráva rovnako
+počas celého tréningu. Na začiatku môže byť výhodné skúšať veľa odlišných riešení. Neskôr, keď populácia nájde sľubnú oblasť, môže byť výhodnejšie robiť jemnejšie zmeny.
+V teoretickej rovine ide o rovnaké napätie ako pri prieskume a využívaní znalostí v
+učení posilňovaním, iba vyjadrené na úrovni populácie kandidátov.
+Neuroevolúcia. Neuroevolúcia je použitie evolučných algoritmov na neurónové siete.
+Kandidátom už nie je priamo jedna akcia ani jednoduché pravidlo, ale parametre neurónovej siete. Ak parametre siete označíme ako θ, môžeme kandidáta chápať ako
+x ≡ θ.
+
+1.7. GENETICKÉ ALGORITMY A NEUROEVOLÚCIA
+
+25
+
+V praxi sú tieto parametre uložené v maticiach váh a vektoroch posunov. Ak ich sploštíme do jedného vektora, dostaneme genóm jedinca, s ktorým môže evolučný algoritmus
+pracovať podobne ako s iným číselným kandidátom. Túto predstavu znázorňuje obrázok 1.10.
+Parametre siete ako genóm
+
+matica váh W
+
+w11
+
+w12
+
+w13
+
+⋯
+
+w1n
+
+w21
+
+w22
+
+w23
+
+⋯
+
+w2n
+
+⋮
+
+⋮
+
+⋮
+
+⋱
+
+⋮
+
+wm1
+
+wm2
+
+wm3
+
+⋯
+
+wmn
+
+vektor parametrov
+sploštenie
+
+[ w11, w12, …, w1n, w21, …, wmn ]
+
+x
+genóm
+
+x ≡ vec(W)
+
+Obr. 1.10: Parametre siete ako genóm pre neuroevolúciu.
+Vyhodnotenie kandidáta potom znamená spustiť politiku πθ , nechať ju konať v prostredí a ohodnotiť výsledné správanie. Evolučný algoritmus následne vyberá, kombinuje
+a mutuje celé politiky.
+Tento prístup je užitočný najmä vtedy, keď vieme správanie kandidáta vyhodnotiť,
+ale nechceme alebo nevieme odvodiť gradient cez celé prostredie. Neuroevolúcia sa dá
+použiť aj na zložitejšie úlohy, kde sa optimalizujú nielen váhy siete, ale aj jej štruktúra.
+Príkladom je NEAT, ktorý evolučne hľadá váhy aj topológiu neurónovej siete [33]. V
+tejto práci je dôležitá najmä základná myšlienka: parametre politiky môžu byť priamo
+kandidátom evolučného hľadania.
+Výhody a obmedzenia. Výhodou genetických algoritmov je, že nepotrebujú diferencovateľné prostredie ani presný model prechodov. Stačí, aby sme vedeli kandidáta
+vyhodnotiť. To je praktické pri úlohách, v ktorých je hodnotenie dané celou epizódou
+alebo obsahuje nespojité udalosti. Genetické algoritmy sú zároveň prirodzene populačné, takže môžu skúmať viacero odlišných riešení naraz.
+Obmedzením je počet potrebných vyhodnotení. Ak je jedno vyhodnotenie kandidáta
+drahé, evolučné hľadanie môže byť časovo náročné. Výsledok je tiež citlivý na reprezentáciu kandidáta, fitness funkciu, veľkosť populácie, mutáciu a selekčný tlak. Genetický
+algoritmus preto nie je automatická náhrada za návrh problému. Je to nástroj, ktorý
+môže dobre fungovať vtedy, keď je cieľ rozumne formulovaný a vyhodnotenie kandidátov je uskutočniteľné.
+Doteraz sme o fitness hovorili prevažne ako o jednom číselnom hodnotení. V mnohých úlohách však dobré správanie nemožno jednoducho zhrnúť jedným kritériom.
+
+26
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+Agent môže byť rýchly, ale riskantný. Môže byť bezpečný, ale pomalý. Môže dosiahnuť
+vysoký krátkodobý progres, ale neskôr zlyhať. Ak má genetický algoritmus vyberať medzi takýmito kandidátmi, musí byť jasné, či ich hodnotíme jednou výslednou hodnotou,
+pevným poradím priorít alebo množinou samostatných cieľov.
+
+1.8
+
+Viackriteriálna optimalizácia
+
+V predchádzajúcich častiach sme často predpokladali, že kvalitu kandidáta vieme vyjadriť jedným číslom. Takéto hodnotenie je praktické, pretože kandidátov možno jednoducho zoradiť. Pri riadení agenta však často nechceme iba jednu vlastnosť správania.
+Môže nás zaujímať, či agent dosiahne cieľ, ako rýchlo postupuje, či je jeho správanie
+stabilné a či sa vyhýba nebezpečným stavom. Tieto ciele nemusia byť vždy v súlade.
+Viackriteriálna optimalizácia sa zaoberá práve situáciami, v ktorých riešenie posudzujeme podľa viacerých kritérií naraz [4].
+Konflikt cieľov. Ak máme kandidátne riešenie x, jeho kvalitu môžeme opísať vektorom cieľov
+f (x) = (f1 (x), f2 (x), . . . , fk (x)),
+kde fi je i-te kritérium a k je počet kritérií. V maximalizačnom zápise chceme, aby boli
+jednotlivé hodnoty čo najvyššie. V praktických úlohách však zlepšenie jedného kritéria
+môže zhoršiť iné kritérium. Rýchlejšie správanie môže byť riskantnejšie, bezpečnejšie
+správanie môže byť pomalšie a riešenie s dobrým krátkodobým výsledkom nemusí byť
+najlepšie z dlhodobého hľadiska.
+Tento konflikt je dôležitý preto, že neexistuje vždy jedno riešenie, ktoré by bolo
+najlepšie vo všetkých kritériách. Ak také riešenie existuje, výber je jednoduchý. Ak
+neexistuje, musíme určiť, aký kompromis je pre danú úlohu prijateľný.
+Skalárna agregácia. Jedna možnosť je previesť viac kritérií na jedno skalárne skóre.
+Ak jednotlivým kritériám priradíme váhy wi , môžeme písať
+S(x) =
+
+k
+X
+
+wi fi (x),
+
+i=1
+
+kde S(x) je výsledné skóre kandidáta. Takýto prístup je jednoduchý a dobre sa používa
+v optimalizačných algoritmoch, ktoré očakávajú jednu hodnotu. Jeho slabinou je voľba
+váh. Váhy musia vyjadrovať skutočné priority a zároveň musia rešpektovať rozsahy
+jednotlivých metrík. Ak sú kritériá v odlišných mierkach, jedno kritérium môže výsledné
+skóre ovládnuť iba preto, že má väčšie číselné hodnoty.
+Skalárna agregácia preto nie je nesprávna, ale musí byť čitateľná a odôvodnená.
+Ak váhy pôsobia ako ľubovoľné konštanty bez jasnej interpretácie, výsledné správanie
+
+1.8. VIACKRITERIÁLNA OPTIMALIZÁCIA
+
+27
+
+môže byť ťažké vysvetliť. Pri agentoch je to obzvlášť citlivé, pretože optimalizačný
+algoritmus sa bude snažiť využiť presne tú funkciu, ktorú sme mu zadali.
+Lexikografické poradie. Ďalšou možnosťou je ponechať kritériá oddelené a porovnávať ich podľa pevného poradia priorít. Tento prístup sme už zaviedli pri hodnotení
+správania agenta ako lexikografické porovnávanie. Vo viackriteriálnej optimalizácii ho
+môžeme chápať ako špeciálny spôsob rozhodovania: prvé kritérium má najvyššiu prioritu, druhé rozhoduje až pri rovnosti prvého a tak ďalej [9].
+Výhodou je, že priority sú jasne vyjadrené poradím kritérií. Nevýhodou je tvrdosť
+tohto poradia. Ak prvé kritérium rozlišuje kandidátov, nižšie kritériá sa vôbec nedostanú k slovu. Lexikografické poradie je preto vhodné vtedy, keď skutočne vieme
+povedať, že jeden cieľ má prednosť pred všetkými ostatnými. Ak chceme skúmať širšiu
+množinu kompromisov, potrebujeme iný pohľad.
+Pareto dominancia. Pareto dominancia ponúka spôsob, ako porovnávať riešenia
+bez toho, aby sme museli hneď určiť jednu sadu váh alebo jedno pevné poradie priorít.
+Pre maximalizačný prípad povieme, že riešenie x dominuje riešenie y, ak je aspoň také
+dobré vo všetkých kritériách a lepšie aspoň v jednom kritériu. Zapíšeme to ako
+x ≺ y,
+ak platí
+∀i : fi (x) ≥ fi (y) a zároveň ∃j : fj (x) > fj (y).
+Prvá podmienka hovorí, že x nie je horšie ako y v žiadnom kritériu. Druhá podmienka
+hovorí, že v aspoň jednom kritériu je prísne lepšie. Ak ani jedno riešenie nedominuje
+druhé, znamená to, že každé z nich má inú výhodu a medzi nimi treba urobiť kompromis
+[4].
+Pareto fronta. Riešenia, ktoré nie sú dominované žiadnym iným riešením v množine kandidátov, tvoria Pareto frontu. Pareto fronta teda neobsahuje jedno univerzálne
+najlepšie riešenie, ale množinu kompromisov. Každý bod na fronte je v istom zmysle
+efektívny: ak chceme zlepšiť jedno kritérium, musíme zhoršiť aspoň jedno iné kritérium.
+Pre agenta je tento pohľad prirodzený. Ak hodnotíme napríklad úspešnosť, rýchlosť
+a bezpečnosť, rôzne politiky môžu predstavovať rôzne štýly správania. Jedna môže
+byť rýchla a riskantná, druhá pomalšia a stabilnejšia. Pareto fronta umožňuje tieto
+alternatívy zachytiť bez toho, aby sme ich hneď skryli do jedného čísla.
+NSGA-II. NSGA-II je známy evolučný algoritmus pre viackriteriálnu optimalizáciu.
+Používa triedenie podľa nedominovanosti, teda rozdeľuje kandidátov do frontov podľa
+toho, kto koho dominuje. Okrem toho používa mieru hustoty riešení, často označovanú
+
+28
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+ako crowding distance, aby v populácii udržiaval diverzitu riešení pozdĺž Pareto fronty
+[6].
+V kontexte evolučných algoritmov je to dôležité, pretože nechceme, aby populácia
+skončila iba pri jednom type kompromisu. Ak optimalizujeme viac cieľov, môže byť
+užitočné udržať viac odlišných riešení, ktoré reprezentujú rôzne časti fronty. NSGA-II
+preto nie je iba spôsob výberu najväčšieho čísla. Je to mechanizmus, ktorý sa snaží
+súčasne zohľadniť kvalitu riešení aj rozmanitosť kompromisov.
+Význam pre hodnotenie agenta. Viackriteriálna optimalizácia je pre autonómnych agentov dôležitá preto, že dobré správanie má zvyčajne viac rozmerov. Jedno
+číselné hodnotenie je jednoduché a praktické, ale môže zakryť konflikt medzi cieľmi.
+Lexikografické poradie dáva jasné priority, ale môže byť príliš tvrdé. Pareto prístup
+umožňuje skúmať kompromisy, ale konečný výber riešenia stále vyžaduje interpretáciu.
+Tým máme opísaný základný optimalizačný rámec správania agenta. Vieme hovoriť
+o politike, jej parametroch, hodnotení kandidátov aj o situáciách, keď jedno kritérium
+nestačí. Pri praktickom výskume však tieto pojmy potrebujú aj prostredie, v ktorom
+možno kandidátne správanie bezpečne a opakovateľne skúšať.
+
+1.9
+
+Simulácie a virtuálne prostredia
+
+Pri učení a vyhodnocovaní agentov nestačí mať iba politiku a hodnotenie. Potrebujeme
+aj prostredie, v ktorom možno politiku opakovane spustiť, pozorovať dôsledky jej akcií
+a porovnať ju s inými kandidátmi. Simulácia alebo virtuálne prostredie tu funguje ako
+kontrolovaný priestor pre experiment: agent dostáva pozorovania, vykonáva akcie a z
+prostredia vzniká trajektória spolu s metrikami, ktoré vieme zaznamenať.
+Takéto prostredia sú dôležité najmä preto, že učenie agenta prirodzene zahŕňa veľa
+zlých pokusov. V simulácii sú chyby lacné, opakovateľné a dajú sa logovať. Štandardizované prostredia typu OpenAI Gym vznikli práve preto, aby algoritmy učenia posilňovaním dostali spoločné rozhranie a porovnateľné úlohy [3]. V autonómnom riadení
+podobnú úlohu plnia simulátory, ktoré umožňujú vytvárať kontrolované scenáre pre
+tréning a vyhodnocovanie jazdných systémov [7].
+Pre túto prácu sú podstatné najmä dve vlastnosti prostredia: opakovateľnosť a
+časovanie. Pri opakovateľnosti rozlišujeme najmä deterministické a stochastické
+alebo prakticky variabilné prostredie. Ak je prostredie deterministické, rovnaký stav
+a rovnaká akcia vedú k rovnakému ďalšiemu stavu. Takýto prechod môžeme zapísať
+ako
+st+1 = fsim (st , at ),
+
+1.10. TRACKMANIA AKO PROSTREDIE PRE AGENTA
+
+29
+
+kde fsim je prechodová funkcia simulácie. Ak je prostredie stochastické alebo prakticky
+variabilné, výsledok môže závisieť od šumu, počiatočných podmienok, numeriky alebo
+časovania. Potom prechod opisujeme pravdepodobnostne:
+st+1 ∼ Psim (· | st , at ).
+Deterministické prostredie je výhodné pri ladení, pretože rovnaký experiment možno
+presnejšie zopakovať. Variabilné prostredie je náročnejšie na interpretáciu, ale lepšie
+ukazuje, či je správanie agenta krehké alebo stabilné.
+Druhou praktickou otázkou je, či prostredie beží v pevných krokoch alebo v reálnom
+čase. Z hľadiska časovania teda rozlišujeme synchrónne a realtime alebo asynchrónne prostredie. V synchrónnom prostredí agent vykoná akciu, prostredie spraví jeden
+krok a až potom vznikne ďalšie pozorovanie. V realtime alebo asynchrónnom prostredí
+môže medzi dvoma rozhodnutiami uplynúť rôzny čas. Rovnaká akcia preto nemusí mať
+rovnaký účinok, ak pôsobí dlhšie, kratšie alebo v inom okamihu fyzikálneho výpočtu.
+Pri riadiacich úlohách je táto vlastnosť dôležitá, lebo politika neovplyvňuje iba smer
+rozhodnutia, ale aj jeho načasovanie.
+
+1.10
+
+Trackmania ako prostredie pre agenta
+
+Trackmania je cieľové virtuálne prostredie tejto práce. Ide o pretekársku hru, v ktorej
+je základným cieľom prejsť trať čo najrýchlejšie [39]. V režime, ktorý je pre túto prácu
+dôležitý, nejde o priamy súboj s inými autami na trati. Rozhoduje najmä čas prejazdu
+a trajektória, ktorou sa hráč alebo agent po trati pohybuje.
+Z pohľadu teórie je Trackmania zaujímavá ako úloha sekvenčného rozhodovania
+v reálnom čase. Auto sa pohybuje priebežne a každá akcia mení stav, z ktorého sa
+bude rozhodovať v ďalšom okamihu. Rovnaký vstup môže mať iný účinok pri nízkej
+a vysokej rýchlosti, pred zákrutou a uprostred zákruty alebo pri inom načasovaní. Aj
+malá odchýlka v brzdení či natočení môže po niekoľkých sekundách znamenať inú stopu
+na trati.
+Trate v Trackmanii majú stavebnicový charakter a môžu obsahovať rôzne tvary,
+výšky alebo povrchy [37]. V tejto kapitole však tieto prvky stačí chápať iba ako vlastnosti prostredia. Podstatné je, že agent nerieši jednu izolovanú reakciu, ale celú jazdu:
+musí sa dostať do cieľa, udržať stabilnú trajektóriu a zároveň nestratiť zbytočne veľa
+času.
+Práve tento konflikt robí z pretekárskych hier užitočné prostredie pre skúmanie učiacich sa agentov. Úloha má jasne merateľný cieľ, ale dobré správanie nemožno posúdiť
+iba z jedného okamihu. Treba hodnotiť celý prejazd, jeho stabilitu, čas a schopnosť
+neopustiť použiteľnú trajektóriu [19].
+
+30
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+1.11
+
+Základné pojmy riadenia vozidla a pretekárskej
+jazdy
+
+Aj keď ide o hru, slovník jazdy ostáva podobný ako pri všeobecnom riadení vozidla.
+Pre ďalšie kapitoly nám stačí rozlíšiť pozdĺžne správanie, teda najmä zrýchľovanie a
+brzdenie, a bočné správanie, teda zatáčanie, stabilitu a pohyb v zákrute. Takéto členenie
+je bežné aj v literatúre k dynamike vozidiel [28].
+Rýchlosť, brzdenie a zatáčanie sú v texte dôležité nie ako samostatné fyzikálne
+veličiny, ale ako súčasť rozhodovania. Ak agent pridá plyn, brzdí alebo zatočí, účinok
+tejto akcie závisí od aktuálnej rýchlosti, polohy auta, natočenia a priľnavosti. Rovnaké
+zatočenie môže byť pri pomalej jazde bezpečné, ale pri vyššej rýchlosti môže viesť k
+šmyku alebo k nevhodnej polohe pred ďalšou zákrutou.
+Rovnako dôležitá je trajektória. Pretekárska stopa nie je iba čiara medzi štartom a
+cieľom, ale výsledok mnohých nadväzujúcich rozhodnutí. Dobrá stopa môže byť rýchla,
+ale riskantná; bezpečnejšia stopa môže agentovi nechať viac priestoru na korekciu, ale
+môže stáť čas. Preto sa kvalita správania pri jazde ukáže až na celom priebehu epizódy,
+nie na jednej akcii vytrhnutej z kontextu.
+
+1.12
+
+Základy počítačovej grafiky pre virtuálne senzory
+
+Virtuálne prostredie nemusí byť pre agenta reprezentované iba obrazom. Ak máme k
+dispozícii geometriu sveta, môžeme sa na okolie pýtať priamo: kde je najbližšia plocha,
+ako ďaleko je prekážka alebo aký tvar má priestor pred agentom. Pre túto prácu je
+dôležitá práve táto myšlienka. Geometrická reprezentácia umožňuje zložité prostredie
+zmeniť na menší počet čísel, ktoré opisujú priestorové vzťahy.
+Geometria virtuálneho sveta. V počítačovej grafike sa objekty často opisujú pomocou bodov, vektorov, transformácií a plôch [8]. Pre agenta nie je dôležité, aby tieto
+pojmy poznal ako človek. Dôležité je, že program s nimi vie počítať. Ak má objekt
+vlastný lokálny súradnicový systém, transformácia určuje, kde sa tento objekt nachádza vo svete. V homogénnych súradniciach možno takýto prevod zapísať napríklad
+ako
+xworld = T xlocal .
+Matica T tu reprezentuje posun, rotáciu alebo mierku objektu. Takýto zápis nie je cieľom sám o sebe; je to spôsob, ako dostať jednotlivé časti sveta do spoločného priestoru,
+v ktorom sa potom dajú hľadať vzdialenosti a prieniky.
+
+1.12. ZÁKLADY POČÍTAČOVEJ GRAFIKY PRE VIRTUÁLNE SENZORY
+
+31
+
+Trojuholníková sieť. Povrchy zložitejších objektov sa často reprezentujú ako trojuholníková sieť. Trojuholník je jednoduchá rovinná plocha a väčšie povrchy možno
+aproximovať skladaním mnohých trojuholníkov [15]. Takáto sieť môže reprezentovať
+model objektu, stenu, cestu alebo inú časť virtuálneho prostredia. Čím presnejšie sieť
+zodpovedá skutočnému tvaru objektu, tým presnejšie možno z nej počítať priestorové
+vzťahy.
+Model zobrazený ako mesh
+
+Priblíženie trojuholníkov
+
+Obr. 1.11: Trojuholníková sieť modelu Stanford Bunny a priblíženie na jej lokálnu
+štruktúru. Geometria modelu pochádza zo Stanford 3D Scanning Repository, ktorú
+spravuje Stanford University Computer Graphics Laboratory [32].
+
+Raycasting. Ak poznáme geometriu sveta, môžeme do nej vyslať lúč a hľadať jeho
+prvý prienik s povrchom. Lúč je polpriamka so začiatkom v bode o a smerom d.
+Zapíšeme ho ako
+r(t) = o + td,
+
+t ≥ 0.
+
+Parameter t určuje vzdialenosť pozdĺž lúča od jeho začiatku. Raycasting potom znamená výpočet, pri ktorom zisťujeme, či lúč pretína geometriu a ktorý prienik je najbližší.
+Pri trojuholníkovej sieti je základnou operáciou prienik lúča s jedným trojuholníkom. Algoritmus Möller–Trumbore rieši tento prienik priamo a bez potreby vopred
+ukladať rovnice rovín jednotlivých trojuholníkov [22]. Jeden takýto test je priamy
+geometrický výpočet. Pri celej sieti však výsledná rýchlosť závisí aj od počtu trojuholníkov a od toho, ako sú dáta v priestore organizované.
+
+32
+
+KAPITOLA 1. TEORETICKÉ VÝCHODISKÁ
+
+počiatok lúča
+
+pokračovanie lúča
+
+vystrelený lúč
+
+bod prieniku
+
+testovaný trojuholník
+
+Obr. 1.12: Ilustrácia lúča pretínajúceho trojuholníkovú sieť. Zvýraznenie lúča, smeru
+a prieniku je vytvorené pre túto prácu; použitá geometria modelu Stanford Bunny
+pochádza zo Stanford 3D Scanning Repository, ktorú spravuje Stanford University
+Computer Graphics Laboratory [32].
+Virtuálne senzory. Vo fyzickom svete senzor meria vlastnosť okolia. Vo virtuálnom
+prostredí môžeme podobný signál vypočítať z geometrie. Ak z jedného bodu alebo z
+okolia objektu vyšleme viac lúčov rôznymi smermi, vzdialenosti k najbližším prienikom
+vytvoria kompaktný opis priestoru pred agentom. Výhodou je, že agent nemusí spracúvať celý obraz. Namiesto množstva pixelov dostane menší a ľahšie interpretovateľný
+vektor čísel.
+Tento prístup má aj hranicu. Geometrický senzor vidí iba to, čo je v geometrickom
+modeli dostupné a dostatočne presné. Nezachytáva všetky vizuálne informácie, ktoré
+by boli prítomné v obraze, a jeho kvalita závisí od toho, ako dobre je virtuálny svet
+reprezentovaný. Pre úlohy, kde je dôležitý najmä tvar priestoru, vzdialenosť k prekážkam a poloha voči trati, však môže byť takáto reprezentácia vhodným kompromisom
+medzi informatívnosťou a jednoduchosťou vstupu.
+
+Kapitola 2
+Súvisiace práce
+Táto kapitola nadväzuje na teoretické východiská tým, že už zavedené pojmy používa pri čítaní existujúcich prác. Nejde teda o ďalší výklad agenta, prostredia alebo
+učenia, ale o porovnanie prístupov, ktoré riešia podobné otázky: ako sa v hrách navrhuje správanie, ako vodiaci agent vníma svet, ako sa trénuje pretekárska politika a
+aké obmedzenia tieto prístupy prinášajú pre realtime úlohu typu Trackmania.
+Cieľom kapitoly nie je zostaviť čo najdlhší zoznam projektov. Dôležité je pri každom
+smere určiť, čo robí dobre, kde má limit vzhľadom na našu úlohu a akú motiváciu z
+neho možno preniesť ďalej. Osobitne nás zaujíma napätie medzi obrazovým vstupom,
+ručne navrhnutými reprezentáciami, učením z demonštrácií, učením posilňovaním a
+praktickou potrebou rýchleho a čitateľného vyhodnocovania správania agenta.
+
+2.1
+
+Umelá inteligencia v hrách: od pravidiel k učeniu
+
+Hry sú dlhodobo prirodzeným prostredím pre výskum aj praktické použitie umelej
+inteligencie. Yannakakis a Togelius upozorňujú, že AI v hrách nemá iba jednu úlohu:
+môže hrať hru, generovať obsah, modelovať hráča alebo vytvárať správanie, ktoré je
+pre človeka zaujímavé [42]. Pre našu prácu je dôležitý práve tento rozdiel medzi AI ako
+vedeckým agentom optimalizujúcim cieľ a AI ako súčasťou herného dizajnu.
+V praktickom hernom vývoji majú silné miesto pravidlové systémy, konečné automaty, hľadanie ciest a stromy správania (angl. behavior trees). Millington a Funge ich
+opisujú ako základné nástroje hernej AI, pretože sú čitateľné, kontrolovateľné a autor
+hry vie pomerne presne určiť, ako sa má postava alebo vozidlo správať [21]. Táto vlastnosť je pre herný dizajn výhodou, no pre našu úlohu je zároveň obmedzením: ručne
+navrhnutý vodič môže pôsobiť presvedčivo, ale sám osebe ešte nehľadá lepšiu politiku
+správania.
+Stromy správania sú dobrý príklad tohto kompromisu. Prehľad Iovina a kol.
+ukazuje, že sa používajú nielen v hrách, ale aj v robotike a ďalších oblastiach, kde treba
+
+33
+
+34
+
+KAPITOLA 2. SÚVISIACE PRÁCE
+
+skladať reaktívne správanie z menších častí [16]. Ich silnou stránkou je modularita a
+interpretovateľnosť. Limitom vzhľadom na pretekárskeho agenta je, že kvalita správania
+stále závisí od človeka, ktorý jednotlivé vetvy navrhne, zoradí a ošetrí výnimky.
+Pre našu prácu z toho vyplýva opatrné poučenie. Tradičná herná AI ponúka dobrý
+spôsob, ako udržať správanie čitateľné, ale nie je odpoveďou na otázku, ako má agent
+zlepšovať jazdu z dát alebo z vlastných pokusov. Preto sa v ďalších prácach presúvame
+k reprezentácii vstupu a k metódam, ktoré správanie nemajú celé zapísané v pravidlách.
+
+2.2
+
+Reprezentácia vodiča a sveta v pretekárskych úlohách
+
+Voľba vstupu výrazne určuje, čo sa musí agent naučiť. ALVINN ukázal, že neurónová
+sieť môže z dostupných senzorových vstupov predikovať smerovanie vozidla a tým sa
+učiť riadenie z demonštrácií [26]. Prínos tejto práce je v tom, že riadenie chápe ako
+naučiteľné mapovanie zo vstupu na akciu. Pre našu úlohu je však dôležité aj to, že
+takýto model stojí na kvalite vstupnej reprezentácie a na dátach, z ktorých sa učí.
+PilotNet od NVIDIA posúva túto myšlienku smerom k obrazovému vstupu: model dostáva obraz z prednej kamery a priamo predikuje riadenie [2]. Silnou stránkou je
+menšia potreba ručne navrhnutých príznakov, pretože model sa môže naučiť vnútornú
+reprezentáciu z obrazu. Limitom pre našu prácu je, že obrazové riešenie spája percepciu
+a riadenie do jedného problému. Obraz je zároveň vysokorozmerný vstup: jedna snímka
+obsahuje podstatne viac hodnôt než kompaktná telemetria alebo geometrické senzory.
+V realtime pretekárskej úlohe to vytvára praktický tlak na nižšiu frekvenciu spracovania, menšie rozlíšenie alebo výkonnejší modelový a hardvérový základ. Ak agent urobí
+chybu, ťažšie sa oddeľuje, či problém vznikol pri rozpoznaní situácie, pri reprezentácii
+trate alebo pri samotnom rozhodnutí.
+Pri učení z demonštrácií sa objavuje aj problém správania v uzavretej slučke, ktorý
+teória už zaviedla pri učení napodobňovaním. DAgger od Rossa, Gordona a Bagnella
+je dôležitý práve preto, že ukazuje, ako sa chyba v sekvenčnom rozhodovaní môže hromadiť, keď sa agent dostane do stavov odlišných od expertných dát [29]. Pre vodiaceho
+agenta to znamená, že dobrá predikcia na uloženom datasete ešte nemusí stačiť na stabilnú jazdu po vlastnej trajektórii.
+Z týchto prác si berieme dve veci. Neurónová sieť je použiteľná ako rozhodovacia
+funkcia pre riadenie, ale výber vstupu je rovnako dôležitý ako výber modelu. Obrazový
+vstup je bohatý, no môže byť výpočtovo náročnejší a menej čitateľný. Kompaktnejší
+vstup založený na telemetrii alebo geometrii môže časť percepčného problému oddeliť
+od učenia samotnej politiky.
+
+2.3. AUTONÓMNE PRETEKANIE V SIMULÁTOROCH
+
+35
+
+Telemetria a
+
+Geometria
+
+Obraz
+
+senzory
+
+prostredia
+
+pixely, kamera, CNN
+
+rýchlosť, uhol,
+
+trať, stredová čiara,
+
+bohatý, ale
+
+vzdialenosti
+
+lokálna mapa
+
+vysokorozmerný vstup
+
+kompaktný, ale
+
+čitateľná, ale závislá
+
+navrhnutý vstup
+
+od dostupnej geometrie
+
+Obr. 2.1: Zjednodušené porovnanie typov vstupu pre vodiaceho agenta. Obrazový vstup
+používajú napríklad end-to-end prístupy ako PilotNet [2]; senzorový model je typický
+pre ALVINN a pretekárske súťaže v TORCS/SCRC [26, 18]; explicitná reprezentácia
+trate je bežná v praktickej hernej AI [35].
+
+2.3
+
+Autonómne pretekanie v simulátoroch
+
+TORCS patrí medzi známe otvorené prostredia pre výskum pretekárskych agentov
+[41]. Jeho význam pre našu prácu nespočíva v tom, že by bol totožný s Trackmania,
+ale v tom, že pretekanie ukazuje ako opakovateľnú výskumnú úlohu s definovaným
+rozhraním, senzormi a akciami. Takéto rozhranie umožňuje porovnávať prístupy bez
+toho, aby každý autor najprv riešil všetky technické detaily komerčnej hry.
+Na TORCS nadviazala Simulated Car Racing Championship, ktorá poskytla
+súťažné prostredie a porovnateľné podmienky pre rôzne vodiace algoritmy [18]. Prínos tejto súťaže je v štandardizácii vyhodnotenia. Limitom vzhľadom na našu úlohu
+je, že výskumný simulátor môže agentovi poskytovať priamo také senzory a stavové
+informácie, ktoré komerčná hra nemusí ponúkať v použiteľnej podobe.
+Game AI Pro prináša praktickejší pohľad z herného vývoja. Kapitola o reprezentácii
+pretekárskej trate pre AI vozidlá ukazuje, že samotný opis trate, stredovej čiary, cieľovej
+rýchlosti a lokálneho rozhodovania je významná časť riešenia [35]. Tento zdroj je pre
+nás zaujímavý preto, že nekladie dôraz iba na tréningový algoritmus. Pripomína, že
+dobrá reprezentácia sveta môže výrazne zjednodušiť rozhodovanie vodiča.
+Offline Mania ukazuje novší záujem o pretekárske hry ako benchmark pre učenie
+posilňovaním a offline dáta [19]. Jeho prínos je v tom, že pretekanie neberie len ako
+hernú kuriozitu, ale ako úlohu sekvenčného rozhodovania vhodnú na systematické porovnávanie. Pre našu prácu je však stále dôležitý rozdiel medzi benchmarkom alebo
+pripraveným simulátorom a cieľovým prostredím bežiacej Trackmanie, kde vstupy, časovanie a praktická dostupnosť dát prinášajú vlastné obmedzenia.
+
+36
+
+KAPITOLA 2. SÚVISIACE PRÁCE
+
+2.4
+
+Moderné úspechy: Gran Turismo Sophy a hranice
+hlbokého učenia posilňovaním
+
+Gran Turismo Sophy je najvýraznejší moderný príklad pretekárskeho agenta v komerčnej hre. Wurman a kol. ukázali systém, ktorý v hre Gran Turismo dokázal poraziť
+špičkových ľudských hráčov [40]. Predchádzajúca práca Fuchsa a kol. tiež demonštrovala nadľudský výkon v Gran Turismo Sport pomocou hlbokého učenia posilňovaním
+[10]. Pre našu prácu je dôležité, že nejde o jednoduchú hračkovú úlohu, ale o rýchle a
+dynamické pretekárske prostredie.
+Sophy zároveň ukazuje, že úspech hlbokého učenia posilňovaním nestojí iba na
+výbere algoritmu. Systém potrebuje vhodnú reprezentáciu stavu, veľké množstvo tréningu, premyslené odmeny a infraštruktúru, ktorá umožňuje opakovane vyhodnocovať
+správanie agenta. Navyše rieši aj aspekty, ktoré nie sú jadrom tejto práce, napríklad
+interakciu so súpermi, predbiehanie a pravidlá férovej jazdy.
+Preto je Sophy silná inšpirácia, ale nie priamo opakovateľný recept. Ukazuje, že
+pretekárske hry sú seriózne prostredie pre výskum autonómneho riadenia. Zároveň však
+nastavuje latku, ktorú nemožno mechanicky preniesť do menšieho projektu s odlišným
+cieľom, iným prístupom k dátam a obmedzenejšou tréningovou infraštruktúrou.
+
+2.5
+
+Trackmania a existujúce AI prístupy
+
+Najbližším praktickým príbuzným projektom je TMRL, teda TrackMania Reinforcement Learning [36]. Ide o framework pre tréning agentov v aplikáciách bežiacich v
+reálnom čase, pričom poskytuje aj pipeline pre Trackmania. Jeho prínos pre našu prácu
+je zrejmý: ukazuje, že hru možno napojiť na tréningové rozhranie a použiť ako prostredie pre učenie posilňovaním. Zároveň ho treba citovať ako softvér a dokumentáciu, nie
+ako recenzovaný článok s úplným vedeckým vyhodnotením.
+TMRL je dôležitý aj ako kontrast v otázke vstupu. Praktické Trackmania projekty
+často pracujú s obrazom, snímkami obrazovky alebo jednoduchšími senzormi odvodenými z dostupných runtime informácií. Takýto prístup je prirodzený, pretože využíva
+údaje, ktoré sa dajú z hry získať priamo. Pre náš cieľ však ostáva otvorená otázka, či
+sa časť problému nedá presunúť z obrazového vnímania do explicitnejšej geometrickej
+reprezentácie.
+OpenPlanet je v tejto kapitole relevantný iba ako praktický kontext. Dokumentácia ukazuje možnosti skriptovania a prístupu k runtime údajom v Trackmanii [25].
+To podporuje tvrdenie, že okolo hry existuje nástrojový ekosystém, cez ktorý sa dajú
+získavať informácie o stave hry. Neopisujeme tu však náš spôsob použitia, pretože ten
+patrí až do návrhu riešenia.
+
+2.5. TRACKMANIA A EXISTUJÚCE AI PRÍSTUPY
+
+37
+
+Pri Trackmania prácach treba opatrne pracovať aj s preprintmi a študentskými
+projektmi. Práce Authiera a Carcelena alebo Neindersa sú užitočné ako kontext záujmu
+o učenie agentov v Trackmanii [1, 23]. Ich limit je v tom, že nemajú rovnakú váhu ako
+recenzované články a často neposkytujú taký rozsah metodického porovnania, aký by
+bol potrebný na silné všeobecné tvrdenia.
+Historicky dôležitý je aj náš vlastný bakalársky prototyp. Ten ukázal smer ku
+geometrickej reprezentácii trate, ale ešte neposkytol dostatočne systematické vyhodnotenie robustnosti, hodnotenia správania a tréningových rozhodnutí. V súvisiacich
+prácach ho preto nechápeme ako dôkaz hotového riešenia, ale ako motiváciu presnejšie
+oddeliť otázku vnímania sveta od otázky hľadania politiky správania.
+Tabuľka 2.1: Prehľad vybraných súvisiacich prác podľa vstupu, metódy, prínosu a
+limitu vzhľadom na našu úlohu. Tabuľka neslúži ako poradie kvality, ale ako orientačná
+mapa prístupov.
+Práca/projekt
+
+Vstup
+
+Metóda
+
+Prínos
+
+Limit pre našu úlohu
+
+ALVINN [26]
+
+obraz z kamery a
+laserový diaľkomer
+
+neurónová sieť učená ukazuje, že riadenie
+z demonštrácií
+možno chápať ako
+mapovanie vstupu na
+smer jazdy
+
+starší cestný scenár;
+výsledok silno závisí
+od vstupu a
+demonštrácií
+
+PilotNet [2]
+
+obraz z prednej
+kamery
+
+CNN predikujúca
+riadenie end-to-end
+
+znižuje potrebu ručne
+navrhnutých príznakov
+
+vysokorozmerný obraz
+spája percepciu a
+riadenie do jedného
+problému
+
+SCRC/TORCS senzorový model
+[18, 41]
+trate, súperov a stavu
+auta
+
+súťažné vodiace
+algoritmy v
+simulátore
+
+štandardizované rozhranie výskumný simulátor
+a porovnateľné
+poskytuje senzory
+vyhodnotenie
+priamo; nejde o
+realtime Trackmaniu
+
+Game AI Pro
+[35]
+
+explicitná
+reprezentácia trate a
+lokálne ciele jazdy
+
+praktická herná AI a
+riadenie vozidla
+
+zdôrazňuje, že opis trate
+je podstatná časť
+problému
+
+správanie je prevažne
+navrhované človekom,
+nie učené z vlastného
+výkonu
+
+Gran Turismo
+Sophy [40]
+
+stav hry a pretekársky hlboké učenie
+kontext
+posilňovaním
+
+dokazuje silu RL v
+dynamickej komerčnej
+pretekárskej hre
+
+vyžaduje veľkú
+infraštruktúru, reward
+dizajn a rieši aj súboj
+so súpermi
+
+TMRL [36]
+
+obraz, rýchlosť a
+herné vstupy v
+Trackmanii
+
+framework pre
+realtime deep RL,
+napríklad
+SAC/REDQ
+
+ukazuje praktické
+napojenie Trackmanie na
+tréning politiky
+
+softvér a
+dokumentácia; nie
+recenzované
+experimentálne
+porovnanie
+
+Offline Mania
+[19]
+
+vopred zozbierané
+pretekárske dáta
+
+benchmark pre
+offline RL
+
+znižuje potrebu online
+interakcie s prostredím
+
+benchmark nie je
+cieľová hra a nerieši
+priamo live realtime
+napojenie
+
+38
+
+KAPITOLA 2. SÚVISIACE PRÁCE
+
+2.6
+
+Problémy existujúcich prístupov relevantné pre
+našu prácu
+
+Z porovnania príbuzných prác sa opakuje niekoľko tém. Prvou je obrazový vstup. Práce
+typu PilotNet ukazujú, že riadenie z obrazu je možné [2]. Pre realtime pretekársku
+hru je však otázne, či má byť obraz hlavným vstupom, ak môžeme časť informácie o
+svete reprezentovať kompaktnejšie. Obraz spája percepciu a riadenie, zvyšuje nároky
+na model, môže znižovať praktickú frekvenciu vyhodnocovania a sťažuje interpretáciu
+konkrétneho rozhodnutia.
+Druhou témou je závislosť na ľudských dátach. Demonštrácie sú užitočné na počiatočné učenie alebo overenie, že vstup obsahuje informáciu potrebnú na riadenie.
+Zároveň však agent napodobňuje správanie, ktoré videl, a nemusí priamo optimalizovať cieľ jazdy. DAgger ukazuje, že problém nie je iba v presnosti predikcie, ale aj v
+tom, do akých stavov sa agent dostane vlastnými akciami [29].
+Treťou témou je cena čistého učenia posilňovaním v realtime prostredí. Gran Turismo Sophy ukazuje, že pri dostatočnej infraštruktúre môže byť tento smer mimoriadne silný [40]. Pre menší projekt však zostáva praktická otázka, ako získať dostatočne
+veľa pokusov, ako navrhnúť spätnú väzbu a ako interpretovať veľké množstvo neúspešných jázd bez toho, aby sa tréning zmenil na neprehľadné ladenie odmeny.
+Štvrtou témou je ručne navrhnuté správanie. Pravidlá, automaty a stromy správania
+sú čitateľné a užitočné, ale pri plynulom pretekárskom riadení môžu byť krehké. Čím
+viac výnimiek a špeciálnych prípadov pridáme, tým viac sa riešenie mení na opis našich
+očakávaní, nie na hľadanie správania podľa merateľného cieľa.
+
+2.7
+
+Zhrnutie pre našu úlohu
+
+Súvisiace práce ukazujú, že autonómneho pretekárskeho agenta možno skúmať z viacerých strán. Tradičná herná AI ponúka čitateľné rozhodovacie štruktúry, end-to-end
+prístupy ukazujú silu neurónových sietí pri riadení, demonštračné učenie poskytuje prirodzený vstupný bod z ľudských dát a hlboké učenie posilňovaním dokáže pri veľkej
+infraštruktúre dosiahnuť veľmi silné výsledky. Trackmania projekty zároveň ukazujú,
+že samotná hra je prakticky napojiteľná na tréningový systém.
+Žiadny z týchto smerov však sám osebe neodstraňuje kombináciu obmedzení, ktorá
+je pre našu prácu najdôležitejšia: realtime prostredie, potreba rýchleho snímania, čitateľné vstupy, hodnotenie celej trajektórie a prakticky realizovateľné opakované vyhodnocovanie politík. Práve preto je zmysluplné skúmať smer, v ktorom obraz nie je
+hlavným vstupom, správanie sa hodnotí explicitnými metrikami a rozhodovacia politika
+sa hľadá nad kompaktnejšou reprezentáciou sveta.
+
+Kapitola 3
+Návrh reprezentácie prostredia a
+rozhodovacieho cyklu agenta
+V predchádzajúcich kapitolách sme ukázali, aký slovník budeme používať a aké prístupy
+existujú v príbuzných prácach. Teraz už riešime konkrétnu otázku tejto práce: ako z
+bežiacej hry Trackmania vytvoriť prostredie, v ktorom agent vie získať pozorovanie,
+rozhodnúť sa a svoju akciu aplikovať späť do hry.
+Návrh stojí na oddelení vnímania prostredia od hľadania politiky správania. Hlavným vstupom agenta nebude obraz obrazovky. Namiesto toho spojíme stav auta z hry,
+rekonštruovanú geometriu trate a výpočty nad touto geometriou. Výsledkom kapitoly
+má byť uzavretý rozhodovací cyklus: hra poskytne stav auta, náš program z neho vytvorí pozorovanie, politika vyberie akciu a táto akcia sa vráti do hry.
+
+cie ové prostredie
+
+Trackmania
+
+rozhodnutie
+
+spracovanie v na om systéme
+
+herný
+skript
+
+Python
+runtime
+
+virtuálna
+mapa
+
+pozorovanie
+
+politika
+
+akcia
+
+akcia sa prejaví v hre a vznikne nový stav
+
+Obr. 3.1: Základný tok dát medzi hrou a agentom. Hra poskytuje stav auta cez herný
+skript, Python časť systému ho spojí s virtuálnou mapou a vytvorí pozorovanie pre
+politiku správania. Vybraná akcia sa následne aplikuje späť do hry.
+Ten istý proces možno čítať aj ako prispôsobenie všeobecnej slučky agent–prostredie
+z teoretickej kapitoly. Prostredím je Trackmania, bránu zo sveta do agenta tvorí herný
+skript spolu s 3D projekciou údajov do nášho virtuálneho sveta a akcia sa do hry vracia
+cez virtuálny gamepad. Tento pohľad ukazuje obrázok 3.2.
+39
+
+40
+
+KAPITOLA 3. NÁVRH REPREZENTÁCIE PROSTREDIA
+
+Agent
+
+pozorovanie ot
+odmena rt
+
+herný skript
++ 3D projekcia
+
+Trackmania
+st + 1
+
+politika
+
+at
+akcia
+at
+
+Virtual
+Gamepad
+
+st
+
+Obr. 3.2: Prispôsobenie herného prostredia Trackmania do slučky agent–prostredie.
+Herný skript a 3D projekcia do virtuálneho sveta nahrádzajú senzorickú bránu, politika
+vyberá akciu a virtuálny gamepad ju prenáša späť do hry.
+
+3.1
+
+Nadviazanie na bakalársku prácu
+
+Diplomová práca priamo nadväzuje na bakalársku prácu Trénovanie autonómneho vozidla v hre Trackmania pomocou strojového učenia [20]. Tá mala prototypový charakter. Overovala, či sa dá Trackmania napojiť na programové prostredie, či možno mimo
+hry rekonštruovať mapu a či agent dokáže na základe takejto reprezentácie vykonávať
+jazdu.
+Najdôležitejšia myšlienka bakalárskeho prototypu bola správna: agent nemusí svet
+vnímať iba ako obraz. Už vtedy sa použili údaje z hry, export mapových blokov, virtuálna geometria trate a lúče merajúce lokálne vzdialenosti od prekážok. Tým vznikol
+prvý most medzi komerčnou hrou a výskumným prostredím pre agenta.
+Prototyp však ešte neposkytoval dostatočne presné a systematicky vyhodnotiteľné
+riešenie. Odmena a metriky jazdy neboli opísané s potrebnou presnosťou, experimenty
+slúžili skôr ako ukážka realizovateľnosti a reprezentácia okolia auta bola zjednodušená. Diplomová práca preto nemení základný smer, ale rozdeľuje ho na jasnejšie časti:
+získanie stavu z hry, rekonštrukciu virtuálneho sveta, geometrické vnímanie, tvorbu
+pozorovania, akčný priestor a rozhodovací cyklus.
+Rozdiel medzi prototypom a aktuálnou prácou vidno aj na rozsahu programovej
+časti. Tabuľka 3.1 ho neinterpretuje ako meradlo kvality, iba ako orientačný údaj o
+tom, že diplomová práca už nie je jednorazový prototyp, ale širší experimentálny a
+runtime systém. Počítané boli iba programové súbory .py, .cs, .as a .ps1; do počtu
+
+3.2. PREČO NEPOUŽIŤ OBRAZ AKO HLAVNÝ VSTUP
+
+41
+
+nepatria mapy, dáta, modely, obrázky, LaTeX, dokumentácia ani pripravené textové
+podklady.
+Tabuľka 3.1: Orientačný rozsah programovej časti bakalárskeho prototypu a aktuálnej
+diplomovej práce. Hodnoty slúžia iba ako mierka rozsahu vývoja, nie ako hodnotenie
+kvality riešenia.
+Časť systému
+
+3.2
+
+Počet súborov Riadky kódu
+
+Bakalárska práca: Python runtime a tréning
+
+7
+
+973
+
+Bakalárska práca: plugin a export mapy
+
+6
+
+506
+
+Diplomová práca: runtime jadro
+
+19
+
+10 690
+
+Diplomová práca: experimenty a tréningové skripty
+
+56
+
+15 598
+
+Diplomová práca: pluginy a export mapy
+
+30
+
+4 120
+
+Prečo nepoužiť obraz ako hlavný vstup
+
+Súvisiace práce ukázali, že riadenie z obrazu je možné a v autonómnom riadení má silné
+výsledky, napríklad pri end-to-end modeloch mapujúcich kamerový obraz na riadiacu
+akciu [2]. Pre náš cieľ však obraz nie je najvhodnejší hlavný vstup. Spája percepciu a
+rozhodovanie do jedného problému: model sa musí najskôr naučiť, čo v obraze predstavuje cestu, okraj alebo prekážku, a až potom z toho odvodiť akciu.
+Trackmania nám umožňuje zvoliť inú cestu. Trať je digitálny objekt, skladá sa
+z blokov a jej geometriu možno reprezentovať mimo hry. Stav auta možno získať z
+runtime prostredia cez herné skriptovanie; dokumentácia OpenPlanet opisuje práve
+možnosti rozšírení a prístupu k údajom hry [25]. Namiesto otázky, ako z pixelov spätne
+odvodiť svet, teda môžeme postaviť vlastnú geometrickú reprezentáciu sveta a z nej
+agentovi vypočítať kompaktné pozorovanie.
+Toto rozhodnutie nie je tvrdením, že obrazové prístupy sú všeobecne horšie. Je
+to návrhová voľba pre túto prácu. Chceme, aby vstup politiky bol menší, čitateľnejší
+a priamo spojený s jazdou. Preto najskôr rekonštruujeme prostredie a až nad touto
+reprezentáciou hľadáme politiku správania.
+
+3.3
+
+Získanie stavu z Trackmanie
+
+Na začiatku máme bežiacu hru. Trackmania interne pozná polohu auta, orientáciu,
+rýchlosť, stav vstupov a časovanie fyziky, ale tieto údaje neposkytuje ako hotové výskumné rozhranie typu prostredie–agent. Prvým krokom návrhu je preto získať z hry
+dostatočne čerstvý a použiteľný stav auta.
+
+42
+
+KAPITOLA 3. NÁVRH REPREZENTÁCIE PROSTREDIA
+Používame herný skript, ktorý priebežne číta dostupné údaje z runtime stavu hry
+
+a posiela ich do Python časti systému. Prenos je zámerne jednoduchý: skript neposiela
+obraz ani úplný stav hernej scény, ale kompaktný TCP paket s údajmi potrebnými pre
+jeden rozhodovací krok. Na tejto úrovni ešte neriešime tréning politiky. Potrebujeme
+iba spoľahlivý prenos informácií, ktoré opisujú aktuálny stav vozidla: polohu v hernom
+svete, smer auta, rýchlosť, bočnú zložku pohybu, herný čas, posledný fyzikálny krok a
+aktuálne alebo posledné vstupy.
+Algoritmus 3.1: Vysokourovňový pseudokód herného skriptu
+initialize TCP connection
+while True:
+position = get_car_position()
+direction = get_car_orientation()
+velocity = get_car_velocity()
+time = get_game_time()
+finished, crashed = get_episode_status()
+inputs = get_current_inputs()
+send_metrics_via_tcp(position, direction, velocity,
+time, finished, crashed, inputs)
+wait_until_next_frame()
+
+Samotná telemetria však nestačí. Poloha auta je iba číslo v súradnicovom systéme.
+Bez mapového kontextu nevieme, či je auto na rovinke, pred zákrutou, pri stene alebo
+mimo použiteľnej stopy. Preto sa stav auta musí vyhodnocovať voči rekonštruovanej
+trati. Až vtedy sa z údajov o aute stáva pozorovanie, ktoré má pre politiku správania
+jazdný význam. Celkový tok dát medzi hrou, skriptom, virtuálnou mapou a politikou
+správania zobrazuje obrázok 3.1.
+Algoritmus 3.2: Vysokourovňový pseudokód Python runtime časti
+load virtual map
+load policy
+initialize virtual gamepad
+while True:
+metrics = read_tcp_packet()
+update_virtual_car(metrics)
+observation = get_observation_from_projection()
+action = policy(observation)
+perform_action_via_virtual_gamepad(action)
+
+3.4. REKONŠTRUKCIA VIRTUÁLNEHO SVETA
+
+3.4
+
+43
+
+Rekonštrukcia virtuálneho sveta
+
+Údaje o aute spájame s reprezentáciou trate. Trackmania je na tento krok vhodná,
+pretože trate sú skladané z blokov a editor tratí patrí medzi základné prvky hry [39, 37].
+Pre agenta to znamená, že trať nemusíme chápať ako neznámu scénu z obrazu. Môžeme
+ju skladať ako digitálnu geometriu.
+Pri skladaní trate nepoužívame iba geometrický pohľad, ale aj jednoduchú reprezentáciu z teórie grafov. Každý stavebný blok môžeme chápať ako uzol grafu. Medzi
+dvoma uzlami vznikne hrana vtedy, keď sú príslušné bloky na mape kompatibilne napojené, teda výstup jedného bloku nadväzuje na vstup druhého. Takáto reprezentácia
+nám umožňuje overiť, či je mapa ako trať zmysluplná: validná mapa musí obsahovať
+cestu zo štartovacieho bloku do cieľového bloku. Grafová kontrola tým dopĺňa samotnú
+geometriu. Geometria hovorí, kde sa nachádza cesta v priestore, grafová štruktúra hovorí, či jednotlivé časti trate tvoria súvislú prejazdnú postupnosť.
+
+Obr. 3.3: Samostatné bloky v editore trate. Bloky ešte netvoria prejazdnú mapu; ich
+význam vzniká až správnym umiestnením a napojením.
+Ak bloky položíme v kompatibilných polohách a smeroch, vznikne validná trať.
+Obrázok 3.4 ukazuje jednoduchý príklad takejto mapy zhora. Úloha hráča alebo agenta
+je prejsť zo štartu do cieľa čo najrýchlejšie, pričom konkrétny tvar trate môže byť veľmi
+odlišný. Na obrázku 3.5 je rovnaká myšlienka doplnená o zaznamenaný prejazd; nejde
+tu ešte o hodnotenie politiky, iba o ilustráciu toho, že jazda je trajektória v prostredí.
+Bloky nemusia opisovať iba tvar cesty v rovine. Môžu niesť aj informáciu o povrchu
+a výške. Povrch je dôležitý preto, že neskôr môže meniť interpretáciu jazdy, napríklad
+mieru priľnavosti alebo riziko šmyku. Výškové bloky zase ukazujú, že svet nemusí byť
+len plochý pôdorys. Pre návrh reprezentácie prostredia je preto výhodné, ak blokový
+svet vieme preniesť do geometrie, ktorá zachováva tvar, povrch aj výškové zmeny.
+Princíp rekonštrukcie je postupný. Najprv máme zoznam blokov v mape, ich polohy a otočenia. Ku každému typu bloku priradíme mesh, teda jeho geometrický model. Následne jednotlivé bloky transformujeme do spoločného súradnicového systému
+a zložíme z nich virtuálnu mapu. Rovnaký princíp skladania objektov, transformácií a
+trojuholníkových sietí je bežný v počítačovej grafike [8, 15]. Obrázok 3.7 ukazuje rovný
+
+44
+
+KAPITOLA 3. NÁVRH REPREZENTÁCIE PROSTREDIA
+
+Obr. 3.4: Validná mapa zložená z blokov. Zelenou farbou je zvýraznená štartovacia
+čiara a červenou farbou cieľová čiara.
+
+zaznamenaný prejazd: 23.81 s
+
+rýchlos
+rýchlo
+
+pomaly
+
+Start
+
+Finish
+
+Road
+
+Edges
+
+Obr. 3.5: Ilustračný prejazd trate zhora. Krivka zobrazuje trajektóriu auta od štartu k
+cieľu; farba krivky podľa gradientu vpravo zvýrazňuje zmenu rýchlosti počas jazdy.
+
+3.4. REKONŠTRUKCIA VIRTUÁLNEHO SVETA
+
+45
+
+Obr. 3.6: Príklady povrchových a výškových variantov blokov. Rovnaký princíp skladania trate môže vytvárať mapy s rôznym povrchom aj s vertikálnou členitosťou.
+a zakrivený blok už ako zjednodušenú geometriu vhodnú na výpočty.
+
+Obr. 3.7: Mesh reprezentácia rovného a zakriveného bloku. Trojuholníková geometria
+je jednoduchšia než herný vizuál, ale stačí na výpočty prienikov a vzdialeností.
+Po transformácii viacerých blokov do spoločného súradnicového systému vznikne
+jedna zložená geometria. Obrázok 3.8 zobrazuje poskladanú mapu už ako jeden virtuálny objekt. Takáto reprezentácia je pre agenta dôležitá preto, že stav auta z hry
+potom vieme interpretovať priamo voči geometrii trate.
+Pre túto kapitolu je dôležitá najmä zhoda súradníc. Keď herný skript pošle polohu
+auta, rovnakú polohu vieme premietnuť do virtuálnej mapy. Potom už môžeme klásť
+otázky, ktoré samotná telemetria nevie zodpovedať: čo je pred autom, kde je najbližšia
+stena, ako pokračuje trať a koľko priestoru má vozidlo okolo seba.
+
+46
+
+KAPITOLA 3. NÁVRH REPREZENTÁCIE PROSTREDIA
+
+Obr. 3.8: Zložená mesh mapa vytvorená z blokovej geometrie. Jednotlivé bloky už
+netvoria izolované objekty, ale jednu súvislú scénu, voči ktorej možno vyhodnocovať
+polohu auta.
+
+3.5
+
+Geometrické vnímanie prostredia
+
+Keď sú stav auta a virtuálna mapa v rovnakom priestore, môžeme nad nimi vytvoriť
+virtuálne senzory. Základom je raycasting, teda hľadanie prieniku lúča s geometriou
+scény. Teoreticky bol tento princíp vysvetlený v kapitole o počítačovej grafike; tu nás
+zaujíma jeho návrhový význam. Lúč odpovedá na praktickú otázku: koľko priestoru
+má auto v danom smere, kým narazí na okraj trate alebo inú prekážku. Prienik lúča
+s trojuholníkovou geometriou možno počítať napríklad algoritmom Möller–Trumbore
+[22].
+Bakalársky prototyp používal jednoduchšiu predstavu: lúče vychádzali zo stredu
+auta a merali vzdialenosť k okoliu [20]. Takýto prístup je zrozumiteľný a vhodný ako
+prvý krok, ale auto v skutočnosti nie je bod. V úzkom priestore môže byť stred auta
+ešte bezpečne na ceste, zatiaľ čo okraj vozidla už zasahuje do bariéry.
+Preto v aktuálnom návrhu interpretujeme vzdialenosti ako voľný priestor vzhľadom
+na rozmery auta. Namiesto otázky „ako ďaleko je stena od stredu auta“ nás zaujíma
+otázka „koľko priestoru zostáva, kým sa pôdorys auta dotkne prekážky“ . Hodnota
+blízka nule potom neznamená iba blízku stenu v abstraktnom zmysle, ale priamo riziko
+kontaktu.
+Táto zmena je dôležitá aj pre učenie politiky. Sieť nemusí z obrazu odhadovať, kde
+je okraj cesty a či je vzdialenosť ešte bezpečná. Dostane už spracovaný geometrický
+signál, ktorý je bližšie k tomu, čo vodič potrebuje pri rozhodovaní v zákrute.
+
+3.6. VEKTOR POZOROVANIA
+
+47
+
+Obr. 3.9: Rovnaká jazdná situácia v hre a vo virtuálnej reprezentácii agenta. Ľavý
+pohľad je vizuálne bohatý screenshot z hry, pravý pohľad zvýrazňuje iba geometriu
+trate, polohu auta a virtuálne lúče potrebné na výpočet pozorovania.
+
+3.6
+
+Vektor pozorovania
+
+Pozorovanie je vstup politiky správania. V návrhu ho skladáme zo skupín príznakov,
+ktoré majú priamy význam pre riadenie. Nejde o náhodný zoznam čísel, ale o kompaktný opis situácie: kde je auto, ako sa pohybuje, ako je otočené voči trati a aký
+priestor má okolo seba.
+Prvú skupinu tvoria geometrické príznaky. Patria sem vzdialenosti alebo clearance
+hodnoty v okolí auta. Tie hovoria, či je pred autom voľný priestor, na ktorej strane sa
+blíži stena a či sa auto nedostáva do kontaktu s hranicou trate.
+Druhú skupinu tvoria informácie o orientácii voči trati. Samotné vzdialenosti nestačia, pretože auto môže byť uprostred cesty, ale otočené zlým smerom. Preto pozorovanie obsahuje aj smer pokračovania trate, rozdiel medzi smerom auta a smerom logickej
+dráhy, prípadne informáciu o zakrivení najbližšieho úseku.
+Logickú dráhu trate pritom nepočítame ako ideálnu spojitú stredovú čiaru celej
+cesty. Využívame blokovú štruktúru mapy a aproximujeme ju lomenou čiarou, ktorá
+spája prechody medzi susednými blokmi. Táto aproximácia zjednodušuje výpočet postupu po trati. Ak je auto v polohe
+p = (x, y)
+a aktuálna časť logickej dráhy je úsečka
+ℓi = qi qi+1 ,
+kde qi a qi+1 sú dva po sebe idúce prechodové body blokov, progress bod získame ako
+ortogonálnu projekciu polohy auta na túto úsečku:
+
+
+(p − qi ) · (qi+1 − qi )
+p̂ = qi + clip[0,1]
+(qi+1 − qi ).
+∥qi+1 − qi ∥2
+
+48
+
+KAPITOLA 3. NÁVRH REPREZENTÁCIE PROSTREDIA
+
+Symbol p̂ označuje bod na úsečke trate, ktorý je k autu najbližší v smere kolmice. Funkcia clip[0,1] zabezpečí, že projekcia nevybehne mimo aktuálnu úsečku. Takto získaný
+bod používame na určenie lokálneho postupu po trati a na odvodenie orientácie auta
+voči najbližšej časti logickej dráhy.
+Tretiu skupinu tvoria pohybové veličiny. Rýchlosť, bočná rýchlosť alebo zmena
+smeru pomáhajú politike rozlíšiť, či je rovnaká geometrická situácia bezpečná alebo
+riskantná. Zákruta pri nízkej rýchlosti a tá istá zákruta pri vysokej rýchlosti nie sú pre
+agenta rovnaký stav.
+Rýchlostný vektor auta preto rozkladáme vzhľadom na lokálny smer auta alebo
+trate na doprednú a bočnú zložku. Dopredná zložka hovorí, ako rýchlo sa auto pohybuje
+v smere jazdy, zatiaľ čo bočná zložka vyjadruje pohyb do strany. Ak je bočná zložka
+výrazne nenulová, auto sa nepohybuje iba smerom, ktorým je orientované. V jazdnom
+kontexte to znamená šmyk alebo bočné kĺzanie, čo je pre rozhodovanie agenta iná
+situácia než pokojná jazda po rovnakej geometrii.
+
+prejdený progress
+budúci progress
+prechod blokov
+
+progress bod
+kolmica na os
+vzdialenosti k stenám
+
+smer auta
+rýchlostný vektor
+bo ná zlo ka
+
+Obr. 3.10: Ilustrácia tvorby lokálneho pozorovania z virtuálnej geometrie trate. Hladké
+okraje predstavujú fyzickú geometriu cesty, zatiaľ čo červená a modrá lomená čiara
+predstavujú blokovú aproximáciu postupu po trati cez prechody medzi blokmi. Oranžový bod je projekcia auta na aktuálnu úsečku tejto aproximácie. Spodný detail ukazuje
+lúče merajúce vzdialenosti k okrajom trate, kolmú projekciu auta na úsečku a rozklad
+pohybu auta na doprednú a bočnú zložku.
+Štvrtou skupinou je časovanie. Trackmania beží v reálnom čase a nové údaje nemusia prichádzať v ideálne pravidelných intervaloch. Preto je užitočné, aby pozorovanie
+nieslo aj informáciu o poslednom pozorovanom fyzikálnom kroku. Nejde o predikciu
+budúcnosti, ale o kontext, v ktorom má politika interpretovať zmenu stavu.
+Neskôr sa k týmto skupinám môžu pridať výškové a povrchové príznaky. Výška je
+
+3.7. AKČNÝ PRIESTOR
+
+49
+
+dôležitá pri svahoch a kopcoch, povrch pri zmene trakcie. V tejto kapitole ich berieme
+ako rozšírenia reprezentácie prostredia, nie ako samostatné experimentálne výsledky.
+
+3.7
+
+Akčný priestor
+
+Politika po spracovaní pozorovania vyberá akciu. V našom prípade nejde o vysokú
+úroveň typu „prejdi nasledujúcu zákrutu“ , ale o vstupy podobné tým, ktoré by poslal
+hráč: plyn, brzda a zatáčanie.
+Klávesnicové ovládanie je prirodzene diskrétne. Tlačidlo je stlačené alebo nie je
+stlačené. Pri pretekárskej jazde to stačí na základné ovládanie, ale obmedzuje jemné
+korekcie smeru. Analógový ovládač umožňuje plynulejšie zatáčanie, pretože hodnota
+natočenia nemusí byť iba „vľavo“ , „vpravo“ alebo „nič“ . Pri vyššej rýchlosti alebo pri
+snahe držať presnú stopu môže byť práve táto jemnosť dôležitá.
+Voľba medzi diskrétnym a spojitým ovládaním je kompromis. Diskrétne akcie zmenšujú vyhľadávací priestor, pretože politika vyberá z menšieho počtu možností. To môže
+byť výhodné pri jednoduchšom tréningu. Zároveň však vzniká problém jemnosti: ak
+agent potrebuje zatočiť iba mierne, diskrétna klávesová akcia mu dovolí buď zatočiť
+naplno, alebo nezatočiť vôbec. Pri pretekárskej jazde sa tak môže stratiť práve malé
+korekčné správanie, ktoré rozhoduje o tom, či auto zostane v stope.
+Druhý dôvod súvisí s reprezentáciou politiky. Neurónová sieť je prirodzený aproximátor funkcie, ktorej výstupy môžu byť reálne čísla. Ak by sme takýto výstup používali
+na klávesnicové ovládanie, museli by sme ho dodatočne prahovať alebo zaokrúhľovať na
+diskrétne stlačenia kláves. Tým by sme do rozhodovania vložili umelý skok: dve veľmi
+podobné hodnoty výstupu siete by mohli po prahovaní znamenať odlišnú akciu. Preto
+v návrhu preferujeme spojité zatáčanie, ktoré lepšie zachováva informáciu vo výstupe
+modelu.
+Preto akciu zapisujeme ako jednoduchý vektor
+at = (gt , bt , ut ),
+kde gt označuje plyn, bt brzdu a ut zatáčanie v čase t. Plyn a brzda možno interpretovať ako samostatné vstupy, zatiaľ čo zatáčanie má prirodzene spojitý charakter.
+Presné technické mapovanie výstupu modelu na vstup do hry je implementačný detail,
+ale význam zostáva rovnaký: politika vytvorí číselnú akciu, ktorú možno aplikovať do
+prostredia bez zbytočného prevodu na hrubé diskrétne rozhodnutie.
+Tento nízkoúrovňový akčný priestor kladie väčší nárok na pozorovanie. Agent nedostáva hotový plán trasy ani ručne navrhnuté pravidlo pre zákrutu. Musí zo stavovogeometrického opisu situácie vybrať konkrétnu akciu v aktuálnom okamihu.
+
+50
+
+KAPITOLA 3. NÁVRH REPREZENTÁCIE PROSTREDIA
+
+Obr. 3.11: Porovnanie diskrétneho klávesnicového ovládania a spojitého analógového
+ovládača. Klávesnica prirodzene reprezentuje smer ako stlačené alebo nestlačené tlačidlo, zatiaľ čo analógový vstup umožňuje jemnejšiu hodnotu zatáčania.
+
+3.8
+
+Rozhodovací cyklus agenta
+
+Jednotlivé časti návrhu sa spájajú do uzavretej slučky. Hra beží a auto má aktuálny
+stav. Herný skript odošle údaje o aute. Python časť ich spojí s virtuálnou mapou,
+vypočíta geometrické príznaky a vytvorí pozorovanie. Politika správania z pozorovania
+vypočíta akciu a tá sa pošle späť do hry.
+Formálne môžeme tvorbu pozorovania zapísať ako
+ot = h(sTt M , G),
+kde sTt M označuje dostupný stav auta a hry v čase t, G je geometrická reprezentácia
+trate a h je spracovanie, ktoré z nich vytvorí pozorovanie. Politika potom vyberie akciu
+at = π(ot ).
+Po aplikovaní akcie hra pokračuje a vznikne nový stav
+M
+sTt+1
+= T (sTt M , at ).
+
+Funkciu T nepoznáme ako uzavretý matematický model. Predstavuje samotnú dynamiku hry, fyziku auta, časovanie a reakciu na vstupy.
+Takto formulovaný cyklus ukazuje, prečo je reprezentácia prostredia jadrom kapitoly. Neoptimalizujeme politiku priamo nad pixelmi ani nad úplným interným stavom
+hry. Optimalizovať budeme politiku nad pozorovaním, ktoré sami navrhujeme. Ak je
+pozorovanie chudobné alebo zavádzajúce, tréningový algoritmus bude hľadať riešenie
+v zle opísanom svete. Ak je pozorovanie dostatočne informatívne, problém sa sústredí
+na hľadanie parametrov politiky.
+
+3.9. ZHRNUTIE NÁVRHU
+
+3.9
+
+51
+
+Zhrnutie návrhu
+
+Kapitola postavila rozhranie medzi hrou a agentom. Máme spôsob, ako získať stav
+auta z Trackmania. Máme rekonštruovanú geometriu trate, ktorá dáva tomuto stavu
+mapový význam. Nad geometriou vieme počítať virtuálne senzory a z nich skladať
+vektor pozorovania. Máme akčný priestor, ktorý možno previesť na vstupy do hry. A
+máme uzavretý cyklus, v ktorom agent opakovane pozoruje, rozhoduje sa a koná.
+Tento návrh ešte nehovorí, ktorá politika bude jazdiť dobre. Hovorí však, v akom
+priestore bude politika konať a aké informácie dostane. Najťažšia časť sa tým presúva z
+otázky, ako agentovi sprostredkovať svet, na otázku, ako nájsť parametre rozhodovacej
+funkcie, ktorá sa v tomto svete bude správať rozumne.
+
+52
+
+KAPITOLA 3. NÁVRH REPREZENTÁCIE PROSTREDIA
+
+Kapitola 4
+Hľadanie politiky správania a tréning
+agenta
+Predchádzajúca kapitola uzavrela prvú polovicu problému: z hry vieme získať stav,
+vieme ho doplniť o geometrické pozorovanie, výstup agenta vieme preložiť na hernú
+akciu a po vykonaní akcie dostaneme nový stav. Tým vznikol rozhodovací cyklus, ale
+ešte nie vodič. Agent má oči a ruky, no nemá pravidlo, podľa ktorého by ich používal.
+V tejto kapitole hľadáme politiku správania (angl. policy), teda funkciu, ktorá z
+pozorovania vyberá akciu. V deterministickom prípade ju môžeme zapísať ako
+at = πθ (ot ),
+kde ot je pozorovanie v čase t, at je zvolená akcia a θ označuje parametre politiky.
+V našej práci je táto politika reprezentovaná neurónovou sieťou. Ako bolo uvedené
+v teoretickej časti, neurónové siete sú parametrické funkcie vhodné na aproximáciu
+zložitých nelineárnych vzťahov [13, 5]. Zároveň však platí, že výber siete ešte nerieši
+tréning. Iba mení otázku z „aké pravidlá napísať ručne“ na „aké parametre siete nájsť“ .
+Kapitola je preto vedená ako postupné vyšetrovanie. Najprv overíme, či sieť vôbec dokáže napodobniť ľudské akcie. Potom ukážeme, prečo samotné napodobňovanie
+nestačí. Následne budeme skladať hodnotenie správania agenta, vyberieme praktický
+genetický tréningový rámec, porovnáme ho s krátkou vetvou učenia posilňovaním a
+nakoniec zhrnieme tréningové vylepšenia.
+
+4.1
+
+Problém: hľadáme politiku správania
+
+Ak by bolo riadenie auta jednoduché, stačilo by napísať niekoľko pravidiel: na rovinke
+zrýchliť, pred zákrutou spomaliť a v zákrute zatočiť. Problém je v tom, že rovnaká
+lokálna situácia nemusí znamenať rovnakú akciu. Záleží na rýchlosti, orientácii auta,
+polohe voči trati, predchádzajúcej chybe, tvare ďalšej zákruty aj na tom, či cieľom je
+53
+
+54
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+bezpečný prejazd alebo čo najlepší čas. Politika preto nie je iba tabuľka reakcií. Je
+to kompaktný rozhodovací model, ktorý má z pozorovania odvodiť akciu v uzavretej
+slučke.
+Neurónovú sieť volíme ako praktickú reprezentáciu politiky. V kontexte tejto kapitoly to znamená, že celú sieť môžeme chápať ako vektor parametrov
+θ = (w1 , w2 , . . . , wn ),
+kde jednotlivé zložky predstavujú váhy a biasy siete. Tréning potom znamená hľadanie
+takého vektora θ, pri ktorom výsledná politika πθ jazdí dobre. To prirodzene prepája
+túto kapitolu s genetickými algoritmami a neuroevolúciou: ak je politika vektor parametrov, môžeme jedinca v populácii chápať ako kandidátnu neurónovú sieť [12, 33].
+Už v tomto bode je však jasné, že problém bude mať viac vrstiev. Potrebujeme
+vybrať architektúru siete, spôsob inicializácie, hodnotenie správania a tréningový algoritmus. Každé z týchto rozhodnutí môže zmeniť výsledné správanie agenta, takže nejde
+o jeden izolovaný výber, ale o reťaz navzájom prepojených rozhodnutí.
+
+4.2
+
+Výber architektúry neurónovej siete
+
+Architektúra siete nie je v tejto práci iba implementačný detail. Väčšia sieť môže mať
+vyššiu reprezentačnú kapacitu, ale zároveň zväčšuje počet parametrov, teda aj dimenziu
+priestoru, ktorý neskôr prehľadáva genetický algoritmus. Príliš malá sieť môže byť
+rýchla a lacná, no nemusí zachytiť vzťah medzi pozorovaním a akciou. Príliš veľká
+sieť môže byť teoreticky silnejšia, ale jej tréning môže byť v našom experimentálnom
+rozpočte ťažší.
+Preto sme architektúru hľadali ako kompromis medzi kapacitou, rýchlosťou inferencie a trénovateľnosťou. Ako lacný experimentálny základ sa ukázala architektúra
+32x16; ako silnejší kandidát pre kvalitnejší tréning architektúra 48x24. V oboch prípadoch ide o malé viacvrstvové perceptróny, ktoré sú dostatočne jednoduché na evolučné
+prehľadávanie, ale stále majú nelineárnu kapacitu.
+Dôležité boli aj aktivačné funkcie. V skrytých vrstvách sme porovnávali najmä
+kombinácie ReLU a hyperbolického tangensu, teda relu,relu a relu,tanh. ReLU je
+jednoduchá a bežne používaná v hlbokom učení [13]; funkcia tanh je zaujímavá tým, že
+prirodzene obmedzuje výstup do intervalu [−1, 1], čo je intuitívne blízke riadeniu typu
+zatáčania. V našich uzavretých experimentoch v zjednodušenej 2D verzii Trackmanie
+kombinácia relu,tanh prekonala relu,relu. Architektúra 48x24 mala silnejší výkon,
+zatiaľ čo 32x16 ostala vhodná ako rýchly baseline.
+Z experimentov vyplýva praktické rozdelenie rolí. Na rýchle testovanie používame
+menšiu sieť 32x16 relu,tanh, pretože má menej parametrov a umožňuje lacnejšie porovnávanie rewardov, rankingov a hyperparametrov. Keď už chceme silnejší kandidátny
+
+4.3. UČENIE S UČITEĽOM AKO TEST KAPACITY SIETE
+
+55
+
+Obr. 4.1: Porovnanie architektúr a aktivačných funkcií v uzavretom tréningu. Graf používame ako dôkaz, že výber siete ovplyvňuje nielen supervised loss, ale aj správanie v prostredí. Vlastné spracovanie experimentu
+ga_architecture_activation_ablation_20260504.
+model, používame 48x24 relu,tanh. Väčšie siete v tejto fáze neberieme ako default,
+ale skôr ako možnú kapacitnú rezervu pre zložitejšie pozorovanie, napríklad pri výškových rozdieloch alebo povrchoch.
+
+4.3
+
+Učenie s učiteľom ako test kapacity siete
+
+Prvá prirodzená otázka bola jednoduchá: ak človek jazdí trať a my ukladáme pozorovanie spolu s jeho akciou, dokáže sa neurónová sieť naučiť toto mapovanie? Takýto
+dataset môžeme zapísať ako
+D = {(oi , ahuman
+)}N
+i
+i=1 ,
+kde oi je pozorovanie a ahuman
+je akcia človeka v rovnakej chvíli. Model potom trénui
+jeme učením s učiteľom (angl. supervised learning) minimalizáciou stratovej funkcie,
+napríklad priemernej chyby medzi predikovanou a ľudskou akciou [13].
+Tento krok však treba interpretovať opatrne. Učenie s učiteľom v tejto kapitole nie
+je dôkaz, že agent vie optimálne jazdiť. Je to test kapacity siete a kvality reprezentácie
+pozorovania. Ak loss neklesá, sieť alebo vstupné dáta pravdepodobne nedokážu zachytiť
+ani ľudské rozhodnutia. Ak loss klesá, získavame aspoň prvý dôkaz, že pozorovanie
+obsahuje použiteľný signál a zvolená architektúra ho vie spracovať.
+
+56
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Obr. 4.2: Priebeh supervised tréningu mapových špecialistov. Klesajúca chyba je dôkazom kapacity siete voči demonštračným dátam, nie dôkazom finálnej autonómnej
+politiky. Vlastné spracovanie experimentu supervised_map_specialists_20260505.
+Supervised experimenty ukázali, že sieť typu 48x24 relu,tanh sa vie naučiť predikovať ľudské akcie na pripravených dátach. To podporuje myšlienku, že zvolený observation vektor nie je prázdny šum a že malý MLP môže byť dostatočný nosič politiky.
+Zároveň však tento výsledok ešte nerozhoduje, či bude politika stabilná v uzavretej
+slučke.
+
+4.4
+
+Behaviorálne klonovanie a motýlí efekt
+
+Behaviorálne klonovanie (angl. behavior cloning) je najjednoduchšia forma učenia napodobňovaním: sieť sa učí kopírovať správanie experta zo zaznamenaných dvojíc pozorovania a akcie. Tento prístup má dlhú históriu v riadení vozidiel, napríklad systém
+ALVINN sa učil riadiť vozidlo z demonštrácií vodiča [26] a neskoršie end-to-end prístupy používali obrazové vstupy na predikciu riadenia [2].
+Rozdiel medzi úspechom na datasete a úspechom počas jazdy je však zásadný.
+Na datasete model vidí pozorovania, do ktorých sa dostal človek. Počas autonómnej
+jazdy sa do ďalších pozorovaní dostáva sám svojimi akciami. Ak spraví malú chybu,
+auto sa posunie trochu inak, ďalšia zákruta príde pod iným uhlom a model dostane
+vstup, ktorý sa v ľudských dátach nemusel často vyskytovať. Tento problém akumulácie
+chýb a distribučného posunu je jedným z hlavných dôvodov, prečo čisté behaviorálne
+klonovanie nemusí stačiť [29].
+Tento jav v texte označujeme ako motýlí efekt v uzavretej slučke. Nejde o formálnu
+novú metódu, ale o výstižnú intuíciu: malá odchýlka v riadení na začiatku jazdy môže
+o niekoľko sekúnd znamenať úplne inú trajektóriu. Preto supervised loss nemôže byť
+jediným meradlom kvality agenta. Model môže veľmi dobre predikovať ľudské akcie v
+známych stavoch, no stále zlyhať, keď vlastnými akciami vytvorí nové stavy.
+
+4.4. BEHAVIORÁLNE KLONOVANIE A MOTÝLÍ EFEKT
+
+57
+
+Obr. 4.3: Porovnanie trajektórií učiteľa a supervised agenta na jednej mape.
+Agent vie sledovať tvar trate, ale malé odchýlky sa v uzavretej slučke hromadia a vedú ku kontaktom so stenou. Vlastné spracovanie experimentu
+supervised_map_specialists_20260505.
+
+58
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+4.5
+
+Učenie napodobňovaním ako korekcia klonovania
+
+Pri učení napodobňovaním (angl. imitation learning) môžeme tento problém zmierňovať tým, že agent počas zberu dát alebo tréningu nevystupuje iba ako pasívny študent.
+Časť akcií môže vykonať sám, človek môže správanie korigovať a do datasetu sa tak
+dostanú aj stavy vzniknuté z agentových vlastných chýb. Práve tento smer motivuje
+algoritmus DAgger, ktorý agreguje dáta zo stavov navštívených učiacou sa politikou
+[29].
+V našom kontexte je podstatná myšlienka miešania ľudskej a agentovej akcie. Na začiatku tréningu môže mať vyššiu váhu človek, pretože agent ešte nevie jazdiť. Postupne
+sa môže váha presúvať na agenta, aby sa učil zvládať vlastné stavy. Takýto postup neznamená, že agent optimalizuje najlepší čas. Stále sa učí najmä napodobňovať alebo
+opravovať správanie podľa ľudského signálu.
+Plánovaný obrázok: graf váhy miešania ľudskej a agentovej akcie počas
+učenia napodobňovaním. Obrázok má ukázať, ako sa v čase mení podiel
+zásahu človeka a podiel akcie navrhnutej agentom.
+Pre túto prácu je výsledok imitation vetvy hlavne diagnostický. Potvrdzuje, že neurónová sieť dokáže prevziať časť rozhodovania z demonštrácií, ale zároveň ukazuje
+hranicu: ak je cieľom rýchla a stabilná jazda, nestačí iba znižovať chybu voči človeku.
+Samotné napodobňovanie tak ostáva skôr dôkazom realizovateľnosti než finálnym tréningovým cieľom.
+
+4.6
+
+Limity napodobňovania
+
+Doterajšie kroky odpovedali na prvé otázky vyšetrovania. Pozorovanie obsahuje použiteľný signál. Malá neurónová sieť ho vie spracovať. Supervised agent dokáže jazdiť
+rozumne na častiach trate. Ale stále sme sa nenaučili hľadať najlepšiu jazdnú politiku.
+Hlavný problém je v tom, že behaviorálne klonovanie optimalizuje podobnosť s
+človekom, nie priamo cieľ pretekov. Ak človek jazdí pomaly, agent nemá dôvod jazdiť
+rýchlejšie. Ak dataset neobsahuje opravy z určitých chýb, agent ich nemusí vedieť
+zvládnuť. Ak sa model dostane mimo distribúciu dát, closed-loop správanie sa môže
+rozpadnúť. Hodnota lossu preto sama osebe nestačí na posúdenie kvality jazdy.
+Napodobňovanie nám teda ukázalo, že sieť vie konať rozumne. Neodpovedalo však
+na otázku, ako ju prinútiť jazdiť lepšie než dáta, z ktorých sa učila. Ak má agent jazdiť
+podľa cieľov pretekov, musíme posudzovať jeho správanie priamo počas jazdy.
+
+4.7. OD NAPODOBŇOVANIA K HODNOTENIU SPRÁVANIA
+
+4.7
+
+59
+
+Od napodobňovania k hodnoteniu správania
+
+V Trackmanii je intuitívny cieľ jasný: dostať sa do cieľa a urobiť to čo najrýchlejšie.
+Keby všetci agenti dokončovali trať, stačilo by ich porovnať podľa času. V evolučnom
+tréningu však väčšina náhodne inicializovaných jedincov na začiatku nedokončí takmer
+nič. Ak by sme hodnotili iba finish a čas, populácia by dostala veľmi riedky signál.
+Najjednoduchší zápis cieľa je
+(finished, −time).
+Prvá zložka hovorí, či agent dokončil trať, druhá preferuje kratší čas. Tento cieľ je z
+hľadiska hry správny, no pre počiatočné učenie je príliš hrubý. Ak dvaja agenti nedokončia trať, tuple ich nerozlíši podľa toho, či jeden prešiel tri metre a druhý polovicu
+mapy.
+Preto do hodnotenia pridávame progress, teda plynulý geometrický postup po trati.
+Takto agent dostáva jemnejší signál aj pred prvým dokončením celej trate. Zároveň sa
+vyhýbame problému ľubovoľných váh. Namiesto jedného skalárneho rewardu typu
+S = w1 m1 + w2 m2 + · · · + wk mk
+pracujeme s lexikografickým poradím metrík. Vážená suma je použiteľná, ale vyžaduje obhájenie váh wi a môže skrývať priority medzi cieľmi. Lexikografické poradie
+je čitateľnejšie: najprv rozhoduje prvá metrika, pri zhode druhá, potom tretia a tak
+ďalej. Pri návrhu odmeny a jej tvarovania je všeobecne známe, že zle navrhnutý signál
+môže viesť k neželanému správaniu [24]. Tu preto chceme, aby boli priority metrík čo
+najviditeľnejšie.
+
+4.8
+
+Postupné skladanie lexikografickej ranking funkcie
+
+Ranking funkciu sme neskladali naraz. Každý ďalší člen tuple reagoval na problém,
+ktorý sa ukázal pri predchádzajúcej verzii.
+
+4.8.1
+
+Finish a progress
+
+Prvý použiteľnejší krok bol
+(finished, progress).
+Tento zápis už rozlišuje neúspešných agentov podľa toho, ako ďaleko sa dostali. V
+zjednodušenej 2D verzii Trackmanie na testovanej mape viedol k prvému finishu až v
+generácii 216 a najlepší čas bol 22,39 sekundy. Dôležitejšie než samotný čas však bolo,
+že progress umožnil populácii postupne sa posúvať ďalej po trati.
+
+60
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Tabuľka 4.1: Zhrnutie lexikografického reward sweep-u. Používame skratky F =
+finished, P = progress, T = time a C = crashes. Stĺpec stabilita znamená priemerný
+počet dokončujúcich jedincov na generáciu počas posledných 50 generácií.
+Ranking
+
+Prvý finish
+
+Spolu finish
+
+Stabilita
+
+Čas [s]
+
+(F, P )
+
+216
+
+501
+
+6,62
+
+22,39
+
+(F, P, −T )
+
+247
+
+389
+
+7,64
+
+17,84
+
+(F, P, −T, −C)
+
+137
+
+2209
+
+15,46
+
+17,33
+
+(F, P, −C, −T )
+
+136
+
+2246
+
+14,70
+
+17,97
+
+Problémom bolo, že takto definovaný ranking netlačí agenta dostatočne na rýchlosť.
+Agent môže dostať dobré hodnotenie za to, že trať prejde alebo sa dostane ďaleko, no
+nemusí optimalizovať čas.
+
+4.8.2
+
+Pridanie času
+
+Ďalšia verzia preto pridala čas:
+(finished, progress, −time).
+Tento krok lepšie zodpovedá hre, pretože Trackmania je časová výzva. V reward sweepe našiel tento variant najlepší čas 17,84 sekundy, ale prvý finish prišiel až v generácii
+247 a neskorá stabilita nebola taká silná ako pri crash-aware variantoch. Objavil sa aj
+očakávaný konflikt: ak agent maximalizuje progress a následne čas, môže sa mu oplatiť
+dostať sa rýchlo ďaleko aj za cenu riskantného konca.
+
+4.8.3
+
+Pridanie crash metriky
+
+Preto sme do ranking tuple pridali počet nárazov. Porovnali sme dve prirodzené poradia:
+(finished, progress, −time, −crashes)
+a
+(finished, progress, −crashes, −time).
+Rozdiel je malý v zápise, ale veľký v správaní. Prvé poradie pri rovnakom finishi a
+progresse preferuje rýchlosť a až potom bezpečnosť. Druhé poradie najprv preferuje
+menej nárazov a až potom čas. Tým sa ukázal skutočný konflikt cieľov: rýchla jazda
+môže byť riskantnejšia, bezpečná jazda môže byť pomalšia.
+Ako praktický základ sme zvolili (finished, progress, -time, -crashes). Nevyberáme ho iba preto, že mal najlepší jednotlivý čas. Dôležitejšie je, že kombinoval
+
+4.8. POSTUPNÉ SKLADANIE LEXIKOGRAFICKEJ RANKING FUNKCIE
+
+61
+
+Obr. 4.4: Vývoj najlepšieho progressu pri porovnaní lexikografických ranking funkcií.
+Progress poskytuje hustejší signál než samotný finish. Vlastné spracovanie experimentu
+lex_reward_aabb_lidar_fixed100_20260503.
+
+Obr. 4.5: Najlepší dosiahnutý čas pri jednotlivých ranking funkciách. Crashaware variant s poradím finished, progress, -time, -crashes dosiahol najlepší
+praktický kompromis medzi časom a stabilitou. Vlastné spracovanie experimentu
+lex_reward_aabb_lidar_fixed100_20260503.
+
+62
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Obr.
+
+4.6:
+
+ranking
+bez
+
+Vzťah
+
+medzi
+
+stabilitou
+
+dokončovania
+
+a
+
+variantoch.
+
+Graf
+
+ukazuje,
+
+prečo
+
+nestačí
+
+vybrať
+
+populácie.
+
+Vlastné
+
+spracovanie
+
+pohľadu
+
+na
+
+stabilitu
+
+najlepším
+iba
+
+časom
+
+pri
+
+najnižší
+
+čas
+
+experimentu
+
+lex_reward_aabb_lidar_fixed100_20260503.
+skorší prvý finish, vysoký počet finisherov, dobrú neskorú finish stabilitu a najlepší čas
+v tomto porovnaní.
+Globálne grafy ukazujú, ktorý ranking vyšiel najlepšie v celom sweep-e. Aby sme
+však videli aj spôsob učenia, pre dva najsilnejšie varianty sme dopočítali detailné grafy z
+per-individual metrík. Tienené pásma v nasledujúcich obrázkoch nepredstavujú rozptyl
+medzi viacerými seedmi, ale rozptyl jedincov v populácii v rámci jednej generácie.
+Pri grafoch času rátame priemerný čas populácie penalizovane: ak jedinec nedokončil
+trať, narazil alebo skončil timeoutom, do priemeru vstupuje maximálny čas epizódy 30
+sekúnd. Tak priemer neignoruje neúspešných agentov.
+
+4.8. POSTUPNÉ SKLADANIE LEXIKOGRAFICKEJ RANKING FUNKCIE
+
+63
+
+Obr. 4.7: Detailný priebeh tréningu pre (finished, progress, -time, -crashes).
+Horný panel ukazuje najlepší a priemerný progress spolu s populačným rozptylom,
+dolný panel počet dokončení, nárazov a timeoutov v generácii. Vlastné spracovanie
+experimentu lex_reward_aabb_lidar_fixed100_20260503.
+
+Obr. 4.8: Čas populácie pre (finished, progress, -time, -crashes). Modrá
+krivka zobrazuje najlepší dosiahnutý finish time, oranžová krivka penalizovaný priemer
+populácie, kde neúspešná jazda vstupuje ako maximálny čas epizódy. Vlastné spracovanie experimentu lex_reward_aabb_lidar_fixed100_20260503.
+
+64
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Obr. 4.9: Detailný priebeh tréningu pre (finished, progress, -crashes, -time).
+Variant našiel prvý finish podobne skoro a mal mierne vyšší neskorý priemerný progress, ale najlepší čas bol slabší než pri poradí s časom pred počtom nárazov. Vlastné
+spracovanie experimentu lex_reward_aabb_lidar_fixed100_20260503.
+
+Obr. 4.10: Čas populácie pre (finished, progress, -crashes, -time). Penalizovaný priemer ukazuje, že samotné dokončovanie trate nestačí; zaujíma nás aj to,
+koľko neúspešných jedincov populácia stále produkuje. Vlastné spracovanie experimentu lex_reward_aabb_lidar_fixed100_20260503.
+
+4.9. KONTROLNÝ NÁVRAT K UČENIU POSILŇOVANÍM
+
+4.9
+
+65
+
+Kontrolný návrat k učeniu posilňovaním
+
+V tomto bode už máme lepší jazyk na opis hodnotenia správania. To je vhodné miesto
+krátko sa vrátiť k učeniu posilňovaním (angl. reinforcement learning). V bakalárskej
+práci bol smer s PPO prítomný, ale výsledky neboli dostatočne presvedčivé [20]. Spätne
+je dôležité povedať, že problém nemusel byť iba v algoritme. Veľká časť zlyhania mohla
+pochádzať z nevhodne formulovaného rewardu.
+Preto sme spravili kontrolný reward-equivalent sweep. Nepoužili sme ho ako hlavný
+smer práce, ale ako spätnú kontrolu: čo sa stane, ak moderným RL algoritmom dáme
+odmenu postavenú na rozumnejších metrikách auta, teda na dokončení, progresse, čase
+a nárazoch? Porovnávali sme PPO, SAC a TD3, ktoré predstavujú známe prístupy
+v hlbokom učení posilňovaním [31, 14, 11]. Teoretický rámec RL vychádza z odmien
+získaných interakciou s prostredím [34].
+Výsledok bol zaujímavý, ale nemení hlavnú líniu práce. PPO vo fixed100 profile
+dosiahol 43 finishov a najlepší čas 26,91 sekundy; vo variabilnejšom profile dosiahol
+33 finishov a najlepší čas 25,04 sekundy. SAC a TD3 v tomto nastavení nedokončili
+trať. Tento experiment ukazuje, že lepší reward signál dokáže zmeniť aj výsledky RL
+vetvy. Zároveň však GA ostal pre našu prácu praktickejším hlavným nástrojom, pretože prirodzene pracuje s vyhodnotením celej epizódy a s lexikografickým rankingom
+kandidátnych politík.
+
+66
+
+Obr.
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+4.11:
+
+Kumulatívny
+
+najlepší
+
+progress
+
+v
+
+reward-equivalent
+
+RL
+
+sweep-
+
+e. PPO sa ako jediný algoritmus v tomto nastavení naučil dokončiť trať,
+SAC a TD3 ostali pod 8 % progressu. Vlastné spracovanie experimentu
+rl_reward_equivalent_sweep_20260505.
+
+Obr. 4.12: Výsledky epizód v RL sweep-e. PPO vytvoril finishere, zatiaľ čo SAC
+a TD3 v rovnakom nastavení končili nárazom. Vlastné spracovanie experimentu
+rl_reward_equivalent_sweep_20260505.
+
+4.10. KONFLIKT CIEĽOV A PARETO/NSGA-II
+
+4.10
+
+67
+
+Konflikt cieľov a Pareto/NSGA-II
+
+Lexikografický ranking je čitateľný, ale zároveň vopred určuje poradie priorít. Pri riadení auta však ciele nie sú nezávislé. Rýchlosť môže zvyšovať riziko, bezpečnosť môže
+znižovať rýchlosť a agresívna explorácia môže pomôcť nájsť prvý finish, ale zhoršiť
+stabilitu. Preto bolo prirodzené vyskúšať aj viackriteriálny prístup.
+Pareto dominancia a NSGA-II ponúkajú spôsob, ako udržiavať množinu kompromisných riešení namiesto jednej pevnej váženej alebo lexikografickej funkcie [4, 6]. Z
+teoretického pohľadu to vyzerá vhodne: ak sa ciele bijú, nemusíme hneď vybrať jedno
+poradie. Môžeme hľadať front riešení, ktoré nie sú dominované inými kandidátmi.
+Experimentálne však táto vetva neprebila lexikografický baseline. Pôvodné MOO
+pokusy boli slabé alebo nestabilné. Opravený variant trackmania_racing už mal signál, dosiahol najlepší čas 18,55 sekundy a prvý finish v generácii 204, ale stále sa nestal
+novým defaultom. Preto ho v práci interpretujeme ako dôležitý negatívny a diagnostický výsledok, nie ako zlyhanie.
+
+68
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Obr. 4.13: Diagnostický pohľad na MOO/NSGA-II vetvu. Revidovaný variant mal
+užitočný signál, ale neprebil lexikografický baseline. Vlastné spracovanie experimentu
+training_improvements_20260505.
+
+4.11. HYPERPARAMETRE GENETICKÉHO ALGORITMU
+
+4.11
+
+69
+
+Hyperparametre genetického algoritmu
+
+Keď ranking tuple stabilizoval hodnotenie jazdy, ostalo nastaviť samotný genetický algoritmus. V našej úlohe jedinec reprezentuje neurónovú sieť, populácia obsahuje viacero
+kandidátnych politík a nová generácia vzniká výberom rodičov, elitizmom a mutáciou.
+Takéto hľadanie je typickým príkladom evolučnej optimalizácie [12].
+Najdôležitejšie parametre boli veľkosť populácie, počet rodičov, počet elít, pravdepodobnosť mutácie a veľkosť mutačného šumu. Populácia určuje, koľko kandidátov
+vyhodnotíme v jednej generácii. Počet rodičov ovplyvňuje selekčný tlak. Elity prenášajú najlepších jedincov bez mutácie. Parametre mutácie zas určujú, ako ďaleko sa
+nová generácia odváži od už nájdených riešení.
+Refined grid podporil ako najlepší screeningový selection bod túto konfiguráciu:
+population = 48,
+
+parent_count = 14,
+
+elite_count = 1.
+
+Pre mutáciu bol najbezpečnejší vnútorný bod
+mutation_prob = 0,10,
+
+mutation_sigma = 0,25.
+
+Praktický baseline preto držíme okolo tejto oblasti; pri niektorých behoch používame
+dve elity, aby sa zachovala väčšia diverzita užitočných riešení, hoci samotný refined
+grid papierovo najviac podporil jednu elitu.
+
+70
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Obr. 4.14: Heatmapa neskorej finish rate pri rôznych nastaveniach rodičov a elít. Najsilnejší screeningový výsledok mal parent_count=14 a elite_count=1. Vlastné spracovanie experimentu ga_hyperparam_refinement_20260504.
+
+4.11. HYPERPARAMETRE GENETICKÉHO ALGORITMU
+
+Obr.
+
+4.15:
+
+dobnostiach
+
+Heatmapa
+a
+
+neskorej
+
+veľkostiach
+
+finish
+
+mutácie.
+
+rate
+Stabilný
+
+pri
+
+71
+
+rôznych
+vnútorný
+
+pravdepobod
+
+bol
+
+mutation_prob=0.10 a mutation_sigma=0.25. Vlastné spracovanie experimentu
+ga_hyperparam_refinement_20260504.
+
+Obr. 4.16: Interpretácia mutačných režimov. Väčšia mutácia podporuje exploráciu, menšia mutácia je vhodnejšia na dolaďovanie. Vlastné spracovanie experimentu
+ga_hyperparam_refinement_20260504.
+
+72
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+4.12
+
+Tréningové vylepšenia
+
+Po výbere ranking funkcie a základných hyperparametrov sme už neriešili iba otázku,
+či sa agent niečo naučí. Začali sme testovať hypotézy, ktoré mali tréning zrýchliť, stabilizovať alebo zlepšiť kvalitu výslednej politiky.
+
+4.12.1
+
+Zrkadlenie
+
+Zrkadlenie vychádza zo symetrie časti pozorovania a akčného priestoru. Ak je situácia
+zrkadlovo otočená, očakávame, že vhodná akcia bude tiež zrkadlová, najmä pri zatáčaní. Hypotéza bola, že takýto tréning môže znížiť preferenciu jednej strany a zlepšiť
+robustnosť.
+Výsledok zatiaľ nie je pozitívnym dôkazom. Both-mirror evaluácia sa síce vedela
+trénovať, ale stála približne dvojnásobný evaluačný čas a holdout test nepotvrdil jasnú
+generalizáciu. Lacnejšia verzia cez pravdepodobnosť zrkadlenia sa tiež neukázala presvedčivo. Preto zrkadlenie uvádzame ako rozumnú, ale zatiaľ diagnostickú vetvu.
+Plánovaný obrázok alebo tabuľka: porovnanie zrkadleného tréningu
+s bežným tréningom a holdout vyhodnotením. Má ukázať, či zrkadlenie
+zlepšuje robustnosť alebo iba zvyšuje evaluačný čas.
+
+4.12.2
+
+Vyrovnávacia pamäť elity
+
+Vyrovnávacia pamäť elity rieši praktickú otázku: ak najlepšieho jedinca prenášame
+do ďalšej generácie, musíme ho zakaždým znova vyhodnocovať? Pri deterministickom
+prostredí by rovnaký jedinec mal dostať rovnaký výsledok. Pri variabilnom fyzikálnom
+kroku však môže rovnaká politika dopadnúť trochu inak, čo vytvára riziko, že náhodne
+slabší rollout zničí inak dobrého kandidáta.
+Pred experimentom existovala aj opačná obava. Cache môže chrániť jedinca, ktorému sa raz náhodne podaril riskantný beh, a tým šíriť zlé gény. Výsledky však v našich
+dátach hovorili opačne. Pri variabilnom ticku bez cache neboli žiadni finisheri; s elite
+cache sa objavilo 572 finishov a najlepší čas 18,71 sekundy.
+Tento výsledok berieme ako thesis-grade pozitívny signál. Cache nebola iba optimalizácia času vyhodnocovania, ale aj stabilizačný mechanizmus pre šumovejšie vyhodnotenie.
+
+4.12. TRÉNINGOVÉ VYLEPŠENIA
+
+73
+
+Obr. 4.17: Porovnanie tréningu s vyrovnávacou pamäťou elity a bez nej pri variabilnom
+fyzikálnom kroku. Cache bola najsilnejším pozitívnym tréningovým vylepšením v tomto
+balíku. Vlastné spracovanie experimentu training_improvements_20260505.
+
+4.12.3
+
+Pokles mutácie
+
+Z hyperparametrických experimentov vyplýva, že rôzne mutačné režimy majú rôzne
+úlohy. Väčšia mutácia pomáha explorácii, menšia mutácia dolaďovaniu. Fixná hodnota je preto kompromisom. Pokles mutácie (angl. mutation decay) sa snaží začať viac
+exploračne a postupne prejsť do jemnejšieho dolaďovania.
+Prvá verzia však môže znížiť mutácie príliš skoro, ešte pred tým, než populácia nájde
+prvého finishera. Preto vznikla verzia s first-finish triggerom: pred prvým dokončením
+držíme exploračnejšie hodnoty, po prvom finishi začneme plynule znižovať mutáciu.
+Výsledok je zmiešaný. First-finish decay je obhájiteľný nápad a v niektorých metrikách pomáha, ale neprekonal jednoznačne stabilitu baseline. V práci ho preto uvádzame
+ako rozumný optimalizačný pokus, nie ako finálne pravidlo.
+
+74
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Obr. 4.18: Porovnanie baseline a first-finish mutation decay. Výsledok je užitočný tradeoff, ale nie jednoznačný nový default. Vlastné spracovanie experimentu
+training_improvements_20260505.
+
+4.12.4
+
+Viac dotykov a počet nárazov
+
+Pôvodný crash model je prísny: náraz znamená koniec epizódy. V reálnej jazde však
+malý kontakt nemusí nutne znamenať úplné zlyhanie. Experiment s viacerými povolenými dotykmi preto rozlišoval medzi nárazom ako chybou a nárazom ako okamžitým
+koncom jazdy. Agent mohol po kontakte pokračovať, ale počet dotykov sa započítal do
+hodnotenia.
+Táto vetva bola diagnostická. Pomohla lepšie pomenovať, čo vlastne crash metrika
+znamená, ale nepriniesla jasný finálny tréningový zisk. Pri nastavení s tromi dotykmi
+bol progress vysoký, no neskorý crash profil ostal príliš hlučný. Preto túto myšlienku
+nepoužívame ako hlavné vylepšenie, ale ponechávame ju ako nástroj na skúmanie robustnosti správania.
+Plánovaný obrázok alebo tabuľka: diagnostika experimentu s viacerými povolenými dotykmi, ideálne progress, počet nárazov a typ ukončenia
+epizódy. Obrázok má odlíšiť „náraz ako koniec“ od „náraz ako chyba v
+jazde“ .
+
+4.12.5
+
+Supervised-seeded GA
+
+Po behaviorálnom klonovaní vznikla prirodzená otázka: ak supervised model už vie
+jazdiť aspoň čiastočne rozumne, prečo začínať GA úplne náhodne? Myšlienka hybridu
+je vložiť supervised politiku do prvej populácie a vytvoriť okolo nej mutované varianty.
+
+4.12. TRÉNINGOVÉ VYLEPŠENIA
+
+75
+
+Obr. 4.19: Porovnanie random baseline, sparse supervised seeding a dense supervised seeding. Dense-noise inicializácia využila supervised model ako užitočný štart,
+ale nechala GA dostatočný priestor na zmenu. Vlastné spracovanie experimentu
+ga_supervised_seeded_20260505.
+Ukázalo sa však, že dôležitý je spôsob mutácie. Sparse seeded verzia zachovala
+behaviorálne klonovanie príliš silno a našla finishery veľmi neskoro. Dense weight-noise
+verzia mutovala váhy širšie, zachovala časť štruktúry supervised politiky, ale vytvorila
+dostatočnú diverzitu pre evolučnú selekciu.
+Dense-noise supervised seeding je silný pozitívny hybrid: prvý finisher prišiel v generácii 116 a najlepší čas bol 17,28 sekundy. Zároveň ho neprezentujeme ako čistý GA
+trik, pretože využíva dodatočné ľudské dáta. Jeho prínos je v spojení dvoch svetov:
+behaviorálne klonovanie dá počiatočný smer a evolúcia ho vie ďalej zmeniť podľa hodnotenia v prostredí.
+
+76
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Obr. 4.20: Najlepší čas pri supervised-seeded GA porovnaní. Dense-noise variant dosiahol najlepší čas 17,28 sekundy, ale používa dodatočné ľudské dáta,
+preto ho interpretujeme ako hybridný výsledok. Vlastné spracovanie experimentu
+ga_supervised_seeded_20260505.
+
+4.13
+
+Zloženie najlepšieho 2D asfaltového agenta
+
+Po týchto krokoch už nejde o jeden náhodný úspech. Máme reťaz rozhodnutí, z ktorých
+každé reagovalo na predchádzajúci problém. Supervised experimenty ukázali, že sieť
+vie spracovať pozorovanie. Closed-loop architektonická ablácia podporila relu,tanh
+a malé MLP architektúry. Reward sweep vybral crash-aware lexikografický ranking.
+Hyperparametrický grid našiel rozumnú oblasť pre selekciu a mutáciu. Tréningové vylepšenia odlíšili pozitívne výsledky od diagnostických vetiev.
+Finálny 2D asfaltový tréning preto skladáme z viacerých podporených zistení: malá
+MLP politika, lexikografické hodnotenie (finished, progress, -time, -crashes),
+primeraný GA baseline okolo populácie 48 jedincov, rodičov približne 14, malej elity
+a mutácie v oblasti prob=0.10, sigma=0.25. Pri šumovejšom alebo variabilnejšom
+vyhodnotení pridávame vyrovnávaciu pamäť elity. Ako hybridnú alternatívu používame
+dense-noise supervised seeding.
+Toto zloženie je vrcholom 2D časti práce. Neznamená, že sme našli absolútne optimálne nastavenie, ale znamená, že máme obhájiteľný postup, ktorý nevznikol jedným
+odhadom. Každý prvok má za sebou experimentálny dôvod alebo negatívny výsledok,
+ktorý vysvetľuje, prečo ho nepoužívame.
+Plánovaný obrázok: finálny 2D asfaltový agent. Vhodný je focus progress
+plot, krivka najlepšieho času a trajektória/path nad mapou po uzamknutí
+finálneho runu.
+
+4.14. VÝŠKOVÉ ROZDIELY
+
+4.14
+
+77
+
+Výškové rozdiely
+
+Rovinná asfaltová trať je dôležitý prvý prípad, ale Trackmania nie je iba rovina. Keď
+sa objavia kopce, svahy alebo skoky, 2D interpretácia okolia prestáva byť úplná. Lúč
+premietaný iba do roviny môže prehliadnuť, že cesta stúpa, klesá alebo sa mení sklon
+bloku.
+Z tréningového hľadiska nechceme zahodiť všetko, čo sme zistili v 2D časti. Ranking,
+GA baseline aj všeobecná logika hodnotenia ostávajú použiteľné. Mení sa však observation space a pravdepodobne aj potrebná kapacita siete. Výškové informácie zvyšujú
+množstvo vstupných dát a môžu vyžadovať silnejšiu architektúru než lacný baseline.
+Pri výškovej variante bude potrebné overiť, ako reprezentovať výšku, ako ju dostať
+do virtuálneho senzora a či architektúry 32x16 a 48x24 stále postačujú. Detaily geometrie a projekcie lúča patria do implementačného opisu a experimentov; pre tréning je
+podstatné najmä to, že po vyriešení roviny sa objavuje tretí rozmer.
+Plánovaný obrázok: výškový modul observation. Porovnanie pozorovania bez výšky a s výškovými príznakmi, prípadne trajektória agenta na
+mape s výškovým gradientom.
+
+4.15
+
+Rôzne povrchy
+
+Druhým rozšírením sú povrchy. Rovnaká akcia auta nemusí mať rovnaký účinok na
+asfalte, tráve, plastovom povrchu alebo ľade. Z pohľadu agenta teda nestačí vedieť,
+kde je cesta. Potrebuje aj informáciu o tom, aký charakter má podklad.
+Aj tu je cieľom preniesť čo najviac z 2D asfaltovej časti. Ranking funkcia, základný
+GA a spôsob porovnávania politík ostávajú rovnakým rámcom. Mení sa observation
+vektor, pretože k geometrii pridávame informáciu o povrchu. Podobne ako pri výške
+bude potrebné znova overiť veľkosť siete a jej schopnosť využiť nové vstupy.
+Ukázali sme, že výsledkom tréningovej časti nie je iba jeden natrénovaný model, ale
+postup, ako sa k nemu dopracovať: od reprezentácie politiky cez hodnotenie správania
+až po experimentálne podporené tréningové rozhodnutia. Rovnaký postup potom prirodzene vytvára základ aj pre bohatší svet, v ktorom sa mení výška trate alebo povrch
+pod autom.
+Plánovaný obrázok: surface modul. Mapa povrchov s odlíšenými typmi
+podkladu a trajektória agenta, aby bolo vidieť, ako sa správanie mení pri
+rôznej trakcii.
+
+78
+
+KAPITOLA 4. HĽADANIE POLITIKY SPRÁVANIA
+
+Kapitola 5
+Vyhodnotenie výsledného agenta
+Tu pôjde kapitola o finálnom vyhodnotení agenta.
+
+5.1
+
+Cieľ finálneho vyhodnotenia
+
+5.2
+
+Výber agentov na porovnanie
+
+5.3
+
+Výber testovacích tratí
+
+5.4
+
+Metriky finálneho hodnotenia
+
+5.5
+
+Trajektórie a správanie na mape
+
+5.6
+
+Vyhodnotenie generalizácie
+
+5.7
+
+Vyhodnotenie výškových rozdielov
+
+5.8
+
+Vyhodnotenie rôznych povrchov
+
+5.9
+
+Časové porovnanie
+
+5.10
+
+Diskusia správania agenta
+
+5.11
+
+Prechod do záveru
+
+79
+
+80
+
+KAPITOLA 5. VYHODNOTENIE VÝSLEDNÉHO AGENTA
+
+Záver
+Tu pôjde záver práce.
+
+Splnenie cieľov
+Hlavné výsledky
+Obmedzenia práce
+Možnosti ďalšieho vývoja
+
+81
+
+82
+
+Záver
+
+Literatúra
+[1] Simon Authier and Daniel Carcelen. A driving model in the realistic 3d game
+trackmania using deep reinforcement learning, 2024. Preprint, nie recenzovany
+clanok. DOI: https://doi.org/10.20944/preprints202409.0778.v1.
+[2] Mariusz Bojarski, Davide Del Testa, Daniel Dworakowski, Bernhard Firner, Beat
+Flepp, Prasoon Goyal, Lawrence D. Jackel, Mathew Monfort, Urs Muller, Jiakai
+Zhang, Xin Zhang, Jake Zhao, and Karol Zieba. End to end learning for selfdriving cars. In arXiv preprint arXiv:1604.07316, 2016. Dostupne z: https:
+//arxiv.org/abs/1604.07316.
+[3] Greg Brockman, Vicki Cheung, Ludwig Pettersson, Jonas Schneider, John Schulman, Jie Tang, and Wojciech Zaremba. Openai gym, 2016. [Citovane 2026-05-06].
+Dostupne z: https://arxiv.org/abs/1606.01540.
+[4] Carlos A. Coello Coello. A comprehensive survey of evolutionary-based multiobjective optimization techniques. Knowledge and Information Systems, 1(3):269–308,
+1999.
+[5] George Cybenko. Approximation by superpositions of a sigmoidal function. Mathematics of Control, Signals and Systems, 2(4):303–314, 1989.
+[6] Kalyanmoy Deb, Amrit Pratap, Sameer Agarwal, and T. Meyarivan. A fast and
+elitist multiobjective genetic algorithm: Nsga-ii. IEEE Transactions on Evolutionary Computation, 6(2):182–197, 2002.
+[7] Alexey Dosovitskiy, German Ros, Felipe Codevilla, Antonio Lopez, and Vladlen
+Koltun. CARLA: An open urban driving simulator. In Proceedings of the 1st
+Annual Conference on Robot Learning, pages 1–16, 2017. [Citovane 2026-05-06].
+Dostupne z: https://arxiv.org/abs/1711.03938.
+[8] Fletcher Dunn and Ian Parberry. 3D Math Primer for Graphics and Game Development. CRC Press, 2 edition, 2011.
+[9] Matthias Ehrgott. Multicriteria Optimization. Springer, Berlin, Heidelberg, 2
+edition, 2005.
+83
+
+84
+
+LITERATÚRA
+
+[10] Florian Fuchs, Yunlong Song, Elia Kaufmann, Davide Scaramuzza, and Peter
+Dürr. Super-human performance in gran turismo sport using deep reinforcement
+learning. IEEE Robotics and Automation Letters, 6(3):4257–4264, 2021.
+[11] Scott Fujimoto, Herke van Hoof, and David Meger. Addressing function approximation error in actor-critic methods. In Proceedings of the 35th International Conference on Machine Learning, pages 1587–1596, 2018. Dostupne z:
+https://proceedings.mlr.press/v80/fujimoto18a.html.
+[12] David E. Goldberg. Genetic Algorithms in Search, Optimization, and Machine
+Learning. Addison-Wesley, 1989.
+[13] Ian Goodfellow, Yoshua Bengio, and Aaron Courville. Deep Learning. MIT Press,
+2016. Dostupne z: https://www.deeplearningbook.org/.
+[14] Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actorcritic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In Proceedings of the 35th International Conference on Machine Learning, pages 1861–1870, 2018. Dostupne z: https://proceedings.mlr.press/
+v80/haarnoja18b.html.
+[15] John F. Hughes, Andries van Dam, Morgan McGuire, David F. Sklar, James D.
+Foley, Steven K. Feiner, and Kurt Akeley. Computer Graphics: Principles and
+Practice. Addison-Wesley, 3 edition, 2014.
+[16] Matteo Iovino, Edvards Scukins, Jonathan Styrud, Petter Ogren, and Christian
+Smith. A survey of behavior trees in robotics and ai. Robotics and Autonomous
+Systems, 154:104096, 2022.
+[17] W. Bradley Knox, Alessandro Allievi, Holger Banzhaf, Felix Schmitt, and Peter Stone. Reward (mis)design for autonomous driving. Artificial Intelligence,
+316:103829, 2023.
+[18] Daniele Loiacono, Pier Luca Lanzi, Julian Togelius, Enrique Onieva, David A.
+Pelta, Martin V. Butz, Thies D. Lönneker, Luigi Cardamone, Diego Perez, Yago
+Sáez, and Mike Preuss. The 2009 simulated car racing championship. IEEE
+Transactions on Computational Intelligence and AI in Games, 2(2):131–147, 2010.
+[19] Andrea Macaluso, Alessandro Sestini, and Andrew D. Bagdanov. A benchmark
+environment for offline reinforcement learning in racing games. In 2024 IEEE
+Conference on Games, 2024.
+
+LITERATÚRA
+
+85
+
+[20] Timotej Melkovič. Trénovanie autonómneho vozidla v hre trackmania pomocou
+strojového učenia. Bakalárska práca, Univerzita Komenského v Bratislave, Fakulta
+matematiky, fyziky a informatiky, 2024.
+[21] Ian Millington and John Funge. Artificial Intelligence for Games. CRC Press, 3
+edition, 2019.
+[22] Tomas Möller and Ben Trumbore. Fast, minimum storage ray/triangle intersection. Journal of Graphics Tools, 2(1):21–28, 1997.
+[23] L. J. Neinders. Improving trackmania reinforcement learning performance: A comparison of sophy and trackmania ai. Bachelor’s thesis, University of Twente, 2023.
+Kontextovy zdroj k Trackmania RL; nepouzivat ako hlavny recenzovany dokaz.
+[24] Andrew Y. Ng, Daishi Harada, and Stuart J. Russell. Policy invariance under
+reward transformations: Theory and application to reward shaping. In Proceedings
+of the Sixteenth International Conference on Machine Learning, pages 278–287,
+1999.
+[25] Openplanet. Openplanet documentation, 2026. [Citovane 2026-05-06]. Dostupne
+z: https://wiki.openplanet.dev/.
+[26] Dean A. Pomerleau.
+
+Alvinn: An autonomous land vehicle in a ne-
+
+ural network.
+
+In Advances in Neural Information Processing Systems, vo-
+
+lume 1, 1989.
+
+Dostupne z: https://papers.nips.cc/paper/1988/hash/
+
+812b4ba287f5ee0bc9d43bbf5bbe87fb-Abstract.html.
+[27] Antonin Raffin, Ashley Hill, Adam Gleave, Anssi Kanervisto, Maximilian Ernestus, and Noah Dormann. Stable-baselines3: Reliable reinforcement learning implementations. Journal of Machine Learning Research, 22(268):1–8, 2021.
+[28] Rajesh Rajamani. Vehicle Dynamics and Control. Springer, 2 edition, 2012.
+[29] Stéphane Ross, Geoffrey J. Gordon, and J. Andrew Bagnell. A reduction of imitation learning and structured prediction to no-regret online learning. In Proceedings of the 14th International Conference on Artificial Intelligence and Statistics, pages 627–635, 2011. Dostupne z: https://proceedings.mlr.press/v15/
+ross11a.html.
+[30] Stuart J. Russell and Peter Norvig. Artificial Intelligence: A Modern Approach.
+Pearson, 4 edition, 2021.
+[31] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov.
+Proximal policy optimization algorithms. In arXiv preprint arXiv:1707.06347,
+2017. Dostupne z: https://arxiv.org/abs/1707.06347.
+
+86
+
+LITERATÚRA
+
+[32] Stanford University Computer Graphics Laboratory. The stanford 3d scanning
+repository, 2023. Zdroj geometrie modelu Stanford Bunny. [Citovane 2026-05-07].
+Dostupne z: https://graphics.stanford.edu/data/3Dscanrep/.
+[33] Kenneth O. Stanley and Risto Miikkulainen. Evolving neural networks through
+augmenting topologies. Evolutionary Computation, 10(2):99–127, 2002.
+[34] Richard S. Sutton and Andrew G. Barto. Reinforcement Learning: An Introduction. MIT Press, 2 edition, 2018. Dostupne z: http://incompleteideas.net/
+book/the-book-2nd.html.
+[35] Simon Tomlinson and Nic Melder. Representing and driving a race track for ai
+controlled vehicles. In Steve Rabin, editor, Game AI Pro: Collected Wisdom of
+Game AI Professionals. CRC Press, 2014. Kopia PDF je v pracovnom priecinku
+Sources. Dostupne z: https://www.gameaipro.com/GameAIPro/GameAIPro_
+Chapter39_Representing_and_Driving_a_Race_Track_for_AI_Controlled_
+Vehicles.pdf.
+[36] TrackMania Reinforcement Learning Contributors. Tmrl: Trackmania reinforcement learning, 2024. [Citovane 2026-05-06]. Dostupne z: https://github.com/
+trackmania-rl/tmrl.
+[37] Trackmania Wiki Contributors. Trackmania wiki, 2026. [Citovane 2026-05-06].
+Dostupne z: https://wiki.trackmania.io/.
+[38] A. M. Turing. Computing machinery and intelligence. Mind, 59(236):433–460,
+1950.
+[39] Ubisoft. Trackmania, 2026. [Citovane 2026-05-06]. Dostupne z: https://www.
+ubisoft.com/en-gb/game/trackmania/trackmania.
+[40] Peter R. Wurman, Samuel Barrett, Kenta Kawamoto, James MacGlashan, Kaushik Subramanian, Thomas J. Walsh, Roberto Capobianco, Alisa Devlic, Franziska Eckert, Florian Fuchs, Leilani Gilpin, Piyush Khandelwal, Varun Kompella,
+Hao Chih Lin, Patrick MacAlpine, Declan Oller, Takuma Seno, Craig Sherstan,
+Michael D. Thomure, Hamid Aghabozorgi, Lucas Barrett, Rory Douglas, Dustin
+Whitehead, Peter Durr, Peter Stone, Michael Spranger, and Hiroaki Kitano. Outracing champion gran turismo drivers with deep reinforcement learning. Nature,
+602(7896):223–228, 2022.
+[41] Bernhard Wymann, Christos Dimitrakakis, Andrew Sumner, Eric Espié, and
+Christophe Guionneau. Torcs, the open racing car simulator. In Software available
+at http: // torcs. sourceforge. net/ , 2000. [Citovane 2026-05-06].
+
+LITERATÚRA
+
+87
+
+[42] Georgios N. Yannakakis and Julian Togelius. Artificial Intelligence and Games.
+Springer, 2018.
+
+88
+
+LITERATÚRA
+
+Príloha A: obsah elektronickej prílohy
+Tu pôjde opis elektronickej prílohy, napríklad zdrojový kód, experimentálne dáta, vybrané grafy, modely a návody na spustenie.
+
+89
+
+

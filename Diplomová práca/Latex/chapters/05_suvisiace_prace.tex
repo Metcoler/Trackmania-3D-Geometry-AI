@@ -18,7 +18,7 @@ Pre našu prácu z toho vyplýva opatrné poučenie. Tradičná herná AI ponúk
 
 Voľba vstupu výrazne určuje, čo sa musí agent naučiť. \textbf{ALVINN} ukázal, že neurónová sieť môže z dostupných senzorových vstupov predikovať smerovanie vozidla a tým sa učiť riadenie z demonštrácií \cite{pomerleau1989alvinn}. Prínos tejto práce je v tom, že riadenie chápe ako naučiteľné mapovanie zo vstupu na akciu. Pre našu úlohu je však dôležité aj to, že takýto model stojí na kvalite vstupnej reprezentácie a na dátach, z ktorých sa učí.
 
-\textbf{PilotNet} od NVIDIA posúva túto myšlienku smerom k obrazovému vstupu: model dostáva obraz z prednej kamery a priamo predikuje riadenie \cite{bojarski2016endtoend}. Silnou stránkou je menšia potreba ručne navrhnutých príznakov, pretože model sa môže naučiť vnútornú reprezentáciu z obrazu. Limitom pre našu prácu je, že obrazové riešenie spája percepciu a riadenie do jedného problému. Obraz je zároveň vysokorozmerný vstup: jedna snímka obsahuje podstatne viac hodnôt než kompaktná telemetria alebo geometrické senzory. V realtime pretekárskej úlohe to vytvára praktický tlak na nižšiu frekvenciu spracovania, menšie rozlíšenie alebo výkonnejší modelový a hardvérový základ. Ak agent urobí chybu, ťažšie sa oddeľuje, či problém vznikol pri rozpoznaní situácie, pri reprezentácii trate alebo pri samotnom rozhodnutí.
+\textbf{PilotNet} od NVIDIA posúva túto myšlienku smerom k obrazovému vstupu: model dostáva obraz z prednej kamery a priamo predikuje riadenie \cite{bojarski2016endtoend}. Silnou stránkou je menšia potreba ručne navrhnutých príznakov, pretože model sa môže naučiť vnútornú reprezentáciu z obrazu. Limitom pre našu prácu je, že obrazové riešenie spája percepciu a riadenie do jedného problému. Obraz je zároveň vysokorozmerný vstup: jedna snímka obsahuje podstatne viac hodnôt než kompaktná telemetria alebo geometrické senzory. V realtime pretekárskej úlohe to vytvára praktický tlak na nižšiu frekvenciu spracovania, menšie rozlíšenie alebo výkonnejší modelový a hardvérový základ. Pri Trackmanii sa k tomu pridáva aj časový problém: snímka obrazovky je viazaná na renderovanie a spôsob získavania obrazu, takže nemusí byť rovnako čerstvá ako dostupný stav hry. Ak agent urobí chybu, ťažšie sa oddeľuje, či problém vznikol pri rozpoznaní situácie, pri reprezentácii trate alebo pri samotnom rozhodnutí.
 
 Pri učení z demonštrácií sa objavuje aj problém správania v uzavretej slučke, ktorý teória už zaviedla pri učení napodobňovaním. \textbf{DAgger} od Rossa, Gordona a Bagnella je dôležitý práve preto, že ukazuje, ako sa chyba v sekvenčnom rozhodovaní môže hromadiť, keď sa agent dostane do stavov odlišných od expertných dát \cite{ross2011dagger}. Pre vodiaceho agenta to znamená, že dobrá predikcia na uloženom datasete ešte nemusí stačiť na stabilnú jazdu po vlastnej trajektórii.
 
@@ -57,6 +57,32 @@ Z týchto prác si berieme dve veci. Neurónová sieť je použiteľná ako rozh
     \caption[Typy vstupu pre vodiaceho agenta]{Zjednodušené porovnanie typov vstupu pre vodiaceho agenta. Obrazový vstup používajú napríklad end-to-end prístupy ako \textbf{PilotNet} \cite{bojarski2016endtoend}; senzorový model je typický pre \textbf{ALVINN} a pretekárske súťaže v \textbf{TORCS}/\textbf{SCRC} \cite{pomerleau1989alvinn, loiacono2010scrc}; explicitná reprezentácia trate je bežná v praktickej hernej AI \cite{game_ai_pro_racetrack2013}.}
     \label{fig:related_input_types}
 \end{figure}
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.18}
+    \caption[Časový kontext obrazového vstupu]{Časový kontext rôznych zdrojov vstupu v realtime Trackmanii. Tabuľka nemeria náš systém; zhŕňa praktický rozdiel medzi rytmom hry, obrazovou pipeline a kompaktným stavovo-geometrickým vstupom.}
+    \label{tab:related_input_frequency}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{0.24\textwidth}
+                    >{\raggedright\arraybackslash}p{0.34\textwidth}
+                    >{\raggedright\arraybackslash}p{0.34\textwidth}}
+        \toprule
+        Zdroj vstupu & Časový charakter & Dôsledok pre našu úlohu \\
+        \midrule
+        Herný stav a tick hry &
+        Komunitná dokumentácia Trackmanie viaže presnosť závodného času na stotiny sekundy a tickrate hry \cite{trackmania_wiki_units2026}. Prakticky ide o rytmus približne \(10\,\mathrm{ms}\), teda približne \(100\) krokov za sekundu. &
+        Ak chceme reagovať na aktuálny stav auta, je výhodné pracovať s údajmi, ktoré sú čo najbližšie k tomuto rytmu a nie sú naviazané na snímku obrazovky. \\
+        Obrazovka a screenshot &
+        Frekvencia obrazu závisí od FPS, hardvéru, rozlíšenia a spôsobu získavania snímok. Projektový zápis Hall of Dreams uvádza cieľ \(1600\times900\) pri \(30\) FPS a opisuje, že samotné získanie a spracovanie obrazu môže spotrebovať veľkú časť dostupného času na rozhodnutie \cite{hallofdreams_trackmania_eyes2026}. &
+        Obraz je bohatý vstup, ale môže priniesť oneskorenie, nižšiu praktickú frekvenciu rozhodovania alebo potrebu špecializovanej GPU pipeline. \\
+        Geometria a telemetria &
+        Vstup tvorí menší počet stavových a geometrických príznakov: poloha, rýchlosť, orientácia, vzdialenosti a lokálny opis trate. Nie je potrebné spracovať celú snímku obrazovky. &
+        Časť percepcie presunieme do explicitnej reprezentácie sveta a politika dostane menší, čitateľnejší vstup vhodný na rýchle opakované vyhodnocovanie. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \section{Autonómne pretekanie v simulátoroch}
 

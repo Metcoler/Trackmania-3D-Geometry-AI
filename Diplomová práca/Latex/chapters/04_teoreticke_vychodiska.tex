@@ -542,7 +542,18 @@ Trate v Trackmanii majú stavebnicový charakter a môžu obsahovať rôzne tvar
 
 Práve tento konflikt robí z pretekárskych hier užitočné prostredie pre skúmanie učiacich sa agentov. Úloha má jasne merateľný cieľ, ale dobré správanie nemožno posúdiť iba z jedného okamihu. Treba hodnotiť celý prejazd, jeho stabilitu, čas a schopnosť neopustiť použiteľnú trajektóriu \cite{offline_mania2024}.
 
-% TODO: doplniť ilustračný náhľad prejazdu trate v Trackmanii: trať, štart, cieľ, trajektória auta a výsledný čas.
+Trackmania je zároveň vhodná aj na porovnanie voči človeku. Keďže výsledok jazdy je čas prejazdu, malé rozdiely sú priamo viditeľné v rebríčku. Pri krátkych technických tratiach však nemožno automaticky predpokladať, že rozdiel pol sekundy je zanedbateľný. V hornej časti rebríčkov sa hráči často odlišujú o desatiny alebo stotiny sekundy.
+
+Túto mierku ilustrujú verejné časy hráčov na klasickej mape \emph{A01-Race} \cite{tmnf_exchange_a01_race2026, maniaexchange_api2026}. Obrázok~\ref{fig:trackmania_a01_human_times} zobrazuje horných 1000 časov z rebríčka tejto mapy. Nejde o štatistický model všetkých hráčov, ale o praktický pohľad na to, ako tesne sú pri takejto krátkej trati zoradené dobré prejazdy. Vyhladená krivka v grafe slúži iba na lepšiu čitateľnosť histogramu; netvrdíme, že časy majú normálne rozdelenie.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{images/theory/theory_trackmania_a01_human_times.pdf}
+    \caption[Ľudské časy na mape A01-Race]{Rozdelenie horných 1000 časov z verejného rebríčka mapy \emph{A01-Race}. Histogram a vyhladená krivka slúžia iba na vizuálne zobrazenie vzorky; netvrdíme, že časy majú normálne rozdelenie. Dáta boli odvodené z verejne dostupných záznamov k tejto mape \cite{tmnf_exchange_a01_race2026, maniaexchange_api2026}.}
+    \label{fig:trackmania_a01_human_times}
+\end{figure}
+
+V tejto vzorke bol najlepší čas približne \(23{,}77\) sekundy. Medzi prvým a desiatym časom bol rozdiel iba približne \(0{,}07\) sekundy. Horných 100 časov sa zmestilo do približne \(0{,}22\) sekundy, horných 500 do \(0{,}41\) sekundy a horných 1000 do \(0{,}71\) sekundy. Pointa je jednoduchá: pri krátkej technickej trati môže aj rozdiel niekoľkých desatín sekundy znamenať viditeľný posun v poradí. Preto neskôr nebudeme rozdiel \(0{,}5\) sekundy čítať ako maličkosť, ale ako rozdiel, ktorý má v Trackmanii praktický význam.
 
 \section{Základné pojmy riadenia vozidla a pretekárskej jazdy}
 

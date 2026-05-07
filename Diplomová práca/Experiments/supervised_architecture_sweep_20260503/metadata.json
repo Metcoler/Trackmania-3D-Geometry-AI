@@ -1,0 +1,18 @@
+{
+  "experiment_id": "supervised_architecture_sweep_20260503",
+  "source_run": "logs\\supervised_architecture_sweep\\20260503_214049_v2d_asphalt_capacity_sweep",
+  "purpose": "Supervised capacity sweep for selecting practical MLP policy architectures.",
+  "train_samples": 43898,
+  "val_samples": 10858,
+  "obs_dim": 34,
+  "act_dim": 3,
+  "epochs": 120,
+  "optimizer": "Adam",
+  "loss": "SmoothL1Loss with action weights [1, 1, 3]",
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "batch_size": 4096,
+  "train_augment_mirror": true,
+  "val_augment_mirror": false,
+  "random_seed": 51951
+}

@@ -176,3 +176,9 @@ python Driver.py --population-file night-ga --map-name single_surface_flat --end
 
 
 powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_pretrain_single_height_48x24_20260506.ps1
+
+
+
+
+
+powershell -ExecutionPolicy Bypass -File .\Experiments\run_supervised_pretrain_multi_surface_flat_48x24_20260507.ps1

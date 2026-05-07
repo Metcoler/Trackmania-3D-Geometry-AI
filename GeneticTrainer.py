@@ -2306,17 +2306,17 @@ if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
     # map dependend constants
-    map_name = "single_surface_height"
+    map_name = "multi_surface_flat"
     env_max_time = 45
     
     # neural network architecture
     hidden_dim = [48, 24]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
-    vertical_mode = True
-    multi_surface_mode = False
+    vertical_mode = False
+    multi_surface_mode = True
 
-    # Best-supported real-TM lexicographic GA profile for the seeded height run.
+    # Best-supported real-TM lexicographic GA profile for the seeded multi-surface run.
     pop_size = 48
     elite_count = 2
     parent_count = 14
@@ -2387,11 +2387,11 @@ if __name__ == "__main__":
     
     # Train from checkpoint or supervised pretrained model.
     #
-    # Hybrid BC initialization: single_surface_height pretrain with the live
-    # v3d asphalt observation layout (obs_dim=48, vertical=True, surface=False).
-    initial_population_source: Optional[str] = (
-        r"logs\supervised_runs_single_height_pretrain_48x24_20260506"
-        r"\20260506_154202_v3d_asphalt_target_supervised\best_model.pt"
+    # Hybrid BC initialization: multi_surface_flat pretrain with the live
+    # v2d surface observation layout (obs_dim=39, vertical=False, surface=True).
+    initial_population_source_root = r"logs\supervised_runs_multi_surface_flat_pretrain_48x24_20260507"
+    initial_population_source: Optional[str] = GeneticTrainer.find_latest_supervised_model(
+        initial_population_source_root
     )
     # Old v2d population checkpoints are intentionally not used as the default
     # source anymore because the canonical training observation is now v3d.

@@ -1,0 +1,3 @@
+variant,finished,crashes,timeout,progress,block_progress,time,distance,reward,steps,perturb_start_step,perturb_end_step,perturb_duration_steps,perturb_steer,perturb_gas,perturb_brake
+baseline,1,19,0,100.0,100.0,33.850000000001835,1434.8162244483829,1075.3583333333331,3385,-1,-1,0,-1.0,,
+perturbed,1,18,0,100.0,100.0,33.150000000001974,1431.776240043342,1076.4749999999997,3315,214,333,120,-1.0,,

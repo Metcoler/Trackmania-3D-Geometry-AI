@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex main"] 1778175198.40744 "main.aux" "main.bbl" "main" 1778175204.31366 0
-  "./references.bib" 1778171573 21142 785365aa824e18452c8371b6b3c59bb3 ""
+["bibtex main"] 1778179821.56025 "main.aux" "main.bbl" "main" 1778179833.33598 0
+  "./references.bib" 1778179249 21454 ef2a67cdd78b071fb47b799ca49397ea ""
   "c:/texlive/2026/texmf-dist/bibtex/bst/base/plain.bst" 1777201575 20613 bd3fbfa9f64872b81ac57a0dd2ed855f ""
-  "main.aux" 1778175202 26247 f063506150d4b75e6e5bc65485719174 "pdflatex"
+  "main.aux" 1778179829 28820 4be87267a214c643e683e9f1452a6837 "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1778175199.13938 "c:/Users/sampu/Desktop/Trackmania-BC/Diplomová práca/Latex/main.tex" "main.pdf" "main" 1778175204.31535 0
+["pdflatex"] 1778179822.90408 "c:/Users/sampu/Desktop/Trackmania-BC/Diplomová práca/Latex/main.tex" "main.pdf" "main" 1778179833.33757 0
   "appendices/appendix_a_elektronicka_priloha.tex" 1778066759 236 e61356fb9b0f957994a209008a799b40 ""
   "c:/Users/sampu/Desktop/Trackmania-BC/Diplomová práca/Latex/main.tex" 1778136088 1695 5f205864a26d72bd1741d06b5d40e500 ""
   "c:/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc" 1777202829 2971 def0b6c1f0b107b3b936def894055589 ""
@@ -66,6 +66,7 @@
   "c:/texlive/2026/texmf-dist/fonts/tfm/public/cm/cmsy8.tfm" 1777202808 1120 8b7d695260f3cff42e636090a8002094 ""
   "c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb" 1777199857 32080 340ef9bf63678554ee606688e7b5339d ""
   "c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb" 1777199857 30251 6afa5cb1d0204815a708a080681d4674 ""
+  "c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb" 1777199857 36299 5f9df58c2139e7edcf37c8fca4bd384d ""
   "c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb" 1777199857 36741 0ee9e374ec3e30da87cdfb0ea3575226 ""
   "c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb" 1777199857 37166 8ab3487cbe3ab49ebce74c29ea2418db ""
   "c:/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb" 1777199857 35469 dcf3a5f2fc1862f5952e3ee5eb1d98c4 ""
@@ -174,7 +175,7 @@
   "chapters/04_teoreticke_vychodiska.tex" 1778172795 72511 4800874de9eb243ceaec93b24e7df248 ""
   "chapters/05_suvisiace_prace.tex" 1778171548 21235 dea5570dd96d3d84a55eda9dbb504971 ""
   "chapters/06_navrh_riesenia.tex" 1778173868 34168 f61b2717408698182e4306a68d0f081f ""
-  "chapters/07_trening_policy.tex" 1778175192 3902 e72fd44302e6aa41693ad4fe07f0224c ""
+  "chapters/07_trening_policy.tex" 1778179808 18333 fb595d06b2840ee4c2118dc4db3b8612 ""
   "chapters/08_vyhodnotenie_agenta.tex" 1778066759 553 c4100ca9e99e5333d18f472764f82182 ""
   "chapters/09_zaver.tex" 1778066759 252 f24b20930cb1d8d258e1534769a3ce6c ""
   "definitions.tex" 1778066759 323 74657a3ba59472b1762e05304272eb8b ""
@@ -205,14 +206,19 @@
   "images/theory/theory_neuron_layer_mlp.pdf" 1778136088 24662 3fb8fd6ccb81bb62b4e8e58f847690f7 ""
   "images/theory/theory_scalar_vs_lexicographic.pdf" 1778136088 26813 380abb865a8f35c9a8968ea0d300ece0 ""
   "images/theory/theory_trackmania_a01_human_times.pdf" 1778170945 15694 a9dc79081e42a3fed549fcf4889a06b4 ""
+  "images/training_policy/supervised_architecture_training_curves_all.pdf" 1778177029 84024 a9dfb140d2f8ae64b4694461a513e25d ""
+  "images/training_policy/supervised_architecture_training_curves_practical.pdf" 1778177030 21766 b24e920a67443a5437723f52c13b0605 ""
+  "images/training_policy/supervised_architecture_val_loss_vs_params.pdf" 1778177031 22182 196c2d224a0140ef934eb438e02debc7 ""
+  "images/training_policy/supervised_behavior_cloning_butterfly_p04_left_120.pdf" 1778179068 41363 82aaf3fe76d3378caa93654cdd8b0a41 ""
+  "images/training_policy/supervised_behavior_cloning_teacher_agent_paths.pdf" 1778178040 517801 cac6d64def5e22d4175801630cc863fa ""
   "images/zadanie.pdf" 1778066759 340892 d121efa67341b75d534f92c8f3c1e16e ""
-  "main.aux" 1778175202 26247 f063506150d4b75e6e5bc65485719174 "pdflatex"
-  "main.bbl" 1778175199 11950 b1e8872b70e1a7d0889848f8561f96bc "bibtex main"
-  "main.lof" 1778175202 2822 402e6cd604f4047a1c4d488c3682d7b8 "pdflatex"
-  "main.lot" 1778175202 459 4acc45318d3f4ac4850543782b4d40b7 "pdflatex"
-  "main.out" 1778175202 10037 3aa623b0a70a8305e84026bfd076ab09 "pdflatex"
+  "main.aux" 1778179829 28820 4be87267a214c643e683e9f1452a6837 "pdflatex"
+  "main.bbl" 1778179822 12209 9f4d7820d2317b14e38714964e0534b9 "bibtex main"
+  "main.lof" 1778179829 3417 d857b345fd9551d70756522de4313810 "pdflatex"
+  "main.lot" 1778179829 669 27e7866c664e3640430782e5dbe7e7e6 "pdflatex"
+  "main.out" 1778179829 10811 b9c5b98d51869ffdcfe4f81af2a51bee "pdflatex"
   "main.tex" 1778136088 1695 5f205864a26d72bd1741d06b5d40e500 ""
-  "main.toc" 1778175202 8290 f0e2cb5e9fb116b2427e6c7e97ec10d7 "pdflatex"
+  "main.toc" 1778179829 8593 0a2587ce22e2e212f0c425b49d80b86f "pdflatex"
   "preamble.tex" 1778136088 706 cf8ab38e640d17ea6d246819ff2eda4a ""
   "variables.tex" 1778066759 716 16bd96c9fda2f2c27efa7b57bd72ce05 ""
   (generated)

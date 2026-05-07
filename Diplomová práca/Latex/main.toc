@@ -90,17 +90,18 @@
 \contentsline {section}{\numberline {4.1}Problém: hľadáme politiku správania}{61}{section.4.1}%
 \contentsline {section}{\numberline {4.2}Výber architektúry neurónovej siete}{62}{section.4.2}%
 \contentsline {section}{\numberline {4.3}Behaviorálne klonovanie v uzavretej slučke}{65}{section.4.3}%
-\contentsline {chapter}{\numberline {5}Vyhodnotenie výsledného agenta}{69}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Cieľ finálneho vyhodnotenia}{69}{section.5.1}%
-\contentsline {section}{\numberline {5.2}Výber agentov na porovnanie}{69}{section.5.2}%
-\contentsline {section}{\numberline {5.3}Výber testovacích tratí}{69}{section.5.3}%
-\contentsline {section}{\numberline {5.4}Metriky finálneho hodnotenia}{69}{section.5.4}%
-\contentsline {section}{\numberline {5.5}Trajektórie a správanie na mape}{69}{section.5.5}%
-\contentsline {section}{\numberline {5.6}Vyhodnotenie generalizácie}{69}{section.5.6}%
-\contentsline {section}{\numberline {5.7}Vyhodnotenie výškových rozdielov}{69}{section.5.7}%
-\contentsline {section}{\numberline {5.8}Vyhodnotenie rôznych povrchov}{69}{section.5.8}%
-\contentsline {section}{\numberline {5.9}Časové porovnanie}{69}{section.5.9}%
-\contentsline {section}{\numberline {5.10}Diskusia správania agenta}{69}{section.5.10}%
-\contentsline {section}{\numberline {5.11}Prechod do záveru}{69}{section.5.11}%
-\contentsline {chapter}{Záver}{71}{chapter*.67}%
-\contentsline {chapter}{Príloha A}{79}{chapter*.73}%
+\contentsline {section}{\numberline {4.4}Interaktívne učenie napodobňovaním}{68}{section.4.4}%
+\contentsline {chapter}{\numberline {5}Vyhodnotenie výsledného agenta}{71}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Cieľ finálneho vyhodnotenia}{71}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Výber agentov na porovnanie}{71}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Výber testovacích tratí}{71}{section.5.3}%
+\contentsline {section}{\numberline {5.4}Metriky finálneho hodnotenia}{71}{section.5.4}%
+\contentsline {section}{\numberline {5.5}Trajektórie a správanie na mape}{71}{section.5.5}%
+\contentsline {section}{\numberline {5.6}Vyhodnotenie generalizácie}{71}{section.5.6}%
+\contentsline {section}{\numberline {5.7}Vyhodnotenie výškových rozdielov}{71}{section.5.7}%
+\contentsline {section}{\numberline {5.8}Vyhodnotenie rôznych povrchov}{71}{section.5.8}%
+\contentsline {section}{\numberline {5.9}Časové porovnanie}{71}{section.5.9}%
+\contentsline {section}{\numberline {5.10}Diskusia správania agenta}{71}{section.5.10}%
+\contentsline {section}{\numberline {5.11}Prechod do záveru}{71}{section.5.11}%
+\contentsline {chapter}{Záver}{73}{chapter*.67}%
+\contentsline {chapter}{Príloha A}{81}{chapter*.73}%

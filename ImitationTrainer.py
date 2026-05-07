@@ -101,11 +101,13 @@ class ImitationMixConfig:
     binarize_executed_gas_brake: bool = False
 
     def probability_for_saved_attempts(self, saved_attempts: int) -> float:
-        if self.num_attempts <= 1:
-            return float(np.clip(self.initial_agent_probability, 0.0, self.max_agent_probability))
-
-        curriculum_position = float(np.clip(saved_attempts, 0, self.num_attempts - 1))
-        curriculum_ratio = curriculum_position / float(self.num_attempts - 1)
+        # `num_attempts` is the number of accepted training attempts in the
+        # curriculum. Dividing by `num_attempts` makes a 10-attempt run progress
+        # by exact 10 percentage-point steps: 0%, 10%, ..., 90%. The 100% agent
+        # policy is then the final model evaluated after the curriculum.
+        total_steps = max(1, int(self.num_attempts))
+        curriculum_position = float(np.clip(saved_attempts, 0, total_steps))
+        curriculum_ratio = curriculum_position / float(total_steps)
         probability = (
             self.initial_agent_probability
             + curriculum_ratio * (self.max_agent_probability - self.initial_agent_probability)

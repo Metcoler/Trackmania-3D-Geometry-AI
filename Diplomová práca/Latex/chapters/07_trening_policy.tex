@@ -122,10 +122,57 @@ Z tohto experimentu si berieme dve pracovné architektúry. \(32\times16\) ReLU,
 
 Obrázok~\ref{fig:supervised_behavior_cloning_teacher_agent_paths} je dôležitý práve preto, že výsledok nie je ani úplné zlyhanie, ani hotové riešenie. Agent sa už z naučených dát dokáže dostať do cieľa. Zároveň však jazdí výrazne horšie než učiteľské prejazdy: na tejto mape dokončil jazdu za \(43{,}39\,\mathrm{s}\) a počas nej nazbieral \(32\) kontaktov so stenou, zatiaľ čo učiteľské jazdy v použitom datasete boli približne v rozsahu \(23{,}81\) až \(24{,}65\,\mathrm{s}\). Supervised strata teda zachytila schopnosť predikovať ľudskú akciu, ale sama o sebe nezaručila dobré správanie v uzavretej slučke.
 
-Toto je presne miesto, kde sa behaviorálne klonovanie láme. Pri učení dostáva sieť pozorovania, ktoré vznikli počas ľudskej jazdy. Pri samostatnej jazde si však agent svoje budúce pozorovania vytvára vlastnými akciami. Malá chyba v jednej zákrute posunie auto na inú stopu, tým zmení vzdialenosti k okrajom trate a ďalšie rozhodnutia už prebiehajú v stave, ktorý nemusel byť dobre pokrytý trénovacími dátami. Tento problém distribučného posunu je známy aj v literatúre k napodobňovaniu a motivuje interaktívne metódy typu DAgger \cite{ross2011dagger}.
+Toto je presne miesto, kde sa behaviorálne klonovanie láme. Pri učení dostáva sieť pozorovania, ktoré vznikli počas ľudskej jazdy. Väčšina dobrých ľudských prejazdov však prirodzene vedie podobnou časťou trate: hráč sa snaží držať rýchlu stopu a vyhýba sa stavom, v ktorých by už musel prudko zachraňovať chybu. Dataset preto obsahuje veľa príkladov bežnej jazdy, ale málo príkladov zriedkavých opravných situácií.
+
+Pri samostatnej jazde si agent svoje budúce pozorovania vytvára vlastnými akciami. Malá chyba v jednej zákrute posunie auto na inú stopu, tým zmení vzdialenosti k okrajom trate a ďalšie rozhodnutia už prebiehajú v stave, ktorý nemusel byť dobre pokrytý trénovacími dátami. Tento problém distribučného posunu je známy aj v literatúre k napodobňovaniu a motivuje interaktívne metódy typu DAgger \cite{ross2011dagger}.
 
 Citlivosť na zásah do akcie sme si overili aj krátkou diagnostickou perturbáciou: na niekoľko krokov sme politike prepísali riadenie a sledovali sme, ako sa zmení zvyšok trajektórie. Tento beh nepoužívame ako samostatný kvantitatívny dôkaz, ale dobre ilustruje praktický problém: v sekvenčnej jazde sa odchýlka neuzavrie v jednom kroku. Mení budúcu polohu auta, a tým aj celé ďalšie rozhodovanie politiky.
 
-Z behaviorálneho klonovania si teda berieme pozitívny aj negatívny výsledok. Pozitívny výsledok je, že navrhnuté pozorovanie obsahuje dosť informácií na to, aby sieť vytvorila použiteľné akcie a prešla trať. Negatívny výsledok je, že samotné napodobňovanie nestačí na stabilného pretekárskeho agenta. Potrebujeme buď zbierať dáta aj zo stavov, do ktorých sa agent dostane vlastnými chybami, alebo začať politiku hodnotiť podľa jej správania v prostredí.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/supervised_behavior_cloning_butterfly_p04_left_120.pdf}
+    \caption[Diagnostická zmena akcie pri supervised politike]{Diagnostická zmena akcie pri politike naučenej behaviorálnym klonovaním. Modrá čiara ukazuje pôvodný prejazd, oranžová prejazd po krátkom nanútenom zatočení doľava. Červený úsek označuje trvanie zásahu a čierne body kontakty so stenou. Zásah v tomto behu neviedol k horšiemu času, ale zmenil ďalšiu trajektóriu auta, čo ilustruje citlivosť jazdy na malé odchýlky v minulosti.}
+    \label{fig:supervised_behavior_cloning_butterfly}
+\end{figure}
+
+Obrázok~\ref{fig:supervised_behavior_cloning_butterfly} používame ako analógiu k známej myšlienke citlivosti dynamických systémov na malé zmeny počiatočných podmienok, ktorá sa často označuje ako butterfly efekt \cite{lorenz1963deterministic}. Netvrdíme, že týmto diagnostickým behom dokazujeme chaotickosť nášho prostredia. Podstatná je jednoduchšia praktická pointa: v uzavretej slučke môže aj malá odchýlka dávno pred aktuálnym rozhodnutím dostať auto do inej časti stavového priestoru. Politika naučená iba na učiteľských dátach tam nemusí mať dostatok príkladov.
+
+Z behaviorálneho klonovania si teda berieme pozitívny aj negatívny výsledok. Pozitívny výsledok je, že navrhnuté pozorovanie obsahuje dosť informácií na to, aby sieť vytvorila použiteľné akcie a prešla trať. Negatívny výsledok je, že samotné napodobňovanie nestačí na stabilného pretekárskeho agenta. Aby sme zachytili špecifické a opravné situácie, potrebovali by sme veľa variabilných vzoriek, alebo musíme dáta zbierať aj zo stavov, do ktorých sa agent dostane vlastnými chybami. Druhá možnosť vedie k interaktívnemu učeniu napodobňovaním.
+
+\FloatBarrier
+
+\section{Interaktívne učenie napodobňovaním}
+
+Prirodzená oprava behaviorálneho klonovania je nezbierať iba ideálne jazdy človeka. Ak problém vzniká tým, že agent počas vlastnej jazdy navštívi iné stavy než učiteľ, potom má zmysel zbierať dáta práve v týchto stavoch. Tento smer nadväzuje na myšlienku DAgger: dataset sa postupne rozširuje o pozorovania, do ktorých sa dostáva aktuálna politika, zatiaľ čo expert poskytuje správnu akciu \cite{ross2011dagger}.
+
+V našom interaktívnom režime preto človek a agent nejazdia oddelene. V každom kroku máme ľudskú akciu \(a_t^{\mathrm{human}}\) a akciu aktuálnej politiky \(a_t^{\mathrm{agent}}\). Do hry pošleme vykonanú akciu \(a_t^{\mathrm{exec}}\), ale ako trénovací cieľ ukladáme ľudskú korekciu. Pri režime miešania akcií môžeme vykonanú akciu zapísať ako
+\[
+    a_t^{\mathrm{exec}}
+    =
+    (1-\lambda_t)a_t^{\mathrm{human}}
+    +
+    \lambda_t a_t^{\mathrm{agent}},
+\]
+kde \(\lambda_t \in [0,1]\) určuje, akú časť riadenia v danom pokuse preberá agent. Na začiatku je \(\lambda_t\) malé a jazdu drží najmä človek. Postupne sa zvyšuje, takže agent vytvára čoraz väčšiu časť stavov, na ktorých sa bude po prejazde ďalej učiť.
+
+Praktický cyklus jedného pokusu je krátky:
+\[
+\begin{array}{l}
+\text{spusti aktuálnu politiku a nastav podiel agenta,}\\
+\text{počas jazdy miešaj akciu človeka a agenta,}\\
+\text{ukladaj pozorovanie a ľudskú korekčnú akciu,}\\
+\text{po dokončení prejazdu krátko douč sieť na nových dátach,}\\
+\text{zvýš podiel agenta a opakuj.}
+\end{array}
+\]
+Tým sa od behaviorálneho klonovania líši najmä zdroj dát. Už nejde iba o stavy, do ktorých sa dostal dobrý ľudský prejazd. Do datasetu pribúdajú aj stavy vzniknuté tým, že agent zatáčal trochu inak, spomalil na inom mieste alebo vyšiel zo stopy. Práve tam sú korekčné akcie najcennejšie.
+
+% TODO: doplniť graf priebehu interaktívneho učenia napodobňovaním: na osi x pokus alebo čas, na osi y podiel riadenia agenta \(\lambda\), doplnený o krátke doučenia po prejazdoch.
+
+% TODO: doplniť obrázok trajektórií po interaktívnom učení napodobňovaním: aktuálny agent a predchádzajúce prejazdy/korekcie na rovnakej mape.
+
+Tento krok však stále nemení cieľ učenia. Sieť sa učí napodobniť ľudskú korekciu v širšej množine stavov, nie priamo minimalizovať čas alebo počet kontaktov. Interaktívne napodobňovanie preto môže zlepšiť správanie oproti čisto statickému behaviorálnemu klonovaniu, ale ostáva závislé od kvality človeka, ktorý korekcie poskytuje. Ak hráč reaguje pomaly, volí slabú stopu alebo nevie ukázať dostatočne pestrú množinu opravných manévrov, agent sa bude učiť práve z týchto obmedzení.
+
+Praktický problém je aj množstvo dát. Čím viac stavov chceme pokryť, tým viac prejazdov a korekcií potrebujeme. Pri krátkej mape sa to dá zvládnuť ručne, ale pri všeobecnejšom agentovi by sa počet potrebných vzoriek rýchlo zväčšoval. Po tejto časti teda vieme, že sieť vie konať a že vieme získavať lepšie korekčné dáta. Stále však potrebujeme spôsob, ako politiku hodnotiť podľa toho, čo na trati skutočne dosiahla.
 
 \FloatBarrier

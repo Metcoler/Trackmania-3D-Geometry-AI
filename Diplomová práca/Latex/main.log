@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.4.26)  7 MAY 2026 20:21
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.4.26)  7 MAY 2026 20:50
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -571,12 +571,12 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 ) [3] [4
 
 ]
-<images/zadanie.pdf, id=225, 597.50731pt x 845.04607pt>
+<images/zadanie.pdf, id=229, 597.50731pt x 845.04607pt>
 File: images/zadanie.pdf Graphic file (type pdf)
 <use images/zadanie.pdf>
 Package pdftex.def Info: images/zadanie.pdf  used on input line 72.
 (pdftex.def)             Requested size: 597.50584pt x 845.044pt.
-<images/zadanie.pdf, id=227, page=1, 597.50731pt x 845.04607pt>
+<images/zadanie.pdf, id=231, page=1, 597.50731pt x 845.04607pt>
 File: images/zadanie.pdf Graphic file (type pdf)
 <use images/zadanie.pdf, page 1>
 Package pdftex.def Info: images/zadanie.pdf , page1 used on input line 72.
@@ -621,13 +621,13 @@ l.1 \newpage
 \openout4 = `main.toc'.
 
 
-[8] (./main.lof)
+[8] (./main.lof [9
+
+])
 \tf@lof=\write5
 \openout5 = `main.lof'.
 
- [9
-
-] [10] (./main.lot)
+ [10] (./main.lot)
 \tf@lot=\write6
 \openout6 = `main.lot'.
 
@@ -646,7 +646,7 @@ Package babel Info: 'slovak' activates 'slovak' shorthands.
 ]
 Kapitola 1.
 [3] [4] [5]
-<images/theory/theory_agent_environment_loop.pdf, id=479, 585.74835pt x 330.706
+<images/theory/theory_agent_environment_loop.pdf, id=486, 585.74835pt x 330.706
 22pt>
 File: images/theory/theory_agent_environment_loop.pdf Graphic file (type pdf)
 <use images/theory/theory_agent_environment_loop.pdf>
@@ -655,7 +655,7 @@ on input line 79.
 (pdftex.def)             Requested size: 441.01773pt x 249.00294pt.
  [6] [7 <./images/theory/theory_agent_environment_loop.pdf>]
 [8] [9]
-<images/theory/theory_scalar_vs_lexicographic.pdf, id=535, 658.56035pt x 194.06
+<images/theory/theory_scalar_vs_lexicographic.pdf, id=542, 658.56035pt x 194.06
 058pt>
 File: images/theory/theory_scalar_vs_lexicographic.pdf Graphic file (type pdf)
 <use images/theory/theory_scalar_vs_lexicographic.pdf>
@@ -663,7 +663,7 @@ Package pdftex.def Info: images/theory/theory_scalar_vs_lexicographic.pdf  used
  on input line 150.
 (pdftex.def)             Requested size: 418.96548pt x 123.46101pt.
  [10 <./images/theory/theory_scalar_vs_lexicographic.pdf>] [11]
-<images/theory/theory_activation_functions.pdf, id=586, 823.61105pt x 280.92812
+<images/theory/theory_activation_functions.pdf, id=593, 823.61105pt x 280.92812
 pt>
 File: images/theory/theory_activation_functions.pdf Graphic file (type pdf)
 <use images/theory/theory_activation_functions.pdf>
@@ -671,7 +671,7 @@ Package pdftex.def Info: images/theory/theory_activation_functions.pdf  used on
  input line 195.
 (pdftex.def)             Requested size: 441.01773pt x 150.43007pt.
  [12]
-<images/theory/theory_neuron_layer_mlp.pdf, id=592, 546.54187pt x 364.38628pt>
+<images/theory/theory_neuron_layer_mlp.pdf, id=599, 546.54187pt x 364.38628pt>
 File: images/theory/theory_neuron_layer_mlp.pdf Graphic file (type pdf)
 <use images/theory/theory_neuron_layer_mlp.pdf>
 Package pdftex.def Info: images/theory/theory_neuron_layer_mlp.pdf  used on inp
@@ -680,7 +680,7 @@ ut line 221.
 
 [13 <./images/theory/theory_activation_functions.pdf>] [14 <./images/theory/the
 ory_neuron_layer_mlp.pdf>]
-<images/theory/theory_blackbox_function.pdf, id=642, 431.81326pt x 248.17519pt>
+<images/theory/theory_blackbox_function.pdf, id=649, 431.81326pt x 248.17519pt>
 
 File: images/theory/theory_blackbox_function.pdf Graphic file (type pdf)
 <use images/theory/theory_blackbox_function.pdf>
@@ -689,21 +689,21 @@ put line 236.
 (pdftex.def)             Requested size: 361.63776pt x 207.85605pt.
  [15 <./images/theory/theory_blackbox_function.pdf>]
 [16] [17] [18] [19] [20] [21]
-<images/theory/theory_ga_initial_population.pdf, id=740, 679.50322pt x 281.5639
+<images/theory/theory_ga_initial_population.pdf, id=747, 679.50322pt x 281.5639
 2pt>
 File: images/theory/theory_ga_initial_population.pdf Graphic file (type pdf)
 <use images/theory/theory_ga_initial_population.pdf>
 Package pdftex.def Info: images/theory/theory_ga_initial_population.pdf  used o
 n input line 382.
 (pdftex.def)             Requested size: 441.01773pt x 182.7437pt.
-<images/theory/theory_ga_selection.pdf, id=741, 652.24709pt x 281.56392pt>
+<images/theory/theory_ga_selection.pdf, id=748, 652.24709pt x 281.56392pt>
 File: images/theory/theory_ga_selection.pdf Graphic file (type pdf)
 <use images/theory/theory_ga_selection.pdf>
 Package pdftex.def Info: images/theory/theory_ga_selection.pdf  used on input l
 ine 394.
 (pdftex.def)             Requested size: 441.01773pt x 190.38684pt.
  [22 <./images/theory/theory_ga_initial_population.pdf>]
-<images/theory/theory_ga_crossover.pdf, id=764, 660.44183pt x 363.92282pt>
+<images/theory/theory_ga_crossover.pdf, id=771, 660.44183pt x 363.92282pt>
 File: images/theory/theory_ga_crossover.pdf Graphic file (type pdf)
 <use images/theory/theory_ga_crossover.pdf>
 Package pdftex.def Info: images/theory/theory_ga_crossover.pdf  used on input l
@@ -711,7 +711,7 @@ ine 409.
 (pdftex.def)             Requested size: 441.01773pt x 243.01073pt.
  [23 <./images/theory/theory_ga_selection.pdf> <./images/theory/theory_ga_cross
 over.pdf>]
-<images/theory/theory_ga_mutation.pdf, id=816, 680.90144pt x 312.17026pt>
+<images/theory/theory_ga_mutation.pdf, id=823, 680.90144pt x 312.17026pt>
 File: images/theory/theory_ga_mutation.pdf Graphic file (type pdf)
 <use images/theory/theory_ga_mutation.pdf>
 Package pdftex.def Info: images/theory/theory_ga_mutation.pdf  used on input li
@@ -724,7 +724,7 @@ Overfull \hbox (0.24104pt too wide) in paragraph at lines 436--437
  []
 
 [24 <./images/theory/theory_ga_mutation.pdf>]
-<images/theory/theory_neuroevolution_genome.pdf, id=847, 682.22879pt x 287.1287
+<images/theory/theory_neuroevolution_genome.pdf, id=854, 682.22879pt x 287.1287
 1pt>
 File: images/theory/theory_neuroevolution_genome.pdf Graphic file (type pdf)
 <use images/theory/theory_neuroevolution_genome.pdf>
@@ -732,7 +732,7 @@ Package pdftex.def Info: images/theory/theory_neuroevolution_genome.pdf  used o
 n input line 444.
 (pdftex.def)             Requested size: 405.7355pt x 170.76263pt.
  [25 <./images/theory/theory_neuroevolution_genome.pdf>] [26] [27] [28] [29]
-<images/theory/theory_trackmania_a01_human_times.pdf, id=914, 628.3086pt x 334.
+<images/theory/theory_trackmania_a01_human_times.pdf, id=921, 628.3086pt x 334.
 29614pt>
 File: images/theory/theory_trackmania_a01_human_times.pdf Graphic file (type pd
 f)
@@ -741,14 +741,14 @@ Package pdftex.def Info: images/theory/theory_trackmania_a01_human_times.pdf  u
 sed on input line 551.
 (pdftex.def)             Requested size: 441.01773pt x 234.65352pt.
  [30 <./images/theory/theory_trackmania_a01_human_times.pdf>] [31]
-<images/theory/theory_bunny_mesh_overview.pdf, id=944, 586.56035pt x 303.67854p
+<images/theory/theory_bunny_mesh_overview.pdf, id=951, 586.56035pt x 303.67854p
 t>
 File: images/theory/theory_bunny_mesh_overview.pdf Graphic file (type pdf)
 <use images/theory/theory_bunny_mesh_overview.pdf>
 Package pdftex.def Info: images/theory/theory_bunny_mesh_overview.pdf  used on 
 input line 582.
 (pdftex.def)             Requested size: 441.01773pt x 228.33755pt.
-<images/theory/theory_mesh_raycasting_detail.pdf, id=948, 496.13354pt x 293.828
+<images/theory/theory_mesh_raycasting_detail.pdf, id=955, 496.13354pt x 293.828
 14pt>
 File: images/theory/theory_mesh_raycasting_detail.pdf Graphic file (type pdf)
 <use images/theory/theory_mesh_raycasting_detail.pdf>
@@ -764,7 +764,7 @@ Kapitola 2.
 
 ]
 Kapitola 3.
-<images/solution_proposal/solution_dataflow_loop.pdf, id=1075, 745.10371pt x 21
+<images/solution_proposal/solution_dataflow_loop.pdf, id=1082, 745.10371pt x 21
 7.24362pt>
 File: images/solution_proposal/solution_dataflow_loop.pdf Graphic file (type pd
 f)
@@ -772,7 +772,7 @@ f)
 Package pdftex.def Info: images/solution_proposal/solution_dataflow_loop.pdf  u
 sed on input line 9.
 (pdftex.def)             Requested size: 441.01773pt x 128.58366pt.
-<images/solution_proposal/solution_game_agent_loop.pdf, id=1077, 585.74835pt x 
+<images/solution_proposal/solution_game_agent_loop.pdf, id=1084, 585.74835pt x 
 330.70622pt>
 File: images/solution_proposal/solution_game_agent_loop.pdf Graphic file (type 
 pdf)
@@ -785,7 +785,7 @@ tion_proposal/solution_game_agent_loop.pdf>] [45]
 Package hyperref Info: bookmark level for unknown lstlisting defaults to 0 on i
 nput line 68.
  [46]
-<images/solution_proposal/solution_blocks_editor_view.png, id=1218, 1325.70282p
+<images/solution_proposal/solution_blocks_editor_view.png, id=1225, 1325.70282p
 t x 323.70938pt>
 File: images/solution_proposal/solution_blocks_editor_view.png Graphic file (ty
 pe png)
@@ -793,7 +793,7 @@ pe png)
 Package pdftex.def Info: images/solution_proposal/solution_blocks_editor_view.p
 ng  used on input line 106.
 (pdftex.def)             Requested size: 441.01773pt x 107.68387pt.
-<images/solution_proposal/solution_game_map_overview.png, id=1222, 770.12718pt 
+<images/solution_proposal/solution_game_map_overview.png, id=1229, 770.12718pt 
 x 497.60907pt>
 File: images/solution_proposal/solution_game_map_overview.png Graphic file (typ
 e png)
@@ -801,7 +801,7 @@ e png)
 Package pdftex.def Info: images/solution_proposal/solution_game_map_overview.pn
 g  used on input line 115.
 (pdftex.def)             Requested size: 361.63776pt x 233.66368pt.
-<images/solution_proposal/solution_track_drive_preview.pdf, id=1223, 685.70448p
+<images/solution_proposal/solution_track_drive_preview.pdf, id=1230, 685.70448p
 t x 499.8884pt>
 File: images/solution_proposal/solution_track_drive_preview.pdf Graphic file (t
 ype pdf)
@@ -809,7 +809,7 @@ ype pdf)
 Package pdftex.def Info: images/solution_proposal/solution_track_drive_preview.
 pdf  used on input line 122.
 (pdftex.def)             Requested size: 379.27551pt x 276.50314pt.
-<images/solution_proposal/solution_surface_blocks.png, id=1226, 1241.38782pt x 
+<images/solution_proposal/solution_surface_blocks.png, id=1233, 1241.38782pt x 
 352.31625pt>
 File: images/solution_proposal/solution_surface_blocks.png Graphic file (type p
 ng)
@@ -817,7 +817,7 @@ ng)
 Package pdftex.def Info: images/solution_proposal/solution_surface_blocks.png  
 used on input line 131.
 (pdftex.def)             Requested size: 441.01773pt x 125.16183pt.
-<images/solution_proposal/solution_height_blocks.png, id=1227, 1102.1175pt x 33
+<images/solution_proposal/solution_height_blocks.png, id=1234, 1102.1175pt x 33
 5.00156pt>
 File: images/solution_proposal/solution_height_blocks.png Graphic file (type pn
 g)
@@ -828,19 +828,19 @@ sed on input line 133.
  [47 <./images/solution_proposal/solution_blocks_editor_view.png>] [48 <./image
 s/solution_proposal/solution_game_map_overview.png> <./images/solution_proposal
 /solution_track_drive_preview.pdf>]
-<images/solution_proposal/mesh_straight.png, id=1288, 602.25pt x 361.35pt>
+<images/solution_proposal/mesh_straight.png, id=1295, 602.25pt x 361.35pt>
 File: images/solution_proposal/mesh_straight.png Graphic file (type png)
 <use images/solution_proposal/mesh_straight.png>
 Package pdftex.def Info: images/solution_proposal/mesh_straight.png  used on in
 put line 144.
 (pdftex.def)             Requested size: 211.68661pt x 127.01474pt.
-<images/solution_proposal/mesh_curve.png, id=1289, 1204.5pt x 722.7pt>
+<images/solution_proposal/mesh_curve.png, id=1296, 1204.5pt x 722.7pt>
 File: images/solution_proposal/mesh_curve.png Graphic file (type png)
 <use images/solution_proposal/mesh_curve.png>
 Package pdftex.def Info: images/solution_proposal/mesh_curve.png  used on input
  line 149.
 (pdftex.def)             Requested size: 211.68661pt x 127.00371pt.
-<images/solution_proposal/map_mesh.png, id=1291, 1044.90375pt x 568.37344pt>
+<images/solution_proposal/map_mesh.png, id=1298, 1044.90375pt x 568.37344pt>
 File: images/solution_proposal/map_mesh.png Graphic file (type png)
 <use images/solution_proposal/map_mesh.png>
 Package pdftex.def Info: images/solution_proposal/map_mesh.png  used on input l
@@ -850,7 +850,7 @@ ine 159.
 n_proposal/solution_height_blocks.png> <./images/solution_proposal/mesh_straigh
 t.png> <./images/solution_proposal/mesh_curve.png>] [50 <./images/solution_prop
 osal/map_mesh.png>]
-<images/solution_proposal/solution_observation_from_geometry.pdf, id=1308, 499.
+<images/solution_proposal/solution_observation_from_geometry.pdf, id=1315, 499.
 53024pt x 245.25545pt>
 File: images/solution_proposal/solution_observation_from_geometry.pdf Graphic f
 ile (type pdf)
@@ -859,7 +859,7 @@ Package pdftex.def Info: images/solution_proposal/solution_observation_from_geo
 metry.pdf  used on input line 218.
 (pdftex.def)             Requested size: 441.01773pt x 216.53648pt.
  [51]
-<images/solution_proposal/solution_game_vs_agent_view.png, id=1315, 894.9435pt 
+<images/solution_proposal/solution_game_vs_agent_view.png, id=1322, 894.9435pt 
 x 264.5885pt>
 File: images/solution_proposal/solution_game_vs_agent_view.png Graphic file (ty
 pe png)
@@ -875,7 +875,7 @@ Overfull \hbox (0.96732pt too wide) in paragraph at lines 264--265
  \T1/cmtt/m/n/12 surface_instruction_i\T1/cmr/m/n/12 .
  []
 
-<images/solution_proposal/solution_height_raycast_profile.pdf, id=1377, 432.956
+<images/solution_proposal/solution_height_raycast_profile.pdf, id=1384, 432.956
 91pt x 316.23473pt>
 File: images/solution_proposal/solution_height_raycast_profile.pdf Graphic file
  (type pdf)
@@ -885,7 +885,7 @@ le.pdf  used on input line 273.
 (pdftex.def)             Requested size: 405.7355pt x 296.36316pt.
 [54] [55 <./images/solution_proposal/solution_height_raycast_profile.pdf>]
 [56]
-<images/solution_proposal/solution_keyboard_vs_controller.png, id=1439, 1327.96
+<images/solution_proposal/solution_keyboard_vs_controller.png, id=1446, 1327.96
 124pt x 379.4175pt>
 File: images/solution_proposal/solution_keyboard_vs_controller.png Graphic file
  (type png)
@@ -900,7 +900,7 @@ on_keyboard_vs_controller.png>] [59] [60
 Kapitola 4.
 [61] [62]
 <images/training_policy/supervised_architecture_training_curves_all.pdf, id=147
-2, 802.91772pt x 358.49133pt>
+9, 802.91772pt x 358.49133pt>
 File: images/training_policy/supervised_architecture_training_curves_all.pdf Gr
 aphic file (type pdf)
 <use images/training_policy/supervised_architecture_training_curves_all.pdf>
@@ -908,7 +908,7 @@ Package pdftex.def Info: images/training_policy/supervised_architecture_trainin
 g_curves_all.pdf  used on input line 61.
 (pdftex.def)             Requested size: 441.01773pt x 196.90826pt.
 <images/training_policy/supervised_architecture_training_curves_practical.pdf, 
-id=1474, 599.5113pt x 323.54626pt>
+id=1481, 599.5113pt x 323.54626pt>
 File: images/training_policy/supervised_architecture_training_curves_practical.
 pdf Graphic file (type pdf)
 <use images/training_policy/supervised_architecture_training_curves_practical.p
@@ -916,7 +916,7 @@ df>
 Package pdftex.def Info: images/training_policy/supervised_architecture_trainin
 g_curves_practical.pdf  used on input line 70.
 (pdftex.def)             Requested size: 405.7355pt x 218.97179pt.
-<images/training_policy/supervised_architecture_val_loss_vs_params.pdf, id=1476
+<images/training_policy/supervised_architecture_val_loss_vs_params.pdf, id=1483
 , 585.14986pt x 321.60136pt>
 File: images/training_policy/supervised_architecture_val_loss_vs_params.pdf Gra
 phic file (type pdf)
@@ -929,7 +929,7 @@ s_vs_params.pdf  used on input line 79.
 al.pdf> <./images/training_policy/supervised_architecture_val_loss_vs_params.pd
 f>]
 <images/training_policy/supervised_behavior_cloning_teacher_agent_paths.pdf, id
-=1640, 790.27423pt x 494.97083pt>
+=1647, 790.27423pt x 494.97083pt>
 File: images/training_policy/supervised_behavior_cloning_teacher_agent_paths.pd
 f Graphic file (type pdf)
 <use images/training_policy/supervised_behavior_cloning_teacher_agent_paths.pdf
@@ -938,57 +938,75 @@ Package pdftex.def Info: images/training_policy/supervised_behavior_cloning_tea
 cher_agent_paths.pdf  used on input line 118.
 (pdftex.def)             Requested size: 441.01773pt x 276.22258pt.
  [65] [66 <./images/training_policy/supervised_behavior_cloning_teacher_agent_p
-aths.pdf>]) (./chapters/08_vyhodnotenie_agenta.tex [67] [68
+aths.pdf>]
+<images/training_policy/supervised_behavior_cloning_butterfly_p04_left_120.pdf,
+ id=1711, 869.47699pt x 510.80034pt>
+File: images/training_policy/supervised_behavior_cloning_butterfly_p04_left_120
+.pdf Graphic file (type pdf)
+<use images/training_policy/supervised_behavior_cloning_butterfly_p04_left_120.
+pdf>
+Package pdftex.def Info: images/training_policy/supervised_behavior_cloning_but
+terfly_p04_left_120.pdf  used on input line 133.
+(pdftex.def)             Requested size: 441.01773pt x 259.08617pt.
+ [67 <./images/training_policy/supervised_behavior_cloning_butterfly_p04_left_1
+20.pdf>] [68]) (./chapters/08_vyhodnotenie_agenta.tex
+[69] [70
 
 ]
 Kapitola 5.
-) (./chapters/09_zaver.tex [69] [70
+) (./chapters/09_zaver.tex [71] [72
 
-]) [71] [72
+]) [73] [74
 
-] (./main.bbl [73
+] (./main.bbl [75
 
 
-] [74]
-Underfull \hbox (badness 3547) in paragraph at lines 145--149
+]
+Underfull \hbox (badness 1082) in paragraph at lines 104--108
+[]\T1/cmr/m/n/12 Edward N. Lo-renz.  De-ter-mi-nis-tic non-pe-ri-odic flow.  \T
+1/cmr/m/it/12 Jour-nal of the At-
+ []
+
+[76]
+Underfull \hbox (badness 3547) in paragraph at lines 151--155
 []\T1/cmr/m/n/12 Dean A. Po-mer-leau.  Al-vinn: An au-to-no-mous land ve-hicle 
 in a ne-
  []
 
 
-Underfull \hbox (badness 2012) in paragraph at lines 145--149
+Underfull \hbox (badness 2012) in paragraph at lines 151--155
 \T1/cmr/m/n/12 lume 1, 1989.  Do-stupne z: []$\T1/cmtt/m/n/12 https : / / paper
 s . nips . cc / paper / 1988 / hash /
  []
 
-[75]
-Underfull \hbox (badness 5217) in paragraph at lines 194--198
+[77]
+Underfull \hbox (badness 5217) in paragraph at lines 200--204
 \T1/cmr/m/n/12 Sour-ces. Do-stupne z: []$\T1/cmtt/m/n/12 https : / / www . game
 aipro . com / GameAIPro / GameAIPro _
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 194--198
+Underfull \hbox (badness 10000) in paragraph at lines 200--204
 \T1/cmtt/m/n/12 Chapter39 _ Representing _ and _ Driving _ a _ Race _ Track _ f
 or _ AI _ Controlled _
  []
 
-[76]) (./appendices/appendix_a_elektronicka_priloha.tex [77] [78
+[78]) (./appendices/appendix_a_elektronicka_priloha.tex [79] [80
 
-]) [79]
+]) [81]
 (./main.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-03-20>
  ***********
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: 325A3F1BCC7E3B86C9BD368A84E7C68E;10568.
+(rerunfilecheck)             Checksum: B9C5B98D51869FFDCFE4F81AF2A51BEE;10811.
  ) 
 Here is how much of TeX's memory you used:
- 15758 strings out of 467349
- 251782 string characters out of 5419862
- 717146 words of memory out of 5000000
- 44235 multiletter control sequences out of 15000+600000
+ 15777 strings out of 467349
+ 252743 string characters out of 5419862
+ 717268 words of memory out of 5000000
+ 44249 multiletter control sequences out of 15000+600000
  651149 words of font info for 98 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  80i,17n,82p,1153b,2082s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -1017,10 +1035,10 @@ sl1200.pfb><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfti0800.pfb
 ><c:/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfti1200.pfb><c:/texli
 ve/2026/texmf-dist/fonts/type1/public/cm-super/sftt1095.pfb><c:/texlive/2026/te
 xmf-dist/fonts/type1/public/cm-super/sftt1200.pfb>
-Output written on main.pdf (93 pages, 8266562 bytes).
+Output written on main.pdf (95 pages, 8313085 bytes).
 PDF statistics:
- 1992 PDF objects out of 2073 (max. 8388607)
- 1315 compressed objects within 14 object streams
- 335 named destinations out of 1000 (max. 500000)
- 571 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 2057 PDF objects out of 2073 (max. 8388607)
+ 1340 compressed objects within 14 object streams
+ 340 named destinations out of 1000 (max. 500000)
+ 584 words of extra memory for PDF output out of 10000 (max. 10000000)
 

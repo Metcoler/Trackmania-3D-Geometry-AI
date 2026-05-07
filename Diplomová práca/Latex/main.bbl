@@ -100,6 +100,12 @@ Daniele Loiacono, Pier~Luca Lanzi, Julian Togelius, Enrique Onieva, David~A. Pel
 \newblock The 2009 simulated car racing championship.
 \newblock {\em IEEE Transactions on Computational Intelligence and AI in Games}, 2(2):131--147, 2010.
 
+\bibitem{lorenz1963deterministic}
+Edward~N. Lorenz.
+\newblock Deterministic nonperiodic flow.
+\newblock {\em Journal of the Atmospheric Sciences}, 20(2):130--141, 1963.
+\newblock DOI: \url{https://doi.org/10.1175/1520-0469(1963)020\%3C0130:DNF\%3E2.0.CO;2}.
+
 \bibitem{offline_mania2024}
 Andrea Macaluso, Alessandro Sestini, and Andrew~D. Bagdanov.
 \newblock A benchmark environment for offline reinforcement learning in racing games.

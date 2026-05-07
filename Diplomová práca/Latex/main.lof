@@ -1,0 +1,49 @@
+\babel@toc {slovak}{}\relax 
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {1.1}{\ignorespaces Interakcia agenta s prostredím}}{7}{figure.1.1}%
+\contentsline {figure}{\numberline {1.2}{\ignorespaces Skalárne a lexikografické hodnotenie}}{10}{figure.1.2}%
+\contentsline {figure}{\numberline {1.3}{\ignorespaces Aktivačné funkcie}}{13}{figure.1.3}%
+\contentsline {figure}{\numberline {1.4}{\ignorespaces Neurónová sieť}}{14}{figure.1.4}%
+\contentsline {figure}{\numberline {1.5}{\ignorespaces Model ako aproximácia funkcie}}{15}{figure.1.5}%
+\contentsline {figure}{\numberline {1.6}{\ignorespaces Inicializácia populácie}}{22}{figure.1.6}%
+\contentsline {figure}{\numberline {1.7}{\ignorespaces Selekcia jedincov}}{23}{figure.1.7}%
+\contentsline {figure}{\numberline {1.8}{\ignorespaces Kríženie a elitizmus}}{23}{figure.1.8}%
+\contentsline {figure}{\numberline {1.9}{\ignorespaces Mutácia potomkov}}{24}{figure.1.9}%
+\contentsline {figure}{\numberline {1.10}{\ignorespaces Parametre siete ako genóm}}{25}{figure.1.10}%
+\contentsline {figure}{\numberline {1.11}{\ignorespaces Trojuholníková sieť modelu}}{31}{figure.1.11}%
+\contentsline {figure}{\numberline {1.12}{\ignorespaces Raycasting na trojuholníkovej sieti}}{32}{figure.1.12}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Typy vstupu pre vodiaceho agenta}}{35}{figure.2.1}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Tok dát medzi hrou a agentom}}{39}{figure.3.1}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Trackmania ako prostredie pre agenta}}{40}{figure.3.2}%
+\contentsline {figure}{\numberline {3.3}{\ignorespaces Samostatné bloky v editore}}{43}{figure.3.3}%
+\contentsline {figure}{\numberline {3.4}{\ignorespaces Mapa zložená z blokov}}{43}{figure.3.4}%
+\contentsline {figure}{\numberline {3.5}{\ignorespaces Prejazd trate ako trajektória}}{44}{figure.3.5}%
+\contentsline {figure}{\numberline {3.6}{\ignorespaces Povrchy a výškové bloky}}{45}{figure.3.6}%
+\contentsline {figure}{\numberline {3.7}{\ignorespaces Mesh reprezentácia blokov}}{45}{figure.3.7}%
+\contentsline {figure}{\numberline {3.8}{\ignorespaces Zložená mesh mapa}}{46}{figure.3.8}%
+\contentsline {figure}{\numberline {3.9}{\ignorespaces Pohľad hry a virtuálna reprezentácia}}{47}{figure.3.9}%
+\contentsline {figure}{\numberline {3.10}{\ignorespaces Diskrétne a spojité ovládanie}}{48}{figure.3.10}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Porovnanie architektúr siete}}{53}{figure.4.1}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Supervised loss mapových špecialistov}}{54}{figure.4.2}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Trajektórie učiteľa a supervised agenta}}{55}{figure.4.3}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Progress pri reward sweep-e}}{59}{figure.4.4}%
+\contentsline {figure}{\numberline {4.5}{\ignorespaces Najlepší čas pri reward sweep-e}}{59}{figure.4.5}%
+\contentsline {figure}{\numberline {4.6}{\ignorespaces Stabilita a čas reward sweep-u}}{60}{figure.4.6}%
+\contentsline {figure}{\numberline {4.7}{\ignorespaces Detail tréningu vybraného ranking tuple}}{61}{figure.4.7}%
+\contentsline {figure}{\numberline {4.8}{\ignorespaces Čas populácie vybraného ranking tuple}}{61}{figure.4.8}%
+\contentsline {figure}{\numberline {4.9}{\ignorespaces Detail tréningu bezpečnejšieho ranking tuple}}{62}{figure.4.9}%
+\contentsline {figure}{\numberline {4.10}{\ignorespaces Čas populácie bezpečnejšieho ranking tuple}}{62}{figure.4.10}%
+\contentsline {figure}{\numberline {4.11}{\ignorespaces RL progress porovnanie}}{64}{figure.4.11}%
+\contentsline {figure}{\numberline {4.12}{\ignorespaces Výsledky RL epizód}}{64}{figure.4.12}%
+\contentsline {figure}{\numberline {4.13}{\ignorespaces NSGA-II diagnostika}}{66}{figure.4.13}%
+\contentsline {figure}{\numberline {4.14}{\ignorespaces Selekčný tlak GA}}{68}{figure.4.14}%
+\contentsline {figure}{\numberline {4.15}{\ignorespaces Mutácia GA}}{69}{figure.4.15}%
+\contentsline {figure}{\numberline {4.16}{\ignorespaces Roly mutačných režimov}}{69}{figure.4.16}%
+\contentsline {figure}{\numberline {4.17}{\ignorespaces Elite cache pri variabilnom ticku}}{71}{figure.4.17}%
+\contentsline {figure}{\numberline {4.18}{\ignorespaces Pokles mutácie po prvom finishi}}{72}{figure.4.18}%
+\contentsline {figure}{\numberline {4.19}{\ignorespaces Supervised-seeded progress}}{73}{figure.4.19}%
+\contentsline {figure}{\numberline {4.20}{\ignorespaces Supervised-seeded najlepší čas}}{74}{figure.4.20}%
+\addvspace {10\p@ }

@@ -2320,7 +2320,9 @@ if __name__ == "__main__":
     pop_size = 48
     elite_count = 2
     parent_count = 14
-    generations_to_run = 300
+    # Continue the interrupted overnight multi-surface-flat run from generation 40.
+    # The original run requested 300 generations, so this keeps the total target at 300.
+    generations_to_run = 260
     checkpoint_every = 10
 
     # Selection metric for the overnight GA experiment.
@@ -2387,17 +2389,12 @@ if __name__ == "__main__":
     
     # Train from checkpoint or supervised pretrained model.
     #
-    # Hybrid BC initialization: multi_surface_flat pretrain with the live
-    # v2d surface observation layout (obs_dim=39, vertical=False, surface=True).
-    initial_population_source_root = r"logs\supervised_runs_multi_surface_flat_pretrain_48x24_20260507"
-    initial_population_source: Optional[str] = GeneticTrainer.find_latest_supervised_model(
-        initial_population_source_root
+    # Resume the interrupted multi_surface_flat live GA run. This checkpoint is
+    # already evaluated in Trackmania, so run() will first create generation 41.
+    initial_population_source: Optional[str] = (
+        r"logs\tm_finetune_runs\20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model"
+        r"\checkpoints\population_gen_0040.npz"
     )
-    # Old v2d population checkpoints are intentionally not used as the default
-    # source anymore because the canonical training observation is now v3d.
-    # initial_population_source = (
-    #     r"logs/ga_runs\20260409_081105_map_AI_Training__5_v2d_h32x16_p32\checkpoints\population_gen_0190.npz"
-    # )
     seed_model_exact_copies = 1
     seed_model_noise_mode = "dense"
     seed_model_mutation_probs = (0.02, 0.05, 0.10)

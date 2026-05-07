@@ -1,0 +1,52 @@
+This is BibTeX, Version 0.99e (TeX Live 2026)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main.aux
+The style file: plain.bst
+Database file #1: literatura.bib
+Name 1 in "Sony AI, Polyphony Digital Inc., and Sony Interactive Entertainment" has a comma at the end for entry sophy_ai
+while executing---line 1049 of file plain.bst
+Warning--empty school in reinforcment_in_real_time
+Name 1 in "Sony AI, Polyphony Digital Inc., and Sony Interactive Entertainment" has a comma at the end for entry sophy_ai
+while executing---line 1090 of file plain.bst
+You've used 25 entries,
+            2118 wiz_defined-function locations,
+            628 strings with 7976 characters,
+and the built_in function-call counts, 7072 in all, are:
+= -- 641
+> -- 404
+< -- 2
++ -- 162
+- -- 136
+* -- 427
+:= -- 1234
+add.period$ -- 72
+call.type$ -- 25
+change.case$ -- 140
+chr.to.int$ -- 0
+cite$ -- 26
+duplicate$ -- 239
+empty$ -- 555
+format.name$ -- 136
+if$ -- 1457
+int.to.chr$ -- 0
+int.to.str$ -- 25
+missing$ -- 16
+newline$ -- 125
+num.names$ -- 50
+pop$ -- 203
+preamble$ -- 1
+purify$ -- 118
+quote$ -- 0
+skip$ -- 188
+stack$ -- 0
+substring$ -- 226
+swap$ -- 34
+text.length$ -- 2
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 90
+warning$ -- 1
+while$ -- 55
+width$ -- 27
+write$ -- 255
+(There were 2 error messages)

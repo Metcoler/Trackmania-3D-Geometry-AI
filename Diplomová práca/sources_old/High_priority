@@ -1,0 +1,424 @@
+@book{bouteiller2021deep,
+  title={Deep Reinforcement Learning in Real-Time Environments},
+  author={Bouteiller, Yann},
+  year={2021},
+  publisher={Ecole Polytechnique, Montreal (Canada)}
+}
+
+@article{savid2023simulated,
+  title={Simulated autonomous driving using reinforcement learning: A comparative study on unity’s ML-agents framework},
+  author={Savid, Yusef and Mahmoudi, Reza and Maskeli{\=u}nas, Rytis and Dama{\v{s}}evi{\v{c}}ius, Robertas},
+  journal={Information},
+  volume={14},
+  number={5},
+  pages={290},
+  year={2023},
+  publisher={MDPI}
+}
+
+
+@article{tomlinson2014representing,
+  title={Representing and driving a race track for AI controlled vehicles},
+  author={Tomlinson, Simon and Melder, Nic},
+  journal={Game AI Pro},
+  year={2014}
+}
+
+
+@mastersthesis{neinders2023improving,
+  title={Improving Trackmania Reinforcement Learning Performance: A Comparison of Sophy and Trackmania AI},
+  author={Neinders, LJ},
+  type={{B.S.} thesis},
+  year={2023},
+  school={University of Twente}
+}
+
+@article{Fuchs_2021,
+   title={Super-Human Performance in Gran Turismo Sport Using Deep Reinforcement Learning},
+   volume={6},
+   ISSN={2377-3774},
+   url={http://dx.doi.org/10.1109/LRA.2021.3064284},
+   DOI={10.1109/lra.2021.3064284},
+   number={3},
+   journal={IEEE Robotics and Automation Letters},
+   publisher={Institute of Electrical and Electronics Engineers (IEEE)},
+   author={Fuchs, Florian and Song, Yunlong and Kaufmann, Elia and Scaramuzza, Davide and Durr, Peter},
+   year={2021},
+   month=jul, pages={4257–4264} }
+
+
+@book{SuttonBarto2018,
+  title     = {Reinforcement Learning: An Introduction},
+  author    = {Sutton, Richard S. and Barto, Andrew G.},
+  year      = {2018},
+  edition   = {2},
+  publisher = {MIT Press},
+  address   = {Cambridge, MA}
+}
+
+@article{Arulkumaran2017,
+  title   = {A Brief Survey of Deep Reinforcement Learning},
+  author  = {Arulkumaran, Kai and Deisenroth, Marc Peter and Brundage, Miles and Bharath, Anil Anthony},
+  journal = {arXiv preprint arXiv:1708.05866},
+  year    = {2017}
+}
+
+
+@book{Kvasnicka2000,
+  title     = {Evolu{\v{c}}n{\'e} algoritmy},
+  author    = {Kvasni{\v{c}}ka, Vladim{\'\i}r and Posp{\'\i}chal, Ji{\v{r}}{\'\i} and Ti{\v{n}}o, Peter},
+  year      = {2000},
+  publisher = {Slovensk{\'a} technick{\'a} univerzita},
+  address   = {Bratislava},
+  isbn      = {80-227-1377-5}
+}
+
+@book{EibenSmith2003,
+  title     = {Introduction to Evolutionary Computing},
+  author    = {Eiben, A. E. and Smith, J. E.},
+  year      = {2003},
+  publisher = {Springer},
+  address   = {Berlin}
+}
+
+
+@book{Deb2001,
+  title     = {Multi-Objective Optimization Using Evolutionary Algorithms},
+  author    = {Deb, Kalyanmoy},
+  year      = {2001},
+  publisher = {John Wiley \& Sons},
+  address   = {Chichester}
+}
+
+@article{Deb2002NSGAII,
+  title   = {A Fast and Elitist Multiobjective Genetic Algorithm: NSGA-II},
+  author  = {Deb, Kalyanmoy and Pratap, Amrit and Agarwal, Sameer and Meyarivan, T.},
+  journal = {IEEE Transactions on Evolutionary Computation},
+  volume  = {6},
+  number  = {2},
+  pages   = {182--197},
+  year    = {2002},
+  doi     = {10.1109/4235.996017}
+}
+
+
+@article{StanleyMiikkulainen2002,
+  title   = {Evolving Neural Networks through Augmenting Topologies},
+  author  = {Stanley, Kenneth O. and Miikkulainen, Risto},
+  journal = {Evolutionary Computation},
+  volume  = {10},
+  number  = {2},
+  pages   = {99--127},
+  year    = {2002}
+}
+
+@article{Yao1999,
+  title   = {Evolving Artificial Neural Networks},
+  author  = {Yao, Xin},
+  journal = {Proceedings of the IEEE},
+  volume  = {87},
+  number  = {9},
+  pages   = {1423--1447},
+  year    = {1999},
+  doi     = {10.1109/5.784219}
+}
+
+
+@inproceedings{SchrumMiikkulainen2008,
+  title     = {Constructing Complex {NPC} Behavior via Multi-Objective Neuroevolution},
+  author    = {Schrum, Jacob and Miikkulainen, Risto},
+  booktitle = {Proceedings of the Fourth Artificial Intelligence and Interactive Digital Entertainment Conference (AIIDE 2008)},
+  address   = {Stanford, California},
+  pages     = {108--113},
+  year      = {2008},
+  url       = {http://nn.cs.utexas.edu/?schrum:aiide08}
+}
+
+@article{turing_machinery_and_inteligence,
+    author = {TURING, A. M.},
+    title = "{I.—COMPUTING MACHINERY AND INTELLIGENCE}",
+    journal = {Mind},
+    volume = {LIX},
+    number = {236},
+    pages = {433-460},
+    year = {1950},
+    month = {10},
+    issn = {0026-4423},
+    doi = {10.1093/mind/LIX.236.433},
+    url = {https://doi.org/10.1093/mind/LIX.236.433},
+    eprint = {https://academic.oup.com/mind/article-pdf/LIX/236/433/30123314/lix-236-433.pdf},
+}
+
+@book{artificial_intelligence_modern_aproach,
+  added-at = {2020-02-01T18:23:11.000+0100},
+  author = {Russell, Stuart and Norvig, Peter},
+  biburl = {https://www.bibsonomy.org/bibtex/20533b732950d1c5ab4ac12d4f32fe637/mialhoma},
+  edition = 3,
+  interhash = {53908a52dd4c6c8e39f93f4ffc8341be},
+  intrahash = {0533b732950d1c5ab4ac12d4f32fe637},
+  keywords = {ties4530},
+  publisher = {Prentice Hall},
+  timestamp = {2020-02-01T18:23:11.000+0100},
+  title = {Artificial Intelligence: A Modern Approach},
+  year = 2010
+}
+
+@phdthesis{ reinforcment_in_real_time,
+    author={Bouteiller,Yann},
+    year={2021},
+    month={2021},
+    title={Deep Reinforcement Learning in Real-Time Environments},
+    journal={ProQuest Dissertations and Theses},
+    pages={90},
+    note={Copyright - Database copyright ProQuest LLC; ProQuest does not claim copyright in the individual underlying works; Last updated - 2024-03-07},
+    keywords={Machine learning; Computer & video games; Deep learning; Algorithms; Artificial intelligence; Neural networks; Markov analysis; Universe; Robotics; Computer science; Operations research; Recreation; 0771:Robotics; 0814:Recreation; 0796:Operations research; 0800:Artificial intelligence; 0984:Computer science},
+    isbn={9798374494181},
+    language={English},
+    url={https://www.proquest.com/dissertations-theses/deep-reinforcement-learning-real-time/docview/2787194509/se-2},
+}
+
+@misc{end_to_end_self_driving,
+      title={End to End Learning for Self-Driving Cars}, 
+      author={Mariusz Bojarski and Davide Del Testa and Daniel Dworakowski and Bernhard Firner and Beat Flepp and Prasoon Goyal and Lawrence D. Jackel and Mathew Monfort and Urs Muller and Jiakai Zhang and Xin Zhang and Jake Zhao and Karol Zieba},
+      year={2016},
+      eprint={1604.07316},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+
+@mastersthesis{imporving_trackmania_AI,
+  title={Improving Trackmania Reinforcement Learning Performance: A Comparison of Sophy and Trackmania AI},
+  author={Neinders, LJ},
+  type={{B.S.} thesis},
+  year={2023},
+  school={University of Twente}
+}
+
+@techreport{history_of_AI,
+    author =	{Chris Smith, Brian McGuire, Ting Huang and Gary Yang},
+    title= {The History of Artificial Intelligence},
+    year={December 2006},
+    institution = {University of Washington},
+    number = {TR123/1999},
+    url = {https://courses.cs.washington.edu/courses/csep590/06au/projects/history-ai.pdf}
+}
+
+@misc{learning_to_drive_in_day,
+      title={Learning to Drive in a Day}, 
+      author={Alex Kendall and Jeffrey Hawke and David Janz and Przemyslaw Mazur and Daniele Reda and John-Mark Allen and Vinh-Dieu Lam and Alex Bewley and Amar Shah},
+      year={2018},
+      eprint={1807.00412},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+
+@misc{playing_for_data,
+      title={Playing for Data: Ground Truth from Computer Games}, 
+      author={Stephan R. Richter and Vibhav Vineet and Stefan Roth and Vladlen Koltun},
+      year={2016},
+      eprint={1608.02192},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+
+@article{super_human_grand_turismo,
+   title={Super-Human Performance in Gran Turismo Sport Using Deep Reinforcement Learning},
+   volume={6},
+   ISSN={2377-3774},
+   url={http://dx.doi.org/10.1109/LRA.2021.3064284},
+   DOI={10.1109/lra.2021.3064284},
+   number={3},
+   journal={IEEE Robotics and Automation Letters},
+   publisher={Institute of Electrical and Electronics Engineers (IEEE)},
+   author={Fuchs, Florian and Song, Yunlong and Kaufmann, Elia and Scaramuzza, Davide and Durr, Peter},
+   year={2021},
+   month=jul, pages={4257–4264} }
+
+@misc{trackmania_is_np,
+      title={TrackMania is NP-complete}, 
+      author={Franck Dernoncourt},
+      year={2014},
+      eprint={1411.5765},
+      archivePrefix={arXiv},
+      primaryClass={cs.CC}
+}
+
+@article{human_level_control_RL,
+    author = {Mnih, Volodymyr and Kavukcuoglu, Koray a. and Silver, David and Rusu, Andrei A. and Veness, Joel and Bellemare, Marc G. and Graves, Alex and Riedmiller, Martin and Fidjeland, Andreas K. and Ostrovski, Georg and Petersen, Stig and Beattie, Charles and Sadik, Amir and Antonoglou, Ioannis and King, Helen and Kumaran, Dharshan and Wierstra, Daan and Legg, Shane and Hassabis, Demis},
+    title = {Human-level control through deep reinforcement learning},
+    journal = {Nature},
+    year = {2015},
+    volume = {518},
+    number = {7540},
+    pages = {529-533},
+    doi = {10.1038/nature14236}
+}
+
+@book{reinforcment_learning_intro,
+    author = {Sutton, Richard S. and Barto, Andrew G.},
+    title = {Reinforcement Learning: An Introduction},
+    year = {1998},
+    publisher = {MIT Press}
+}
+
+@article{ieee2020artificial,
+    author = {Skinner, Geoff and Walmsley, Tom},
+    title = {Artificial Intelligence and Deep Learning in Video Games: A Brief Review},
+    journal = {IEEE Conference Publication},
+    year = {2019},
+    url = {https://ieeexplore.ieee.org/document/8709038}
+}
+
+@misc{tmrl_github,
+  author = {TrackMania RL},
+  title = {TMRL: TrackMania Reinforcement Learning},
+  year = {2023},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/trackmania-rl/tmrl}},
+}
+
+@misc{trackmania_ai_github,
+  author = {AndrejGobeX},
+  title = {TrackMania AI},
+  year = {2023},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/AndrejGobeX/TrackMania_AI}},
+}
+
+@misc{yoshtm_youtube,
+  author = {Yoshtm},
+  title = {Yoshtm YouTube Channel},
+  year = {2023},
+  publisher = {YouTube},
+  howpublished = {\url{https://www.youtube.com/@yoshtm}},
+}
+
+@misc{linesight_rl_youtube,
+  author = {Linesight RL},
+  title = {Linesight RL YouTube Channel},
+  year = {2023},
+  publisher = {YouTube},
+  howpublished = {\url{https://www.youtube.com/@linesight-rl}},
+}
+
+
+@misc{gbx_py_github,
+  author = {Schadock, Alexander},
+  title = {gbx-py: A Python library for parsing GBX files},
+  year = {2021},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/schadocalex/gbx-py}},
+}
+
+@misc{gbx_net_github,
+  author = {BigBang1112},
+  title = {gbx-net: A .NET library for parsing GBX files},
+  year = {2021},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/BigBang1112/gbx-net}},
+}
+
+@misc{sophy_ai,
+  author = {Sony AI, Polyphony Digital Inc., and Sony Interactive Entertainment},
+  title = {Gran Turismo Sophy: a Champion-level Racing AI Agent Trained Through Deep Reinforcement Learning},
+  year = {2022},
+  url = {https://www.gran-turismo.com/us/gran-turismo-sophy/},
+  note = {Accessed: 2024-06-02},
+}
+
+@article{neat_article,
+    author = {Kenneth O. Stanley and Risto Miikkulainen},
+    title = {Evolving Neural Networks through Augmenting Topologies},
+    journal = {Evolutionary Computation},
+    volume = {10},
+    number = {2},
+    pages = {99-127},
+    year = {2002},
+}
+
+
+@article{krizhevsky2012imagenet,
+  title={Imagenet classification with deep convolutional neural networks},
+  author={Krizhevsky, Alex and Sutskever, Ilya and Hinton, Geoffrey E},
+  journal={Advances in neural information processing systems},
+  volume={25},
+  year={2012}
+}
+
+@book{goodfellow2016deep,
+  title={Deep learning},
+  author={Goodfellow, Ian and Bengio, Yoshua and Courville, Aaron},
+  year={2016},
+  publisher={MIT press}
+}
+
+
+@INPROCEEDINGS{ai_in_games_brief_review,
+  author={Skinner, Geoff and Walmsley, Toby},
+  booktitle={2019 IEEE 4th International Conference on Computer and Communication Systems (ICCCS)}, 
+  title={Artificial Intelligence and Deep Learning in Video Games A Brief Review}, 
+  year={2019},
+  volume={},
+  number={},
+  pages={404-408},
+  keywords={Games;Neural networks;Deep learning;Robots;Testing;artificial intelligence;deep learning;video games;neural networks},
+  doi={10.1109/CCOMS.2019.8821783}}
+
+
+@book{computer_graphics,
+  author = {Hughes, John F. and van Dam, Andries and McGuire, Morgan and Sklar, David F. and Foley, James D. and Feiner, Steven K. and Akeley, Kurt},
+  title = {Computer Graphics: Principles and Practice},
+  edition = {3rd},
+  year = {2013},
+  publisher = {Addison-Wesley Professional},
+  isbn = {978-0321399526}
+}
+
+
+@misc{soft_actor_critic,
+      title={Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor}, 
+      author={Tuomas Haarnoja and Aurick Zhou and Pieter Abbeel and Sergey Levine},
+      year={2018},
+      eprint={1801.01290},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+
+
+@misc{randomized_q_learning,
+      title={Randomized Ensembled Double Q-Learning: Learning Fast Without a Model}, 
+      author={Xinyue Chen and Che Wang and Zijian Zhou and Keith Ross},
+      year={2021},
+      eprint={2101.05982},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+
+@misc{stable_baselines3,
+  author = {Raffin, Antonin and Hill, Ashley and Gleave, Adam and Kanervisto, Anssi and Ernestus, Maximilian and Dormann, Noah},
+  title = {Stable Baselines3},
+  year = {2021},
+  publisher = {GitHub},
+  howpublished = {\url{https://github.com/DLR-RM/stable-baselines3}},
+}
+
+@article{autonomous_vehicle_goals,
+    author = {Paredes, Rob},
+    title = {Autonomous Vehicle Safety: The Future of Driving},
+    journal = {SafetyCulture},
+    year = {2023},
+    url = {https://safetyculture.com/topics/autonomous-vehicle-safety/},
+}
+
+@book{gregory1979eye,
+  title={Eye and Brain: The Psychology of Seeing},
+  author={Gregory, Richard L.},
+  year={1979},
+  publisher={Princeton University Press}
+}
+
+https://hallofdreams.org/posts/trackmania-3/

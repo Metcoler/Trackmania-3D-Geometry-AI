@@ -59,9 +59,9 @@
     "relu",
     "tanh"
   ],
-  "run_started_utc": "2026-05-07T07:02:26Z",
-  "start_generation": 0,
-  "generations_requested": 300,
+  "run_started_utc": "2026-05-07T09:22:48Z",
+  "start_generation": 40,
+  "generations_requested": 260,
   "elite_count": 2,
   "elite_population_ratio": 0.041666666666666664,
   "parent_count": 14,
@@ -94,10 +94,10 @@
     1.0
   ],
   "target_steer_deadzone": 0.0,
-  "finetune_from_checkpoint": null,
-  "initial_population_source": "logs\\supervised_runs_multi_surface_flat_pretrain_48x24_20260507\\20260507_084210_v2d_surface_target_supervised\\best_model.pt",
-  "initial_population_source_kind": "model_seed",
-  "seed_model_path": "logs\\supervised_runs_multi_surface_flat_pretrain_48x24_20260507\\20260507_084210_v2d_surface_target_supervised\\best_model.pt",
+  "finetune_from_checkpoint": "logs\\tm_finetune_runs\\20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model\\checkpoints\\population_gen_0040.npz",
+  "initial_population_source": "logs\\tm_finetune_runs\\20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model\\checkpoints\\population_gen_0040.npz",
+  "initial_population_source_kind": "population_checkpoint",
+  "seed_model_path": null,
   "seed_model_exact_copies": 1,
   "seed_model_noise_mode": "dense",
   "seed_model_mutation_probs": [

@@ -1,0 +1,24 @@
+{
+  "track_name": "A01-Race",
+  "track_id": 2233,
+  "track_page_url": "https://tmnf.exchange/trackshow/2233",
+  "api_doc_url": "https://api2.mania.exchange/Method/Index/45",
+  "generated_at_utc": "2026-05-07T16:22:25+00:00",
+  "raw_replays": 4855,
+  "filtered_leaderboard_replays": 1310,
+  "filters": {
+    "latest_track_at": "2008-04-11T21:27:57",
+    "validated": true,
+    "replay_respawns": 0,
+    "position_not_null": true,
+    "top_n_used_for_figure": 1000
+  },
+  "best_time_s": 23.77,
+  "median_top1000_s": 24.18,
+  "min_top1000_s": 23.77,
+  "max_top1000_s": 24.48,
+  "top_10_range_s": 0.07000000000000028,
+  "top_100_range_s": 0.21999999999999886,
+  "top_500_range_s": 0.41000000000000014,
+  "top_1000_range_s": 0.7100000000000009
+}

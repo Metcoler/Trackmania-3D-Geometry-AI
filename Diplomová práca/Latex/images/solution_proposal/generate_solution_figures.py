@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import trimesh
 from matplotlib import patches
+from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
@@ -67,7 +68,12 @@ def set_axes_equal(ax) -> None:
     ax.set_zlim3d([centers[2] - radius, centers[2] + radius])
 
 
-def mesh_face_colors(triangles: np.ndarray, base_hex: str = ROAD) -> list[tuple[float, float, float, float]]:
+def mesh_face_colors(
+    triangles: np.ndarray,
+    base_hex: str = ROAD,
+    *,
+    alpha: float = 0.95,
+) -> list[tuple[float, float, float, float]]:
     base = np.asarray(
         [int(base_hex[i : i + 2], 16) for i in (1, 3, 5)],
         dtype=np.float64,
@@ -84,15 +90,22 @@ def mesh_face_colors(triangles: np.ndarray, base_hex: str = ROAD) -> list[tuple[
             normal = normal / norm
             intensity = 0.58 + 0.36 * abs(float(np.dot(normal, light_dir)))
         rgb = np.clip(base * intensity, 0.0, 1.0)
-        colors.append((float(rgb[0]), float(rgb[1]), float(rgb[2]), 0.95))
+        colors.append((float(rgb[0]), float(rgb[1]), float(rgb[2]), alpha))
     return colors
 
 
-def add_mesh(ax, mesh: trimesh.Trimesh, *, edge_lw: float = 0.45, equal_axes: bool = True) -> None:
+def add_mesh(
+    ax,
+    mesh: trimesh.Trimesh,
+    *,
+    edge_lw: float = 0.45,
+    equal_axes: bool = True,
+    face_alpha: float = 0.95,
+) -> None:
     triangles = np.asarray(mesh.triangles, dtype=np.float64)
     collection = Poly3DCollection(
         triangles,
-        facecolors=mesh_face_colors(triangles),
+        facecolors=mesh_face_colors(triangles, alpha=face_alpha),
         edgecolors=(0.12, 0.12, 0.12, 0.46),
         linewidths=edge_lw,
     )
@@ -143,6 +156,163 @@ def draw_pallete2_virtual_map() -> None:
     fig.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
     fig.savefig(OUT_DIR / "solution_pallete2_virtual_map.pdf", bbox_inches="tight", pad_inches=0.02)
     fig.savefig(OUT_DIR / "solution_pallete2_virtual_map.png", dpi=180, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+
+
+def _surface_profile_points(mesh: trimesh.Trimesh, *, num_points: int = 9) -> np.ndarray:
+    bounds = np.asarray(mesh.bounds, dtype=np.float64)
+    span = bounds[1] - bounds[0]
+    centers = np.asarray(mesh.triangles_center, dtype=np.float64)
+    normals = np.asarray(mesh.face_normals, dtype=np.float64)
+
+    # The height-test map contains a clear ascending road strip.  We sample only
+    # upward-facing road triangles in that strip, not nearby walls.  This keeps
+    # the drawn ray on the road profile instead of accidentally snapping to an
+    # edge vertex.
+    ramp_mask = (
+        (normals[:, 1] > 0.55)
+        & (centers[:, 0] > bounds[0, 0] + 0.28 * span[0])
+        & (centers[:, 0] < bounds[0, 0] + 0.50 * span[0])
+        & (centers[:, 2] > bounds[0, 2] + 0.40 * span[2])
+        & (centers[:, 2] < bounds[0, 2] + 0.72 * span[2])
+    )
+    ramp_centers = centers[ramp_mask]
+    if len(ramp_centers) < 4:
+        raise RuntimeError("Could not find enough road-surface triangles for the height profile figure.")
+
+    ramp_centers = ramp_centers[np.argsort(ramp_centers[:, 2])]
+    groups = np.array_split(ramp_centers, min(num_points, max(4, len(ramp_centers) // 2)))
+    points = np.asarray([group.mean(axis=0) for group in groups], dtype=np.float64)
+    points[:, 1] += 0.7
+    return points
+
+
+def _height_profile_crop(mesh: trimesh.Trimesh, profile: np.ndarray) -> trimesh.Trimesh:
+    x_min, x_max = float(np.min(profile[:, 0]) - 26.0), float(np.max(profile[:, 0]) + 26.0)
+    z_min, z_max = float(np.min(profile[:, 2]) - 22.0), float(np.max(profile[:, 2]) + 22.0)
+    triangles = np.asarray(mesh.triangles, dtype=np.float64)
+    normals = np.asarray(mesh.face_normals, dtype=np.float64)
+    face_indices = np.flatnonzero(
+        (normals[:, 1] > 0.20)
+        & (triangles[:, :, 0].min(axis=1) >= x_min)
+        & (triangles[:, :, 0].max(axis=1) <= x_max)
+        & (triangles[:, :, 2].min(axis=1) >= z_min)
+        & (triangles[:, :, 2].max(axis=1) <= z_max)
+    )
+    if len(face_indices) == 0:
+        return mesh
+    return mesh.submesh([face_indices], append=True, repair=False)
+
+
+def _height_profile_visual_transform(points: np.ndarray, *, vertical_scale: float = 3.2) -> np.ndarray:
+    visual = np.asarray(points, dtype=np.float64).copy()
+    return np.column_stack(
+        [
+            visual[:, 0],
+            visual[:, 2],
+            visual[:, 1] * vertical_scale,
+        ]
+    )
+
+
+def draw_height_raycast_profile() -> None:
+    mesh_path = ROOT / "Maps" / "Meshes" / "height_test.obj"
+    mesh = trimesh.load(mesh_path, force="mesh")
+    mesh = mesh.copy()
+
+    profile = _surface_profile_points(mesh)
+    local_mesh = _height_profile_crop(mesh, profile)
+    mid_point = profile[len(profile) // 2]
+    centroids = np.asarray(local_mesh.triangles_center, dtype=np.float64)
+    highlight_index = int(
+        np.argmin(np.linalg.norm(centroids[:, [0, 2]] - mid_point[[0, 2]], axis=1))
+    )
+
+    visual_mesh = local_mesh.copy()
+    visual_mesh.vertices = _height_profile_visual_transform(np.asarray(local_mesh.vertices, dtype=np.float64))
+    visual_profile_surface = _height_profile_visual_transform(profile)
+    visual_profile = visual_profile_surface.copy()
+    visual_profile[:, 2] += 15.0
+    visual_triangles = np.asarray(visual_mesh.triangles, dtype=np.float64)
+
+    fig = plt.figure(figsize=(8.8, 4.9), facecolor="white")
+    ax = fig.add_subplot(111, projection="3d")
+    add_mesh(ax, visual_mesh, edge_lw=0.28, equal_axes=False, face_alpha=0.68)
+
+    highlight = Poly3DCollection(
+        [visual_triangles[highlight_index]],
+        facecolors=(1.0, 0.61, 0.12, 0.42),
+        edgecolors=(0.92, 0.36, 0.03, 0.95),
+        linewidths=1.2,
+    )
+    ax.add_collection3d(highlight)
+
+    ax.plot(
+        visual_profile[:, 0],
+        visual_profile[:, 1],
+        visual_profile[:, 2],
+        color=BLUE,
+        linewidth=5.0,
+        solid_capstyle="round",
+    )
+    ax.scatter(
+        visual_profile[0, 0],
+        visual_profile[0, 1],
+        visual_profile[0, 2],
+        s=42,
+        color=INK,
+        depthshade=False,
+        zorder=5,
+    )
+    ax.scatter(
+        visual_profile[-1, 0],
+        visual_profile[-1, 1],
+        visual_profile[-1, 2],
+        s=58,
+        color=RED,
+        depthshade=False,
+        zorder=6,
+    )
+
+    # A subtle vertical reference helps the reader see that the ray is lifted onto
+    # the local road surface instead of staying in a flat top-down projection.
+    for point, surface_point in zip(visual_profile[1:-1:2], visual_profile_surface[1:-1:2]):
+        ax.plot(
+            [surface_point[0], point[0]],
+            [surface_point[1], point[1]],
+            [surface_point[2], point[2]],
+            color="#64748b",
+            linewidth=0.8,
+            linestyle=":",
+            alpha=0.55,
+        )
+
+    ax.set_xlim(float(np.min(visual_profile_surface[:, 0]) - 28.0), float(np.max(visual_profile_surface[:, 0]) + 28.0))
+    ax.set_ylim(float(np.min(visual_profile_surface[:, 1]) - 30.0), float(np.max(visual_profile_surface[:, 1]) + 30.0))
+    ax.set_zlim(float(np.min(visual_mesh.vertices[:, 2]) - 4.0), float(np.max(visual_profile[:, 2]) + 16.0))
+    ax.set_box_aspect((1.0, 1.18, 0.88))
+    ax.view_init(elev=24, azim=-35)
+    ax.set_facecolor("white")
+    ax.set_axis_off()
+    proxy_handles = [
+        Line2D([0], [0], color=BLUE, lw=3.0, label="lúč po profile trate"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=INK, markersize=7, label="počiatok lúča"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=RED, markersize=8, label="koncový bod / stena"),
+        patches.Patch(facecolor="#f59e0b", edgecolor="#ea580c", alpha=0.45, label="lokálna plocha"),
+    ]
+    ax.legend(
+        handles=proxy_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=4,
+        frameon=False,
+        fontsize=9,
+        handlelength=1.7,
+        columnspacing=1.2,
+    )
+    fig.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.12)
+    fig.savefig(OUT_DIR / "solution_height_raycast_profile.pdf", bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(OUT_DIR / "solution_height_raycast_profile.png", dpi=190, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
 
@@ -198,7 +368,10 @@ def draw_track_drive_preview() -> None:
     render_map_background(ax, game_map, projection=projection, show_legend=False, alpha=0.92)
 
     points = projection.points(positions[:, [0, 2]])
-    norm = np.clip(speeds / max(1.0, float(np.nanmax(speeds))), 0.0, 1.0)
+    speed_floor_mps = 100.0 / 3.6
+    speed_ceiling_mps = max(speed_floor_mps + 1e-6, float(np.nanmax(speeds)))
+    display_speeds = np.clip(speeds, speed_floor_mps, speed_ceiling_mps)
+    norm = np.clip((display_speeds - speed_floor_mps) / (speed_ceiling_mps - speed_floor_mps), 0.0, 1.0)
     speed_cmap = plt.get_cmap("turbo_r")
     for i in range(len(points) - 1):
         ax.plot(
@@ -230,7 +403,9 @@ def draw_track_drive_preview() -> None:
     cax.imshow(gradient, aspect="auto", cmap=speed_cmap, origin="lower")
     cax.set_xticks([])
     cax.set_yticks([0, 255])
-    cax.set_yticklabels(["pomaly", "rýchlo"], fontsize=10)
+    speed_floor_kmh = speed_floor_mps * 3.6
+    speed_ceiling_kmh = speed_ceiling_mps * 3.6
+    cax.set_yticklabels([f"≤ {speed_floor_kmh:.0f} km/h", f"{speed_ceiling_kmh:.0f} km/h"], fontsize=10)
     cax.set_title("rýchlosť", fontsize=10, pad=6)
     for spine in cax.spines.values():
         spine.set_visible(False)
@@ -527,6 +702,7 @@ def main() -> None:
     stable_screenshot_assets()
     draw_block_meshes()
     draw_pallete2_virtual_map()
+    draw_height_raycast_profile()
     draw_track_drive_preview()
     draw_game_vs_agent_view()
     draw_dataflow_loop()

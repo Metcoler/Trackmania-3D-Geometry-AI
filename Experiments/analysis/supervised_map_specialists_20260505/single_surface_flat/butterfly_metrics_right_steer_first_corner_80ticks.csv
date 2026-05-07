@@ -1,3 +1,3 @@
-variant,finished,crashes,timeout,progress,block_progress,time,distance,reward,steps,perturb_start_step,perturb_end_step,perturb_duration_steps,perturb_steer
-baseline,1,19,0,100.0,100.0,33.850000000001835,1434.817281536758,1075.3583333333331,3385,-1,-1,0,0.0
-hard_right_perturbation,1,19,0,100.0,100.0,33.71000000000186,1431.2970520630479,1075.3816666666664,3371,214,293,80,-1.0
+variant,finished,crashes,timeout,progress,block_progress,time,distance,reward,steps,perturb_start_step,perturb_end_step,perturb_duration_steps,perturb_steer,perturb_gas,perturb_brake
+baseline,1,19,0,100.0,100.0,33.850000000001835,1434.8162244483829,1075.3583333333331,3385,-1,-1,0,-1.0,,
+perturbed,1,21,0,100.0,100.0,35.75000000000146,1480.9391243383288,1073.0416666666665,3575,103,182,80,-1.0,,

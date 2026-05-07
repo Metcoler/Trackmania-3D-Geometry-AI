@@ -75,6 +75,11 @@ Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine.
 \newblock In {\em Proceedings of the 35th International Conference on Machine Learning}, pages 1861--1870, 2018.
 \newblock Dostupne z: \url{https://proceedings.mlr.press/v80/haarnoja18b.html}.
 
+\bibitem{hallofdreams_trackmania_eyes2026}
+{Hall of Impossible Dreams}.
+\newblock Trackmania iii: The eyes, 2024.
+\newblock Projektovy zapis o obrazovom vstupe a CNN pipeline pre Trackmaniu. [Citovane 2026-05-07]. Dostupne z: \url{https://hallofdreams.org/posts/trackmania-3/}.
+
 \bibitem{hughes2014computer_graphics}
 John~F. Hughes, Andries van Dam, Morgan McGuire, David~F. Sklar, James~D. Foley, Steven~K. Feiner, and Kurt Akeley.
 \newblock {\em Computer Graphics: Principles and Practice}.
@@ -99,6 +104,11 @@ Daniele Loiacono, Pier~Luca Lanzi, Julian Togelius, Enrique Onieva, David~A. Pel
 Andrea Macaluso, Alessandro Sestini, and Andrew~D. Bagdanov.
 \newblock A benchmark environment for offline reinforcement learning in racing games.
 \newblock In {\em 2024 IEEE Conference on Games}, 2024.
+
+\bibitem{maniaexchange_api2026}
+{ManiaExchange}.
+\newblock Maniaexchange api docs: Get track replays, 2026.
+\newblock [Citovane 2026-05-07]. Dostupne z: \url{https://api2.mania.exchange/Method/Index/45}.
 
 \bibitem{melkovic2024bachelor}
 Timotej Melkovi{\v c}.
@@ -186,10 +196,20 @@ Simon Tomlinson and Nic Melder.
 \newblock In Steve Rabin, editor, {\em Game AI Pro: Collected Wisdom of Game AI Professionals}. CRC Press, 2014.
 \newblock Kopia PDF je v pracovnom priecinku Sources. Dostupne z: \url{https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter39_Representing_and_Driving_a_Race_Track_for_AI_Controlled_Vehicles.pdf}.
 
+\bibitem{tmnf_exchange_a01_race2026}
+{TrackMania Nations Forever Exchange}.
+\newblock {A01-Race} by nadeo, 2026.
+\newblock [Citovane 2026-05-07]. Dostupne z: \url{https://tmnf.exchange/trackshow/2233}.
+
 \bibitem{tmrl_github2024}
 {TrackMania Reinforcement Learning Contributors}.
 \newblock Tmrl: Trackmania reinforcement learning, 2024.
 \newblock [Citovane 2026-05-06]. Dostupne z: \url{https://github.com/trackmania-rl/tmrl}.
+
+\bibitem{trackmania_wiki_units2026}
+{Trackmania Wiki Contributors}.
+\newblock Units of measurement, 2024.
+\newblock Komunitna dokumentacia k jednotkam a casovaniu v Trackmanii. [Citovane 2026-05-07]. Dostupne z: \url{https://www.trackmania.wiki/wiki/Units_of_Measurement}.
 
 \bibitem{trackmania_wiki2026}
 {Trackmania Wiki Contributors}.

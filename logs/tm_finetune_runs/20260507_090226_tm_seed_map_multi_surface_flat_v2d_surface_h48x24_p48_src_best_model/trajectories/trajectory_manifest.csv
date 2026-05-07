@@ -256,3 +256,7 @@ generation,rank,original_index,finished,crashes,time,dense_progress,path_file
 155,2,1,1,0,35.369998931884766,100.0,trajectories/gen_0155_rank_002_idx_001_finish_1.npz
 156,1,0,1,0,35.099998474121094,100.0,trajectories/gen_0156_rank_001_idx_000_finish_1.npz
 156,2,1,1,0,35.369998931884766,100.0,trajectories/gen_0156_rank_002_idx_001_finish_1.npz
+157,1,0,1,0,35.099998474121094,100.0,trajectories/gen_0157_rank_001_idx_000_finish_1.npz
+157,2,1,1,0,35.369998931884766,100.0,trajectories/gen_0157_rank_002_idx_001_finish_1.npz
+158,1,0,1,0,35.099998474121094,100.0,trajectories/gen_0158_rank_001_idx_000_finish_1.npz
+158,2,1,1,0,35.369998931884766,100.0,trajectories/gen_0158_rank_002_idx_001_finish_1.npz

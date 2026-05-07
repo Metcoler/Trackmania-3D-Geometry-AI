@@ -407,7 +407,7 @@ if __name__ == "__main__":
     map_name = "height_test"
     
     map_name = "AI Training #5"
-    map_name = "single_surface_height"
+    map_name = "single_surface_flat"
     vizualize = True
     vertical_mode = True
     multi_surface_mode = True

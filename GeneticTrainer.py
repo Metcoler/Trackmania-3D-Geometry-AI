@@ -2207,9 +2207,13 @@ class GeneticTrainer:
                 val = float(fitnesses[i])
                 ind.fitness = None if np.isnan(val) else val
             ind.evaluation_valid = (
-                bool(int(evaluation_valid[i]))
-                if evaluation_valid is not None
-                else restored_metrics_are_valid
+                (
+                    bool(int(evaluation_valid[i]))
+                    if evaluation_valid is not None
+                    else restored_metrics_are_valid
+                )
+                if assume_evaluated_generation
+                else False
             )
             restored_population.append(ind)
 
@@ -2230,7 +2234,7 @@ class GeneticTrainer:
         self._checkpoint_effective_mutation_prob_decay = checkpoint_effective_mutation_prob_decay
         self._checkpoint_effective_mutation_sigma_decay = checkpoint_effective_mutation_sigma_decay
 
-        if "best_genome" in data.files:
+        if assume_evaluated_generation and "best_genome" in data.files:
             best = Individual(
                 obs_dim=self.obs_dim,
                 hidden_dim=self.hidden_dim,
@@ -2272,7 +2276,7 @@ class GeneticTrainer:
             best.evaluation_valid = restored_metrics_are_valid
             self.best_individual = best
         else:
-            if self.population:
+            if self.population and assume_evaluated_generation:
                 self._order_population_for_selection()
                 self.best_individual = self.population[0].copy()
             else:
@@ -2306,24 +2310,24 @@ if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
     # map dependend constants
-    map_name = "multi_surface_flat"
-    env_max_time = 45
+    map_name = "small_map"
+    env_max_time = 60
     
     # neural network architecture
     hidden_dim = [48, 24]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
     vertical_mode = False
-    multi_surface_mode = True
+    multi_surface_mode = False
 
-    # Best-supported real-TM lexicographic GA profile for the seeded multi-surface run.
+    # Evaluation transfer: replay a trained single_surface_flat generation on a new map.
     pop_size = 48
     elite_count = 2
     parent_count = 14
-    # Continue the interrupted overnight multi-surface-flat run from generation 40.
-    # The original run requested 300 generations, so this keeps the total target at 300.
-    generations_to_run = 260
-    checkpoint_every = 10
+    # One generation is enough here: load the population and evaluate every
+    # individual on small_map without creating a mutated next generation.
+    generations_to_run = 1
+    checkpoint_every = 1
 
     # Selection metric for the overnight GA experiment.
     #
@@ -2347,11 +2351,11 @@ if __name__ == "__main__":
     moo_objective_priority = "finished,progress,neg_time,neg_crashes,neg_distance"
     pareto_tiebreak = "priority"
 
-    mutation_prob = 0.15
+    mutation_prob = 0.10
     mutation_prob_decay = 1.0
     mutation_prob_min = 0.05
 
-    mutation_sigma = 0.30
+    mutation_sigma = 0.25
     mutation_sigma_decay = 1.0
     mutation_sigma_min = 0.20
     mutation_decay_trigger = "first_finish"
@@ -2360,9 +2364,9 @@ if __name__ == "__main__":
     # Fancy updates
     mirror_episode_prob = 0.0
     evaluate_both_mirrors = False
-    reuse_elite_evaluations = True
-    trajectory_log_mode = "top"  # off / top / top-finishers-final / all
-    trajectory_top_k = 2
+    reuse_elite_evaluations = False
+    trajectory_log_mode = "all"  # off / top / top-finishers-final / all
+    trajectory_top_k = pop_size
     trajectory_log_actions = True
     target_steer_deadzone = 0.00
     max_touches = 1
@@ -2387,13 +2391,12 @@ if __name__ == "__main__":
     Individual.RANKING_KEY = ranking_key
     Individual.RANKING_PROGRESS_SOURCE = ranking_progress_source
     
-    # Train from checkpoint or supervised pretrained model.
-    #
-    # Resume the interrupted multi_surface_flat live GA run. This checkpoint is
-    # already evaluated in Trackmania, so run() will first create generation 41.
+    # Evaluate the trained single_surface_flat population on a new map. The
+    # checkpoint already contains metrics from the original map, but those are
+    # intentionally ignored below because small_map must be driven live again.
     initial_population_source: Optional[str] = (
-        r"logs\tm_finetune_runs\20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model"
-        r"\checkpoints\population_gen_0040.npz"
+        r"logs\tm_finetune_runs\20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model"
+        r"\checkpoints\population_gen_0080.npz"
     )
     seed_model_exact_copies = 1
     seed_model_noise_mode = "dense"
@@ -2401,9 +2404,9 @@ if __name__ == "__main__":
     seed_model_mutation_sigmas = (0.01, 0.025, 0.05)
     seed_model_tier_counts = (16, 16, 15)
     
-    # True = TM checkpoint already evaluated in TM -> continue from next generation.
-    # False = mini pretrain checkpoint -> evaluate loaded population in TM first.
-    resume_assume_evaluated_generation = True
+    # True = TM checkpoint already evaluated in the same environment.
+    # False = transfer/evaluation checkpoint -> evaluate loaded population in TM first.
+    resume_assume_evaluated_generation = False
 
     resume_checkpoint: Optional[str] = None
     seed_model_path: Optional[str] = None
@@ -2457,11 +2460,16 @@ if __name__ == "__main__":
         else:
             source_checkpoint_name = os.path.splitext(os.path.basename(resume_checkpoint))[0]
             source_run_name = os.path.basename(os.path.dirname(os.path.dirname(resume_checkpoint)))
+            source_tag = (
+                f"{source_run_name}_{source_checkpoint_name}"
+                if resume_assume_evaluated_generation
+                else source_checkpoint_name
+            )
             run_name = (
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 f"_tm_finetune_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_"
                 f"{'surface' if multi_surface_mode else 'asphalt'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
-                f"_src_{source_run_name}_{source_checkpoint_name}"
+                f"_src_{source_tag}"
             )
             logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
     elif seed_model_path:

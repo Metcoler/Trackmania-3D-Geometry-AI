@@ -34,7 +34,7 @@ MAP_NAME = "single_surface_flat"
 FIGURE_STEM = "supervised_behavior_cloning_teacher_agent_paths"
 SPEED_TO_KMH = 3.6
 
-SPEED_CMAP = plt.get_cmap("turbo")
+SPEED_CMAP = plt.get_cmap("turbo_r")
 TEACHER_COLOR = "#4b5563"
 AGENT_COLOR = "#38bdf8"
 CONTACT_COLOR = "#050505"

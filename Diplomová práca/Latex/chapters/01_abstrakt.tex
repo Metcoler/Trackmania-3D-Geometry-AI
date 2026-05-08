@@ -1,6 +1,10 @@
 \newpage
 \section*{Abstrakt}
 
-Tu pôjde slovenský abstrakt v rozsahu približne 100 až 500 slov. Text stručne zhrnie cieľ práce, použitý prístup, hlavné výsledky a význam práce.
+Táto práca sa venuje návrhu, implementácii a vyhodnoteniu autonómne jazdiaceho agenta pre hru \Trackmania{}. Nadväzuje na predchádzajúci bakalársky prototyp, ktorý ukázal, že agent môže vnímať trať pomocou exportovanej geometrie namiesto obrazu obrazovky. Cieľom diplomovej práce je tento smer rozvinúť do systematickejšieho riešenia: vytvoriť reprezentáciu prostredia, navrhnúť pozorovanie agenta, automatizovať tréning politiky správania a empiricky overiť kvalitu výslednej jazdy.
 
-\paragraph*{Kľúčové slová:} Trackmania, autonómny agent, neuroevolúcia, genetický algoritmus, neurónová sieť
+Navrhnutý systém získava stav auta z bežiacej hry, premieta ho do rekonštruovanej virtuálnej mapy a z geometrie trate vypočítava kompaktný vektor pozorovania. Politika správania je reprezentovaná viacvrstvovou neurónovou sieťou a jej parametre sú hľadané najmä neuroevolúciou pomocou genetického algoritmu. V práci sú najprv použité dáta ľudského hráča na výber architektúry a na ukázanie limitov klonovania správania. Následne sú porovnané viaceré spôsoby hodnotenia správania, vrátane lexikografickej hodnotiacej funkcie, učenia posilňovaním a Pareto porovnávania.
+
+V rámci vykonaných experimentov sa ako najpraktickejší hlavný smer ukázalo lexikografické hodnotenie \texttt{(cieľ, progres, -čas, -nárazy)} v kombinácii s genetickým tréningom. Výsledný agent dokáže dokončiť trate v rovinnej verzii, na trati s výškovými rozdielmi aj na trati s rôznymi povrchmi. Na nevidenej mape \texttt{small\_map} dosiahol čas \(19{,}68\,\mathrm{s}\), zatiaľ čo agent z bakalárskej práce dosiahol \(23{,}064\,\mathrm{s}\) a referenčný ľudský prejazd \(17{,}89\,\mathrm{s}\). Výsledky v testovaných podmienkach podporujú tvrdenie, že oproti pôvodnej verzii nastalo výrazné zlepšenie a že geometrický prístup je použiteľný aj mimo jednoduchej rovinnej trate.
+
+\paragraph*{Kľúčové slová:} Trackmania, autonómny agent, neuroevolúcia, genetický algoritmus, neurónová sieť, virtuálne senzory

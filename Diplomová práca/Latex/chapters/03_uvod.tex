@@ -2,10 +2,42 @@
 \addcontentsline{toc}{chapter}{Úvod}
 \markboth{Úvod}{Úvod}
 
-Tu pôjde úvod práce.
+Pretekárska hra pôsobí na prvý pohľad ako jednoduché prostredie: auto stojí na štarte, pred ním je trať a cieľom je dostať sa do cieľa čo najrýchlejšie. Z pohľadu autonómneho agenta je však takáto úloha sekvenčné rozhodovanie v reálnom čase. Každé zatočenie, brzdenie alebo pridanie plynu mení budúcu polohu auta a situáciu, v ktorej sa bude agent rozhodovať neskôr. Malá chyba sa preto nemusí prejaviť okamžite, ale môže ovplyvniť celú ďalšiu trajektóriu.
 
-\section*{Motivácia}
+\Trackmania{} je pre túto prácu vhodné prostredie práve preto, že má jasne merateľný cieľ, stavebnicové trate a veľký dôraz na presný čas prejazdu. Pri krátkych technických tratiach môžu mať význam aj desatiny sekundy. Pre autonómneho agenta tak vznikajú tri praktické otázky: ako má trať vnímať, ako má svoje správanie hodnotiť a ako nájsť politiku, ktorá bude jazdiť rýchlo aj stabilne.
+
+Táto diplomová práca nadväzuje na bakalársku prácu \emph{Trénovanie autonómneho vozidla v hre Trackmania pomocou strojového učenia} \cite{melkovic2024bachelor}. Bakalársky prototyp ukázal dôležitú myšlienku: agent nemusí vnímať hru iba ako obraz obrazovky. Keďže trať je digitálny objekt, možno ju exportovať, rekonštruovať ako geometriu a nad touto geometriou počítať virtuálne senzory. Prototyp však ešte neobsahoval dostatočne systematické hodnotenie správania, presne definované metriky ani plne automatizovaný tréningový proces. Táto práca preto rozvíja pôvodnú ideu do ucelenejšieho systému od reprezentácie prostredia až po empirické vyhodnotenie výsledného agenta.
 
 \section*{Ciele práce}
 
+Hlavným cieľom práce je navrhnúť a implementovať lepšiu verziu autonómne jazdiaceho agenta pre \Trackmania{}. Zlepšenie chápeme vo viacerých rovinách: agent má jazdiť lepšie než pôvodná bakalárska verzia, tréning má byť automatizovaný a výsledok má byť vyhodnotený pomocou jasných metrík a vizualizácií.
+
+Práca sa sústreďuje najmä na tieto úlohy:
+
+\begin{itemize}
+    \item vytvoriť reprezentáciu prostredia bez obrazového vstupu, založenú na stave auta a rekonštruovanej geometrii trate,
+    \item navrhnúť vektor pozorovania pre rovinné trate, výškové rozdiely a rôzne povrchy,
+    \item reprezentovať politiku správania neurónovou sieťou a nájsť vhodný spôsob jej tréningu,
+    \item navrhnúť čitateľné hodnotenie jazdy, ktoré zohľadňuje dokončenie trate, progres, čas a nárazy,
+    \item porovnať výsledného agenta s bakalárskou verziou a s orientačným ľudským prejazdom.
+\end{itemize}
+
+Práca si nekladie za cieľ vytvoriť univerzálneho vodiča pre ľubovoľnú mapu v \Trackmania{} ani prekonať najlepších ľudských hráčov. Cieľ je užší: ukázať, že geometrická reprezentácia prostredia a automatizovaný tréning politiky dokážu vytvoriť agenta, ktorý sa oproti pôvodnému prototypu výrazne zlepší a zvládne aj rozšírené režimy prostredia.
+
+\section*{Prístup práce}
+
+Navrhnutý systém spája tri časti. Prvou je bežiaca hra, z ktorej získavame stav auta a do ktorej vraciame akcie cez virtuálny ovládač. Druhou je virtuálny svet, v ktorom je trať rekonštruovaná z blokov a ich geometrie. Treťou je politika správania reprezentovaná neurónovou sieťou, ktorá z kompaktného pozorovania počíta akciu.
+
+Hľadanie politiky je vedené experimentálne. Najprv používame dáta ľudského hráča na výber architektúry siete a na overenie, že navrhnuté pozorovanie nesie informáciu potrebnú na riadenie. Potom ukazujeme limity samotného napodobňovania a ako hlavnú cestu volíme neuroevolúciu. Parametre siete tvoria genóm a genetický algoritmus vyberá politiky podľa ich jazdy v prostredí. Dôležitou súčasťou je lexikografické hodnotenie \texttt{(cieľ, progres, -čas, -nárazy)}, ktoré pomenúva priority jazdy bez neprehľadnej váženej sumy konštánt.
+
 \section*{Štruktúra práce}
+
+Prvá kapitola zavádza teoretické pojmy potrebné pre ďalší text: agenta, prostredie, politiku, hodnotenie, neurónové siete, metódy učenia, genetické algoritmy, viackriteriálnu optimalizáciu a geometrické virtuálne senzory.
+
+Druhá kapitola porovnáva súvisiace práce a ukazuje, prečo je pre túto úlohu zaujímavý kompaktný geometrický vstup namiesto čistého obrazového vnímania.
+
+Tretia kapitola opisuje návrh riešenia: získanie stavu z hry, rekonštrukciu virtuálnej mapy, tvorbu pozorovania, akčný priestor a rozhodovací cyklus agenta.
+
+Štvrtá kapitola tvorí experimentálne jadro práce. Postupne skúma učenie s učiteľom, interaktívne napodobňovanie, neuroevolúciu, porovnávacie vetvy učenia posilňovaním a Pareto optimalizácie, výber hyperparametrov a záverečné tréningové behy.
+
+Piata kapitola vyhodnocuje výsledného agenta, porovnáva ho s bakalárskou verziou a s orientačným ľudským prejazdom. Záver potom sumarizuje splnenie cieľov, hlavné prínosy a obmedzenia práce.

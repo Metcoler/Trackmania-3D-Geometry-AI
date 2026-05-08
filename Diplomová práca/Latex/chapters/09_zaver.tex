@@ -2,12 +2,22 @@
 \addcontentsline{toc}{chapter}{Záver}
 \markboth{Záver}{Záver}
 
-Tu pôjde záver práce.
+Cieľom práce bolo nadviazať na bakalársky prototyp autonómneho agenta pre \Trackmania{} a vytvoriť systematickejšie trénovanú a vyhodnotenú verziu. Zachovali sme hlavnú myšlienku, že agent nemusí vnímať hru cez obraz, ale môže pracovať so stavom auta, rekonštruovanou geometriou trate a virtuálnymi senzormi. V diplomovej práci sme túto myšlienku rozšírili na ucelený cyklus: získanie stavu z hry, výpočet kompaktného pozorovania, akcia cez virtuálny ovládač a automatizovaný tréning politiky správania.
 
-\section*{Splnenie cieľov}
+Experimenty v testovaných podmienkach ukázali, že navrhnuté pozorovanie je použiteľné pre neurónovú sieť. Učenie s učiteľom pomohlo vybrať praktickú architektúru a naznačilo, že sieť vie napodobniť ľudskú akciu, ale zároveň odhalilo limity samotného klonovania správania. Hlavnou tréningovou cestou sa preto stala neuroevolúcia. Ako najčitateľnejšie hodnotenie jazdy sa v našich experimentoch ukázalo lexikografické poradie cieľov: najprv dokončiť trať, potom dostať sa čo najďalej, následne zlepšovať čas a až potom rozlišovať počet nárazov. Tento prístup sa vyhol neprehľadnej váženej sume konštánt a v testovaných behoch poskytol stabilnejší signál než skúšané alternatívy.
 
-\section*{Hlavné výsledky}
+Výsledný agent sa oproti bakalárskej verzii výrazne zlepšil. Najlepšieho jedinca z tréningu na mape \texttt{single\_surface\_flat} sme bez ďalšieho dotrénovania vyhodnotili na nevidenej mape \texttt{small\_map}, kde dosiahol čas \(19{,}68\,\mathrm{s}\). Agent z bakalárskej práce na tej istej mape dosiahol \(23{,}064\,\mathrm{s}\) a referenčný ľudský prejazd mal čas \(17{,}89\,\mathrm{s}\). Agent teda človeka ešte neprekonal, ale na krátkej trati sa mu priblížil a jasne prekonal pôvodný prototyp. Záverečné tréningové behy navyše ukázali, že postup nie je viazaný iba na jednu rovinú trať: dokončujúce politiky vznikli aj na trati s výškovými rozdielmi a na trati s rôznymi povrchmi.
 
-\section*{Obmedzenia práce}
+\section*{Splnenie cieľov a prínosy}
 
-\section*{Možnosti ďalšieho vývoja}
+Hlavné ciele zadania možno považovať za splnené. Navrhli a implementovali sme novú verziu agenta, ktorý používa geometrickú reprezentáciu prostredia, automatizovaný genetický tréning a systematické logovanie výsledkov. Agent sa zlepšil nielen časom, ale aj tým, že jeho správanie je možné analyzovať pomocou metrík, grafov a trajektórií.
+
+Prínos práce nie je iba v jednom najlepšom čase. Dôležité je celé riešenie: z digitálnej trate vytvoriť pozorovateľné prostredie, z jazdy odvodiť merateľné kritériá a z populácie kandidátov vybrať politiku, ktorá vie trať samostatne prejsť. Práca zároveň ukázala, ktoré smery boli užitočné a ktoré mali limity: učenie s učiteľom bolo dobré na inicializáciu a výber architektúry, interaktívne napodobňovanie zlepšilo dáta, no samostatné zlepšovanie agenta najlepšie podporila lexikografická neuroevolúcia.
+
+\section*{Obmedzenia a ďalší vývoj}
+
+Výsledky treba čítať opatrne. Väčšina experimentov je praktické porovnanie s jedným seedom, preto z nich nevyvodzujeme silné štatistické tvrdenia o všeobecnej optimálnosti hyperparametrov. Dôvod je najmä výpočtový: niektoré experimenty, napríklad hľadanie vhodnej pravdepodobnosti a rozptylu mutácie, trvali stovky hodín simulovaním agenta v prostredí. Opakovať rovnaké mriežkové experimenty viackrát by bolo pri zdrojoch diplomovej práce veľmi náročné. Agent bol navyše testovaný na vybranom súbore máp, nie na veľkej kolekcii tratí. Geometrické pozorovanie závisí aj od kvality rekonštruovanej mapy a od toho, ktoré vlastnosti sveta zahrnieme do vstupu.
+
+Ďalší vývoj by mal smerovať k širšiemu vyhodnoteniu na viacerých mapách a nezávislých behoch. Zaujímavé je tiež hlbšie preskúmať hybridný tréning, kde ľudské dáta poskytnú dobrý počiatočný smer a neuroevolúcia následne optimalizuje správanie priamo podľa jazdy. Samostatne by dávalo zmysel aj dôkladnejšie porovnať učenie posilňovaním, keďže PPO v práci ukázalo použiteľný signál, ale nebolo hlavným ladeným smerom.
+
+Práca ukázala, že autonómny agent pre \Trackmania{} nemusí byť postavený iba na obraze ani na ručne navrhnutých pravidlách. Ak má k dispozícii zmysluplnú geometrickú reprezentáciu sveta a tréningový postup, ktorý hodnotí celé jazdy, dokáže sa naučiť správanie použiteľné v reálnom hernom prostredí.

@@ -139,7 +139,7 @@ def plot_best_speed(
     points = np.column_stack([px, pz]).reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
     speed_segments = speed[:-1] if speed.size >= x.size else np.zeros(x.size - 1, dtype=np.float32)
-    collection = LineCollection(segments, cmap="turbo", linewidth=2.0)
+    collection = LineCollection(segments, cmap="turbo_r", linewidth=2.0)
     collection.set_array(speed_segments)
 
     fig, ax = plt.subplots(figsize=(12, 7) if game_map is not None else (9, 9))

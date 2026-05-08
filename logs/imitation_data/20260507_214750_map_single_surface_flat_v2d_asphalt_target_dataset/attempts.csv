@@ -1,0 +1,4 @@
+attempt_index,saved,num_frames,finish_time,discrete_progress,dense_progress,finished,crashes,timeout,distance,path
+1,0,1861,-1.5199999809265137,0.0,1.282051282051282,0,0,0,0.0,
+2,0,2161,-1.5499999523162842,0.0,1.282051282051282,0,0,0,0.0,
+3,1,2356,32.04999923706055,100.0,100.0,1,0,0,1395.12158203125,logs/imitation_data\20260507_214750_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0003.npz

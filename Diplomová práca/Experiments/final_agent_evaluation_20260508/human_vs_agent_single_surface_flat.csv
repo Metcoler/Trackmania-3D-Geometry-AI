@@ -1,0 +1,2 @@
+kind,time_s,human_sample_size,human_min_s,human_median_s,human_max_s,humans_faster,humans_slower_or_equal
+agent,27.959999084472656,100,23.051,25.1155,29.681,96,4

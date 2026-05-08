@@ -1,0 +1,2 @@
+attempt_index,saved_attempts,event,agent_probability,mix_mode,frames,finish_time,dense_progress,discrete_progress,distance,train_loss,train_frames,train_attempt_files,train_seconds,model_path
+3,1,saved_and_trained,1.0,agent,2356,32.04999923706055,100.0,100.0,1395.12158203125,0.23689324270889592,4712,1,16.869128299993463,logs/imitation_runs\20260507_214750_map_single_surface_flat_v2d_asphalt_imitation\latest_model.pt

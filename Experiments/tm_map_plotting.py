@@ -99,18 +99,22 @@ def _shade_color(color: str, normalized_height: float) -> str:
     return _rgb_to_hex(base * factor)
 
 
-def _surface_color(block: MapBlock) -> str:
-    if block.name in SPECIAL_COLORS:
+def _surface_color(block: MapBlock, *, checkpoint_as_straight: bool = False) -> str:
+    if block.name in SPECIAL_COLORS and not (checkpoint_as_straight and block.name == "Checkpoint"):
         return SPECIAL_COLORS[block.name]
     return SURFACE_COLORS.get(block.surface_name, SURFACE_COLORS["Unknown"])
 
 
-def _legend_items_for_map(game_map: Map) -> list[Patch]:
-    existing_special = {str(block.name) for block in game_map.blocks.values() if block.name in SPECIAL_COLORS}
+def _legend_items_for_map(game_map: Map, *, checkpoint_as_straight: bool = False) -> list[Patch]:
+    existing_special = {
+        str(block.name)
+        for block in game_map.blocks.values()
+        if block.name in SPECIAL_COLORS and not (checkpoint_as_straight and block.name == "Checkpoint")
+    }
     existing_surfaces = {
         SURFACE_LABELS.get(str(block.surface_name), "Unknown")
         for block in game_map.blocks.values()
-        if block.name not in SPECIAL_COLORS
+        if block.name not in SPECIAL_COLORS or (checkpoint_as_straight and block.name == "Checkpoint")
     }
 
     items: list[Patch] = []
@@ -270,6 +274,7 @@ def render_map_background(
     projection: MapProjection | None = None,
     show_legend: bool = False,
     alpha: float = 1.0,
+    checkpoint_as_straight: bool = False,
 ) -> MapProjection:
     projection = projection or _projection_for_map(game_map)
     heights = _all_road_heights(game_map)
@@ -305,7 +310,7 @@ def render_map_background(
     for block in blocks:
         triangles, triangle_heights = _road_triangles(block)
         if triangles.size:
-            base_color = _surface_color(block)
+            base_color = _surface_color(block, checkpoint_as_straight=checkpoint_as_straight)
             polygons = [projection.points(triangle) for triangle in triangles]
             colors = [
                 _shade_color(
@@ -364,7 +369,7 @@ def render_map_background(
     ax.axis("off")
     ax.margins(0.04)
     if show_legend:
-        legend_items = _legend_items_for_map(game_map)
+        legend_items = _legend_items_for_map(game_map, checkpoint_as_straight=checkpoint_as_straight)
         ax.legend(
             handles=legend_items,
             loc="lower center",
@@ -384,8 +389,9 @@ def add_map_legend(
     height_max: float,
     *,
     flat_height_threshold: float = 0.5,
+    checkpoint_as_straight: bool = False,
 ) -> Legend:
-    legend_items = _legend_items_for_map(game_map)
+    legend_items = _legend_items_for_map(game_map, checkpoint_as_straight=checkpoint_as_straight)
     legend = fig.legend(
         handles=legend_items,
         loc="lower center",
@@ -447,16 +453,30 @@ def plot_map_overview(
     dpi: int = 180,
     show_legend: bool = False,
     title: bool = True,
+    checkpoint_as_straight: bool = False,
 ) -> Path:
     game_map = Map(map_name)
     projection = _projection_for_map(game_map)
     fig, ax = plt.subplots(figsize=(projection.figsize[0] + 0.35, projection.figsize[1] + 0.45))
-    render_map_background(ax, game_map, projection=projection, show_legend=False)
+    render_map_background(
+        ax,
+        game_map,
+        projection=projection,
+        show_legend=False,
+        checkpoint_as_straight=checkpoint_as_straight,
+    )
     if title:
         ax.set_title(str(map_name), fontsize=13, pad=6)
     heights = _all_road_heights(game_map)
     fig.subplots_adjust(left=0.055, right=0.835, top=0.94, bottom=0.13)
-    add_map_legend(fig, ax, game_map, float(np.min(heights)), float(np.max(heights)))
+    add_map_legend(
+        fig,
+        ax,
+        game_map,
+        float(np.min(heights)),
+        float(np.max(heights)),
+        checkpoint_as_straight=checkpoint_as_straight,
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=int(dpi), bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)

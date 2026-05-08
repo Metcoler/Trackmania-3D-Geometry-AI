@@ -363,7 +363,7 @@ def maybe_generate_trajectory(
             points = projection.points(points)
         if len(points) >= 2:
             segments = np.stack([points[:-1], points[1:]], axis=1)
-            collection = LineCollection(segments, cmap="turbo", linewidth=2.2, zorder=120)
+            collection = LineCollection(segments, cmap="turbo_r", linewidth=2.2, zorder=120)
             collection.set_array(speed[:-1] if len(speed) >= len(points) else np.zeros(len(points) - 1))
             ax.add_collection(collection)
             ax.autoscale()

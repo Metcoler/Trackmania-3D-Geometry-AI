@@ -1,0 +1,14 @@
+{
+  "experiment_id": "final_ga_training_20260507",
+  "generated_by": "prepare_thesis_figures.py",
+  "purpose": "Curated final GA training runs for thesis chapter 7.",
+  "source_runs": [
+    "logs\\tm_finetune_runs\\20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model",
+    "logs\\tm_finetune_runs\\20260506_160030_tm_seed_map_single_surface_height_v3d_asphalt_h48x24_p48_src_best_model",
+    "logs\\tm_finetune_runs\\20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model"
+  ],
+  "figures": [
+    "Diplomová práca\\Latex\\images\\training_policy\\final_ga_training_progress.pdf",
+    "Diplomová práca\\Latex\\images\\training_policy\\final_ga_training_trajectories.pdf"
+  ]
+}

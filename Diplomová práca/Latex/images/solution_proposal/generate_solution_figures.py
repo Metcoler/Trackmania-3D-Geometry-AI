@@ -216,67 +216,106 @@ def _height_profile_visual_transform(points: np.ndarray, *, vertical_scale: floa
 
 
 def draw_height_raycast_profile() -> None:
-    mesh_path = ROOT / "Maps" / "Meshes" / "height_test.obj"
-    mesh = trimesh.load(mesh_path, force="mesh")
-    mesh = mesh.copy()
+    # Syntetická didaktická scéna: rovina -> kopec -> rovina. Reálny mesh v
+    # predchádzajúcej verzii prekrýval lúč, preto tu používame jednoduchú
+    # trojuholníkovú sieť, na ktorej je zlom lúča jasne viditeľný.
+    x = np.asarray([-6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0], dtype=np.float64)
+    h = np.asarray([0.0, 0.0, 1.15, 2.35, 1.15, 0.0, 0.0], dtype=np.float64)
+    half_width = 1.65
 
-    profile = _surface_profile_points(mesh)
-    local_mesh = _height_profile_crop(mesh, profile)
-    mid_point = profile[len(profile) // 2]
-    centroids = np.asarray(local_mesh.triangles_center, dtype=np.float64)
-    highlight_index = int(
-        np.argmin(np.linalg.norm(centroids[:, [0, 2]] - mid_point[[0, 2]], axis=1))
-    )
+    vertices: list[list[float]] = []
+    for xi, hi in zip(x, h):
+        vertices.append([xi, -half_width, hi])
+        vertices.append([xi, half_width, hi])
+    vertices_np = np.asarray(vertices, dtype=np.float64)
 
-    visual_mesh = local_mesh.copy()
-    visual_mesh.vertices = _height_profile_visual_transform(np.asarray(local_mesh.vertices, dtype=np.float64))
-    visual_profile_surface = _height_profile_visual_transform(profile)
-    visual_profile = visual_profile_surface.copy()
-    visual_profile[:, 2] += 15.0
-    visual_triangles = np.asarray(visual_mesh.triangles, dtype=np.float64)
+    faces: list[list[int]] = []
+    for idx in range(len(x) - 1):
+        left0, right0 = 2 * idx, 2 * idx + 1
+        left1, right1 = 2 * (idx + 1), 2 * (idx + 1) + 1
+        faces.append([left0, left1, right1])
+        faces.append([left0, right1, right0])
+    surface_mesh = trimesh.Trimesh(vertices=vertices_np, faces=np.asarray(faces), process=False)
 
-    fig = plt.figure(figsize=(8.8, 4.9), facecolor="white")
+    surface_profile = np.column_stack([x, np.zeros_like(x), h])
+    ray_profile = surface_profile.copy()
+    ray_profile[:, 2] += 0.46
+
+    fig = plt.figure(figsize=(9.2, 5.05), facecolor="white")
     ax = fig.add_subplot(111, projection="3d")
-    add_mesh(ax, visual_mesh, edge_lw=0.28, equal_axes=False, face_alpha=0.68)
+    add_mesh(ax, surface_mesh, edge_lw=0.42, equal_axes=False, face_alpha=0.70)
 
+    highlighted_quads = []
+    for idx in (2, 3):
+        quad = np.asarray(
+            [
+                vertices_np[2 * idx],
+                vertices_np[2 * (idx + 1)],
+                vertices_np[2 * (idx + 1) + 1],
+                vertices_np[2 * idx + 1],
+            ],
+            dtype=np.float64,
+        )
+        quad[:, 2] += 0.025
+        highlighted_quads.append(quad)
     highlight = Poly3DCollection(
-        [visual_triangles[highlight_index]],
-        facecolors=(1.0, 0.61, 0.12, 0.42),
+        highlighted_quads,
+        facecolors=(1.0, 0.61, 0.12, 0.38),
         edgecolors=(0.92, 0.36, 0.03, 0.95),
-        linewidths=1.2,
+        linewidths=1.35,
     )
     ax.add_collection3d(highlight)
 
     ax.plot(
-        visual_profile[:, 0],
-        visual_profile[:, 1],
-        visual_profile[:, 2],
+        surface_profile[:, 0],
+        surface_profile[:, 1],
+        surface_profile[:, 2] + 0.035,
+        color="#475569",
+        linewidth=1.2,
+        linestyle="--",
+        alpha=0.65,
+    )
+    ax.plot(
+        ray_profile[:, 0],
+        ray_profile[:, 1],
+        ray_profile[:, 2],
         color=BLUE,
         linewidth=5.0,
         solid_capstyle="round",
+        zorder=20,
     )
     ax.scatter(
-        visual_profile[0, 0],
-        visual_profile[0, 1],
-        visual_profile[0, 2],
+        ray_profile[0, 0],
+        ray_profile[0, 1],
+        ray_profile[0, 2],
         s=42,
         color=INK,
         depthshade=False,
         zorder=5,
     )
     ax.scatter(
-        visual_profile[-1, 0],
-        visual_profile[-1, 1],
-        visual_profile[-1, 2],
+        ray_profile[-1, 0],
+        ray_profile[-1, 1],
+        ray_profile[-1, 2],
         s=58,
         color=RED,
         depthshade=False,
         zorder=6,
     )
+    ax.quiver(
+        ray_profile[-2, 0],
+        ray_profile[-2, 1],
+        ray_profile[-2, 2],
+        ray_profile[-1, 0] - ray_profile[-2, 0],
+        ray_profile[-1, 1] - ray_profile[-2, 1],
+        ray_profile[-1, 2] - ray_profile[-2, 2],
+        color=BLUE,
+        linewidth=2.0,
+        arrow_length_ratio=0.18,
+        normalize=False,
+    )
 
-    # A subtle vertical reference helps the reader see that the ray is lifted onto
-    # the local road surface instead of staying in a flat top-down projection.
-    for point, surface_point in zip(visual_profile[1:-1:2], visual_profile_surface[1:-1:2]):
+    for point, surface_point in zip(ray_profile[1:-1], surface_profile[1:-1]):
         ax.plot(
             [surface_point[0], point[0]],
             [surface_point[1], point[1]],
@@ -287,11 +326,11 @@ def draw_height_raycast_profile() -> None:
             alpha=0.55,
         )
 
-    ax.set_xlim(float(np.min(visual_profile_surface[:, 0]) - 28.0), float(np.max(visual_profile_surface[:, 0]) + 28.0))
-    ax.set_ylim(float(np.min(visual_profile_surface[:, 1]) - 30.0), float(np.max(visual_profile_surface[:, 1]) + 30.0))
-    ax.set_zlim(float(np.min(visual_mesh.vertices[:, 2]) - 4.0), float(np.max(visual_profile[:, 2]) + 16.0))
-    ax.set_box_aspect((1.0, 1.18, 0.88))
-    ax.view_init(elev=24, azim=-35)
+    ax.set_xlim(-6.8, 6.8)
+    ax.set_ylim(-2.75, 2.75)
+    ax.set_zlim(-0.20, 3.45)
+    ax.set_box_aspect((2.55, 1.0, 0.78))
+    ax.view_init(elev=24, azim=-58)
     ax.set_facecolor("white")
     ax.set_axis_off()
     proxy_handles = [

@@ -1,0 +1,12 @@
+attempt_index,saved,num_frames,finish_time,discrete_progress,dense_progress,finished,crashes,timeout,distance,path
+1,0,2112,36.70000076293945,94.87179487179486,97.13470663250794,0,0,0,1306.8243408203125,
+2,1,2366,28.68000030517578,100.0,100.0,1,0,0,1394.4832763671875,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0002.npz
+3,1,2119,30.510000228881836,100.0,100.0,1,0,0,1400.648193359375,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0003.npz
+4,1,1392,28.670000076293945,100.0,100.0,1,0,0,1370.0994873046875,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0004.npz
+5,1,1572,30.450000762939453,100.0,100.0,1,0,0,1392.971435546875,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0005.npz
+6,1,1890,28.59000015258789,100.0,100.0,1,0,0,1386.36572265625,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0006.npz
+7,1,1917,28.600000381469727,100.0,100.0,1,0,0,1434.915283203125,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0007.npz
+8,1,1609,27.649999618530273,100.0,100.0,1,0,0,1406.957763671875,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0008.npz
+9,1,1547,28.079999923706055,100.0,100.0,1,0,0,1371.865478515625,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0009.npz
+10,1,1549,30.15999984741211,100.0,100.0,1,0,0,1351.0682373046875,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0010.npz
+11,1,1507,30.209999084472656,100.0,100.0,1,0,0,1374.7921142578125,logs/imitation_data\20260507_213010_map_single_surface_flat_v2d_asphalt_target_dataset\attempts\attempt_0011.npz

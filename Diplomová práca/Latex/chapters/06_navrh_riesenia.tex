@@ -28,7 +28,7 @@ Najdôležitejšia myšlienka bakalárskeho prototypu bola správna: agent nemus
 
 Prototyp však ešte neposkytoval dostatočne presné a systematicky vyhodnotiteľné riešenie. Odmena a metriky jazdy neboli opísané s potrebnou presnosťou, experimenty slúžili skôr ako ukážka realizovateľnosti a reprezentácia okolia auta bola zjednodušená. Diplomová práca preto nemení základný smer, ale rozdeľuje ho na jasnejšie časti: získanie stavu z hry, rekonštrukciu virtuálneho sveta, geometrické vnímanie, tvorbu pozorovania, akčný priestor a rozhodovací cyklus.
 
-Rozdiel medzi prototypom a aktuálnou prácou vidno aj na rozsahu programovej časti. Tabuľka~\ref{tab:code_scope_bc_vs_diploma} ho neinterpretuje ako meradlo kvality, iba ako orientačný údaj o tom, že diplomová práca už nie je jednorazový prototyp, ale širší experimentálny a runtime systém. Počítané boli iba programové súbory \texttt{.py}, \texttt{.cs}, \texttt{.as} a \texttt{.ps1}; do počtu nepatria mapy, dáta, modely, obrázky, LaTeX, dokumentácia ani pripravené textové podklady.
+Rozdiel medzi prototypom a aktuálnou prácou vidno aj na rozsahu programovej časti. Tabuľka~\ref{tab:code_scope_bc_vs_diploma} ho neinterpretuje ako meradlo kvality, iba ako orientačný údaj o tom, že diplomová práca už nie je jednorazový prototyp, ale širší experimentálny a behový systém. Počítané boli iba programové súbory \texttt{.py}, \texttt{.cs}, \texttt{.as} a \texttt{.ps1}; do počtu nepatria mapy, dáta, modely, obrázky, LaTeX, dokumentácia ani pripravené textové podklady.
 
 \begin{table}[htbp]
     \centering
@@ -41,10 +41,10 @@ Rozdiel medzi prototypom a aktuálnou prácou vidno aj na rozsahu programovej č
         \toprule
         Časť systému & Počet súborov & Riadky kódu \\
         \midrule
-        Bakalárska práca: Python runtime a tréning & 7 & 973 \\
+        Bakalárska práca: Python behová časť a tréning & 7 & 973 \\
         Bakalárska práca: plugin a export mapy & 6 & 506 \\
         \midrule
-        Diplomová práca: runtime jadro & 19 & 10\,690 \\
+        Diplomová práca: behové jadro & 19 & 10\,690 \\
         Diplomová práca: experimenty a tréningové skripty & 56 & 15\,598 \\
         Diplomová práca: pluginy a export mapy & 30 & 4\,120 \\
         \bottomrule
@@ -53,9 +53,9 @@ Rozdiel medzi prototypom a aktuálnou prácou vidno aj na rozsahu programovej č
 
 \section{Prečo nepoužiť obraz ako hlavný vstup}
 
-Súvisiace práce ukázali, že riadenie z obrazu je možné a v autonómnom riadení má silné výsledky, napríklad pri end-to-end modeloch mapujúcich kamerový obraz na riadiacu akciu \cite{bojarski2016endtoend}. Pre náš cieľ však obraz nie je najvhodnejší hlavný vstup. Spája percepciu a rozhodovanie do jedného problému: model sa musí najskôr naučiť, čo v obraze predstavuje cestu, okraj alebo prekážku, a až potom z toho odvodiť akciu. Ako ukázala tabuľka~\ref{tab:related_input_frequency}, obrazový vstup prináša aj časový problém: jeho frekvencia závisí od renderovania, snímania a spracovania obrazu, zatiaľ čo pri riadení chceme pracovať s čo najaktuálnejším stavom sveta.
+Súvisiace práce ukázali, že riadenie z obrazu je možné \cite{bojarski2016endtoend}, no pre náš cieľ sa obraz nejaví ako najpraktickejší hlavný vstup. Spája percepciu a rozhodovanie: model sa musí najskôr naučiť, čo v obraze predstavuje cestu, okraj alebo prekážku, a až potom z toho odvodiť akciu. Ako ukázala tabuľka~\ref{tab:related_input_frequency}, obraz zároveň prináša časový problém, pretože jeho frekvencia závisí od vykresľovania, snímania a spracovania.
 
-\Trackmania{} nám umožňuje zvoliť inú cestu. Trať je digitálny objekt, skladá sa z blokov a jej geometriu možno reprezentovať mimo hry. Stav auta možno získať z runtime prostredia cez herné skriptovanie; dokumentácia \OpenPlanet{} opisuje práve možnosti rozšírení a prístupu k údajom hry \cite{openplanet_wiki2026}. Namiesto otázky, ako z pixelov spätne odvodiť svet, teda môžeme postaviť vlastnú geometrickú reprezentáciu sveta a z nej agentovi vypočítať kompaktné pozorovanie.
+\Trackmania{} nám umožňuje zvoliť inú cestu. Trať je digitálny objekt, skladá sa z blokov a jej geometriu možno reprezentovať mimo hry. Stav auta možno získať počas behu hry cez herné skriptovanie; dokumentácia \OpenPlanet{} opisuje práve možnosti rozšírení a prístupu k údajom hry \cite{openplanet_wiki2026}. Namiesto otázky, ako z pixelov spätne odvodiť svet, teda môžeme postaviť vlastnú geometrickú reprezentáciu sveta a z nej agentovi vypočítať kompaktné pozorovanie.
 
 Toto rozhodnutie nie je tvrdením, že obrazové prístupy sú všeobecne horšie. Je to návrhová voľba pre túto prácu. Chceme, aby vstup politiky bol menší, čitateľnejší a priamo spojený s jazdou. Preto najskôr rekonštruujeme prostredie a až nad touto reprezentáciou hľadáme politiku správania.
 
@@ -63,7 +63,7 @@ Toto rozhodnutie nie je tvrdením, že obrazové prístupy sú všeobecne horši
 
 Na začiatku máme bežiacu hru. \Trackmania{} interne pozná polohu auta, orientáciu, rýchlosť, stav vstupov a časovanie fyziky, ale tieto údaje neposkytuje ako hotové výskumné rozhranie typu prostredie--agent. Prvým krokom návrhu je preto získať z hry dostatočne čerstvý a použiteľný stav auta.
 
-Používame herný skript, ktorý priebežne číta dostupné údaje z runtime stavu hry a posiela ich do Python časti systému. Prenos je zámerne jednoduchý: skript neposiela obraz ani úplný stav hernej scény, ale kompaktný TCP paket s údajmi potrebnými pre jeden rozhodovací krok. Na tejto úrovni ešte neriešime tréning politiky. Potrebujeme iba spoľahlivý prenos informácií, ktoré opisujú aktuálny stav vozidla: polohu v hernom svete, smer auta, rýchlosť, bočnú zložku pohybu, herný čas, posledný fyzikálny krok a aktuálne alebo posledné vstupy.
+Používame herný skript, ktorý priebežne číta dostupné údaje zo stavu hry počas jej behu a posiela ich do Python časti systému. Prenos je zámerne jednoduchý: skript neposiela obraz ani úplný stav hernej scény, ale kompaktný TCP paket s údajmi potrebnými pre jeden rozhodovací krok. Na tejto úrovni ešte neriešime tréning politiky. Potrebujeme iba spoľahlivý prenos informácií, ktoré opisujú aktuálny stav vozidla: polohu v hernom svete, smer auta, rýchlosť, bočnú zložku pohybu, herný čas, posledný fyzikálny krok a aktuálne alebo posledné vstupy.
 
 \begin{lstlisting}[caption={Vysokourovňový pseudokód herného skriptu},label={alg:game_script_tcp}]
 initialize TCP connection
@@ -82,7 +82,7 @@ while True:
 
 Samotná telemetria však nestačí. Poloha auta je iba číslo v súradnicovom systéme. Bez mapového kontextu nevieme, či je auto na rovinke, pred zákrutou, pri stene alebo mimo použiteľnej stopy. Preto sa stav auta musí vyhodnocovať voči rekonštruovanej trati. Až vtedy sa z údajov o aute stáva pozorovanie, ktoré má pre politiku správania jazdný význam. Celkový tok dát medzi hrou, skriptom, virtuálnou mapou a politikou správania zobrazuje obrázok~\ref{fig:solution_dataflow_loop}.
 
-\begin{lstlisting}[caption={Vysokourovňový pseudokód Python runtime časti},label={alg:python_runtime_loop}]
+\begin{lstlisting}[caption={Vysokourovňový pseudokód Python behovej časti},label={alg:python_runtime_loop}]
 load virtual map
 load policy
 initialize virtual gamepad
@@ -99,7 +99,7 @@ while True:
 
 Údaje o aute spájame s reprezentáciou trate. Trackmania je na tento krok vhodná, pretože trate sú skladané z blokov a editor tratí patrí medzi základné prvky hry \cite{ubisoft_trackmania2026, trackmania_wiki2026}. Pre agenta to znamená, že trať nemusíme chápať ako neznámu scénu z obrazu. Môžeme ju skladať ako digitálnu geometriu.
 
-Pri skladaní trate nepoužívame iba geometrický pohľad, ale aj jednoduchú reprezentáciu z teórie grafov. Každý stavebný blok môžeme chápať ako uzol grafu. Medzi dvoma uzlami vznikne hrana vtedy, keď sú príslušné bloky na mape kompatibilne napojené, teda výstup jedného bloku nadväzuje na vstup druhého. Takáto reprezentácia nám umožňuje overiť, či je mapa ako trať zmysluplná: validná mapa musí obsahovať cestu zo štartovacieho bloku do cieľového bloku. Grafová kontrola tým dopĺňa samotnú geometriu. Geometria hovorí, kde sa nachádza cesta v priestore, grafová štruktúra hovorí, či jednotlivé časti trate tvoria súvislú prejazdnú postupnosť.
+Pri skladaní trate používame aj jednoduchý graf: stavebný blok je uzol a hrana vzniká vtedy, keď výstup jedného bloku nadväzuje na vstup druhého. Validná mapa musí obsahovať cestu zo štartovacieho bloku do cieľového bloku, čo je základná úloha dosiahnuteľnosti v grafe \cite{cormen2009introduction}. Grafová kontrola teda hovorí, či bloky tvoria súvislú prejazdnú postupnosť; geometria určuje, kde táto postupnosť leží v priestore.
 
 \begin{figure}[htbp]
     \centering
@@ -135,7 +135,7 @@ Bloky nemusia opisovať iba tvar cesty v rovine. Môžu niesť aj informáciu o 
     \label{fig:solution_surface_height_blocks}
 \end{figure}
 
-Princíp rekonštrukcie je postupný. Najprv máme zoznam blokov v mape, ich polohy a otočenia. Ku každému typu bloku priradíme mesh, teda jeho geometrický model. Následne jednotlivé bloky transformujeme do spoločného súradnicového systému a zložíme z nich virtuálnu mapu. Rovnaký princíp skladania objektov, transformácií a trojuholníkových sietí je bežný v počítačovej grafike \cite{dunn2011mathprimer, hughes2014computer_graphics}. Obrázok~\ref{fig:solution_block_meshes} ukazuje rovný a zakrivený blok už ako zjednodušenú geometriu vhodnú na výpočty.
+Princíp rekonštrukcie je postupný. Najprv máme zoznam blokov v mape, ich polohy a otočenia. Ku každému typu bloku priradíme trojuholníkovú sieť, teda jeho geometrický model. Následne jednotlivé bloky transformujeme do spoločného súradnicového systému a zložíme z nich virtuálnu mapu. Rovnaký princíp skladania objektov, transformácií a trojuholníkových sietí je bežný v počítačovej grafike \cite{dunn2011mathprimer, hughes2014computer_graphics}. Obrázok~\ref{fig:solution_block_meshes} ukazuje rovný a zakrivený blok už ako zjednodušenú geometriu vhodnú na výpočty.
 
 \begin{figure}[htbp]
     \centering
@@ -148,7 +148,7 @@ Princíp rekonštrukcie je postupný. Najprv máme zoznam blokov v mape, ich pol
         \centering
         \includegraphics[width=\textwidth]{solution_proposal/mesh_curve.png}
     \end{minipage}
-    \caption[Mesh reprezentácia blokov]{Mesh reprezentácia rovného a zakriveného bloku. Trojuholníková geometria je jednoduchšia než herný vizuál, ale stačí na výpočty prienikov a vzdialeností.}
+    \caption[Trojuholníková reprezentácia blokov]{Trojuholníková reprezentácia rovného a zakriveného bloku. Trojuholníková geometria je jednoduchšia než herný vizuál, ale stačí na výpočty prienikov a vzdialeností.}
     \label{fig:solution_block_meshes}
 \end{figure}
 
@@ -157,7 +157,7 @@ Po transformácii viacerých blokov do spoločného súradnicového systému vzn
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.92\textwidth]{solution_proposal/map_mesh.png}
-    \caption[Zložená mesh mapa]{Zložená mesh mapa vytvorená z blokovej geometrie. Jednotlivé bloky už netvoria izolované objekty, ale jednu súvislú scénu, voči ktorej možno vyhodnocovať polohu auta.}
+    \caption[Zložená geometrická mapa]{Zložená geometrická mapa vytvorená z blokovej geometrie. Jednotlivé bloky už netvoria izolované objekty, ale jednu súvislú scénu, voči ktorej možno vyhodnocovať polohu auta.}
     \label{fig:solution_map_mesh}
 \end{figure}
 
@@ -172,9 +172,6 @@ Bakalársky prototyp používal jednoduchšiu predstavu: lúče vychádzali zo s
 Preto v aktuálnom návrhu interpretujeme vzdialenosti ako voľný priestor vzhľadom na rozmery auta. Namiesto otázky \uv{ako ďaleko je stena od stredu auta} nás zaujíma otázka \uv{koľko priestoru zostáva, kým sa pôdorys auta dotkne prekážky}. Hodnota blízka nule potom neznamená iba blízku stenu v abstraktnom zmysle, ale priamo riziko kontaktu.
 
 Táto zmena je dôležitá aj pre učenie politiky. Sieť nemusí z obrazu odhadovať, kde je okraj cesty a či je vzdialenosť ešte bezpečná. Dostane už spracovaný geometrický signál, ktorý je bližšie k tomu, čo vodič potrebuje pri rozhodovaní v zákrute.
-
-% TODO: doplniť schému raycastingu na rekonštruovanej trati: auto, lúče, prieniky so stenou a merané vzdialenosti.
-% TODO: doplniť porovnanie center-lidar a hitbox-aware clearance lidar na rovnakom príklade pri stene.
 
 \section{Vektor pozorovania}
 
@@ -216,11 +213,11 @@ Funkcia \(\operatorname{clip}_{[0,1]}\) zabezpečí, že projekcia nevybehne mim
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\textwidth]{solution_proposal/solution_observation_from_geometry.pdf}
-    \caption[Pozorovanie z virtuálnej geometrie]{Ilustrácia tvorby lokálneho pozorovania z virtuálnej geometrie trate. Hladké okraje predstavujú fyzickú geometriu cesty. Červená časť lomenej čiary označuje už prejdený progress, modrá časť budúci progress. Zelené body sú prechody medzi blokmi a sivé priečne čiary ukazujú hranice blokov. Oranžový bod je projekcia auta na aktuálnu úsečku logickej osi. Detail vpravo ukazuje lúče merajúce vzdialenosti k okrajom trate, kolmú projekciu auta na os a rozklad rýchlostného vektora na doprednú a bočnú zložku.}
+    \caption[Pozorovanie z virtuálnej geometrie]{Ilustrácia tvorby lokálneho pozorovania z virtuálnej geometrie trate. Hladké okraje predstavujú fyzickú geometriu cesty. Červená časť lomenej čiary označuje už prejdený progress, modrá časť budúci progress. Zelené body sú prechody medzi blokmi a sivé priečne čiary ukazujú hranice blokov. Oranžový bod je projekcia auta na aktuálnu úsečku logickej osi. Detail vpravo ukazuje lúče merajúce vzdialenosti k okrajom trate, kolmú projekciu auta na os a rozklad rýchlostného vektora na doprednú a bočnú zložku. Ikona auta použitá vo vizualizácii pochádza zo služby Flaticon od autora mynamepong \cite{flaticon_car809998_mynamepong2026}.}
     \label{fig:solution_observation_from_geometry}
 \end{figure}
 
-Obrázok~\ref{fig:solution_observation_from_geometry} nepredstavuje presný výpis všetkých prvkov finálneho observation vektora. Ukazuje princíp, z ktorého tieto prvky vznikajú. Agent nedostáva celú mapu, ale lokálne merania vypočítané z polohy auta vo virtuálnej geometrii: kde je najbližší okraj trate, ako ďaleko je auto od logickej osi, akým smerom pokračuje trať a ako sa auto vzhľadom na tento smer pohybuje.
+Obrázok~\ref{fig:solution_observation_from_geometry} nepredstavuje presný výpis výsledného vektora pozorovania. Ukazuje princíp: agent nedostáva celú mapu, ale lokálne merania z polohy auta vo virtuálnej geometrii, najmä okraje trate, vzdialenosť od logickej osi, smer pokračovania trate a pohyb auta voči tomuto smeru.
 
 Rovnakú myšlienku potom môžeme vidieť aj na konkrétnom napojení hry a nášho agenta. Obrázok~\ref{fig:solution_game_vs_agent_view} ukazuje rovnakú jazdnú situáciu v pôvodnom hernom pohľade a vo virtuálnej reprezentácii, ktorú používa programová časť systému.
 
@@ -249,17 +246,17 @@ Všeobecne môžeme pozorovanie rozdeliť na tieto skupiny príznakov:
 \paragraph{Povrchové informácie.}
 Obrázok~\ref{fig:solution_surface_height_blocks} ukázal, že bloková trať nemusí byť tvorená iba jedným typom povrchu. Pre agenta to znamená, že rovnaká akcia nemusí mať rovnaký dôsledok na asfalte, tráve, snehu alebo ľade. Namiesto toho, aby sa politika musela tento rozdiel nepriamo učiť iba zo šmyku auta, môžeme povrch zaradiť priamo medzi vstupné príznaky.
 
-Každému bloku \(B_i\) preto priraďujeme trakčnú hodnotu
+Každému bloku \(B_i\) priraďujeme trakčnú hodnotu
 \[
     \tau_i = \tau(B_i), \qquad \tau_i \in [0,1],
 \]
-kde vyššia hodnota znamená väčšiu očakávanú priľnavosť a nižšia hodnota šmykľavejší povrch. Ak sa auto nachádza na aktuálnom bloku \(B_0\), pozorovanie môže niesť nielen aktuálnu hodnotu \(\tau_0\), ale aj krátky pohľad dopredu
+kde vyššia hodnota znamená väčšiu očakávanú priľnavosť a nižšia hodnota šmykľavejší povrch. Pozorovanie môže niesť aktuálnu hodnotu \(\tau_0\) aj krátky pohľad dopredu
 \[
     \boldsymbol{\tau}
     =
     (\tau_0, \tau_1, \ldots, \tau_k),
 \]
-kde \(\tau_1,\ldots,\tau_k\) patria nasledujúcim blokom na logickej osi trate. Táto informácia je podobná inštrukciám zákrut: agent vopred vie, či sa blíži prudká zákruta, ale aj či sa blíži povrch s horšou trakciou.
+kde \(\tau_1,\ldots,\tau_k\) patria nasledujúcim blokom na logickej osi trate. Agent tak vopred vie nielen o blížiacej sa zákrute, ale aj o povrchu s horšou trakciou.
 
 V implementácii tomu zodpovedá skupina príznakov typu \texttt{surface\_instruction\_i}. Samostatne používame aj súhrnnú informáciu o šmyku kolies, napríklad \texttt{slip\_mean}. Textovo ich však netreba chápať ako jediný možný formát. Dôležitá je návrhová myšlienka: pozorovanie môže niesť informáciu o tom, po čom auto ide teraz a po čom pôjde o niekoľko blokov neskôr.
 
@@ -271,7 +268,7 @@ Používame rovnaký geometrický základ ako pri raycastingu vysvetlenom v teor
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.92\textwidth]{solution_proposal/solution_height_raycast_profile.pdf}
-    \caption[Raycasting po výškovom profile trate]{Ilustrácia lúča vedeného po výškovom profile rekonštruovanej trate. Modrá čiara je pre čitateľnosť mierne zdvihnutá nad povrch, jej priemet však sleduje cestnú plochu. Oranžová plocha zvýrazňuje lokálny trojuholník alebo rovinu, voči ktorej sa lúč interpretuje, a červený bod označuje koncový bod merania. Výšková zložka je vo vizualizácii zámerne zvýraznená.}
+    \caption[Raycasting po výškovom profile trate]{Schematická ilustrácia lúča vedeného po výškovom profile typu rovina--kopec--rovina. Modrá čiara je pre čitateľnosť mierne zdvihnutá nad povrch, jej priemet však sleduje cestnú plochu. Oranžové plochy zvýrazňujú lokálne roviny, na ktorých sa lúč pri stúpaní a klesaní láme, a červený bod označuje koncový bod merania. Výšková zložka je vo vizualizácii zámerne zvýraznená.}
     \label{fig:solution_height_raycast_profile}
 \end{figure}
 
@@ -301,13 +298,13 @@ Z takéhoto merania môžeme okrem samotnej vzdialenosti získať aj výškovú 
 \[
     h_i = \frac{\Delta y_i}{\max(d_i,\varepsilon)},
 \]
-kde \(\varepsilon > 0\) bráni deleniu nulou. Kladná hodnota \(h_i\) znamená stúpanie, záporná klesanie a hodnota blízka nule približne rovný úsek. Rovnaká myšlienka sa dá použiť aj pre inštrukcie nasledujúcich blokov
+kde \(\varepsilon > 0\) bráni deleniu nulou. Kladná hodnota \(h_i\) znamená stúpanie, záporná klesanie a hodnota blízka nule približne rovný úsek. Výškové inštrukcie nasledujúcich blokov môžeme zapísať ako
 \[
     \boldsymbol{\eta}
     =
     (\eta_0, \eta_1, \ldots, \eta_k),
 \]
-kde \(\eta_j\) opisuje výškovú zmenu budúceho úseku trate. V implementácii sa tento typ informácie objavuje ako \texttt{height\_instruction\_i}, výšková rýchlosť, sklon alebo sektorové zmeny výšky lúčov.
+kde \(\eta_j\) opisuje výškovú zmenu budúceho úseku trate. V implementácii sa tento typ informácie objavuje ako výšková inštrukcia, výšková rýchlosť, sklon alebo sektorové zmeny výšky lúčov.
 
 Takto definované pozorovanie ostáva všeobecné. Neviaže sa na jeden pevný počet lúčov ani na jednu experimentálnu konfiguráciu. Podstatné je, že každý prvok má priamy vzťah k jazde: buď opisuje lokálnu geometriu, orientáciu voči trati, pohyb auta, kontakt s povrchom, výškový profil alebo časový kontext rozhodnutia.
 
@@ -319,7 +316,7 @@ Politika po spracovaní pozorovania vyberá akciu. V našom prípade nejde o vys
 
 Voľba medzi diskrétnym a spojitým ovládaním je kompromis. Diskrétne akcie zmenšujú vyhľadávací priestor, pretože politika vyberá z menšieho počtu možností. To môže byť výhodné pri jednoduchšom tréningu. Zároveň však vzniká problém jemnosti: ak agent potrebuje zatočiť iba mierne, diskrétna klávesová akcia mu dovolí buď zatočiť naplno, alebo nezatočiť vôbec. Pri pretekárskej jazde sa tak môže stratiť práve malé korekčné správanie, ktoré rozhoduje o tom, či auto zostane v stope.
 
-Druhý dôvod súvisí s reprezentáciou politiky. Neurónová sieť je prirodzený aproximátor funkcie, ktorej výstupy môžu byť reálne čísla. Ak by sme takýto výstup používali na klávesnicové ovládanie, museli by sme ho dodatočne prahovať alebo zaokrúhľovať na diskrétne stlačenia kláves. Tým by sme do rozhodovania vložili umelý skok: dve veľmi podobné hodnoty výstupu siete by mohli po prahovaní znamenať odlišnú akciu. Preto v návrhu preferujeme spojité zatáčanie, ktoré lepšie zachováva informáciu vo výstupe modelu.
+Druhý dôvod súvisí s reprezentáciou politiky. Neurónová sieť prirodzene vracia reálne čísla. Pri klávesnici by sme ich museli prahovať na diskrétne stlačenia, čím by sme do rozhodovania vložili umelý skok: dve podobné hodnoty siete by po prahovaní mohli znamenať odlišnú akciu. Preto preferujeme spojité zatáčanie, ktoré lepšie zachováva informáciu vo výstupe modelu.
 
 Preto akciu zapisujeme ako jednoduchý vektor
 \[
@@ -327,7 +324,7 @@ Preto akciu zapisujeme ako jednoduchý vektor
 \]
 kde \(g_t\) označuje plyn, \(b_t\) brzdu a \(u_t\) zatáčanie v čase \(t\). Plyn a brzda možno interpretovať ako samostatné vstupy, zatiaľ čo zatáčanie má prirodzene spojitý charakter.
 
-Aktuátorom nášho systému je virtuálny Xbox ovládač, resp. virtuálny gamepad. Nezasahujeme teda priamo do fyziky hry ani do interného simulátora auta. Výstup politiky preložíme na stav virtuálneho ovládača a ten sa voči hre správa podobne ako vstup od človeka: nastaví plyn, brzdu a analógové natočenie páčky. Takýto aktuátor zachováva prirodzené rozhranie hry a zároveň umožňuje použiť spojitú hodnotu zatáčania bez dodatočného zaokrúhľovania na klávesové stlačenia.
+Aktuátorom systému je virtuálny Xbox ovládač. Nezasahujeme priamo do fyziky hry ani do interného simulátora auta; výstup politiky iba preložíme na plyn, brzdu a analógové natočenie páčky. Voči hre sa preto agent správa podobne ako človek s ovládačom a spojitú hodnotu zatáčania nemusíme zaokrúhľovať na klávesové stlačenia.
 
 Tento nízkoúrovňový akčný priestor kladie väčší nárok na pozorovanie. Agent nedostáva hotový plán trasy ani ručne navrhnuté pravidlo pre zákrutu. Musí zo stavovo-geometrického opisu situácie vybrať konkrétnu akciu v aktuálnom okamihu.
 

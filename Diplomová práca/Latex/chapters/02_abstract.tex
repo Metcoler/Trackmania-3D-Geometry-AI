@@ -1,6 +1,10 @@
 \newpage
 \section*{Abstract}
 
-This page will contain the English version of the abstract. It will summarize the goal of the thesis, the proposed approach, the main results, and the contribution of the work.
+This thesis presents the design, implementation, and evaluation of an autonomous driving agent for the game \Trackmania{}. It builds on an earlier bachelor thesis prototype which showed that a Trackmania agent can perceive the track through exported geometry instead of raw screen images. The goal of this thesis is to turn that idea into a more systematic solution: to construct an environment representation, design the agent observation, automate policy training, and empirically evaluate the resulting driving behavior.
 
-\paragraph*{Keywords:} Trackmania, autonomous agent, neuroevolution, genetic algorithm, neural network
+The proposed system reads the car state from the running game, projects it into a reconstructed virtual map, and computes a compact observation vector from the track geometry. The driving policy is represented by a multilayer neural network, and its parameters are searched primarily through neuroevolution with a genetic algorithm. Human driving data are first used to select a practical network architecture and to demonstrate the limitations of behavioral cloning. The thesis then compares several ways of evaluating driving behavior, including a lexicographic ranking function, reinforcement learning, and Pareto-based multi-objective comparison.
+
+Within the performed experiments, the most practical main direction was lexicographic evaluation with the tuple \texttt{(finish, progress, -time, -crashes)} combined with genetic training. The resulting agent can finish tracks in a flat setting, on a track with height changes, and on a track with different surfaces. On the previously unseen map \texttt{small\_map}, the agent achieved a time of \(19.68\,\mathrm{s}\), while the bachelor-thesis agent achieved \(23.064\,\mathrm{s}\) and the reference human run achieved \(17.89\,\mathrm{s}\). In the tested conditions, these results support the claim that the new system clearly improves over the original prototype and that the geometric approach is useful beyond a simple flat track.
+
+\paragraph*{Keywords:} Trackmania, autonomous agent, neuroevolution, genetic algorithm, neural network, virtual sensors

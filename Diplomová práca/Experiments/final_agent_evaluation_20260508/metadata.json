@@ -1,0 +1,40 @@
+{
+  "small_map_run": "logs\\tm_finetune_runs\\20260507_235715_tm_finetune_map_small_map_v2d_asphalt_h48x24_p48_src_population_gen_0080",
+  "comparison": {
+    "human_time_s": 17.89,
+    "agent_time_s": 19.68000030517578,
+    "bachelor_agent_time_s": 23.064,
+    "agent_vs_bachelor_improvement_s": 3.383999694824219,
+    "agent_gap_to_human_s": 1.7900003051757807
+  },
+  "ranked_final_training_times": [
+    {
+      "key": "single_surface_flat",
+      "run_dir": "logs\\tm_finetune_runs\\20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model",
+      "finishers": 82,
+      "best_time_s": 27.959999084472656,
+      "worst_finished_time_s": 29.979999542236328,
+      "median_finished_time_s": 28.5
+    },
+    {
+      "key": "single_surface_height",
+      "run_dir": "logs\\tm_finetune_runs\\20260506_160030_tm_seed_map_single_surface_height_v3d_asphalt_h48x24_p48_src_best_model",
+      "finishers": 351,
+      "best_time_s": 32.54999923706055,
+      "worst_finished_time_s": 44.9900016784668,
+      "median_finished_time_s": 37.52000045776367
+    },
+    {
+      "key": "multi_surface_flat",
+      "run_dir": "logs\\tm_finetune_runs\\20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model",
+      "finishers": 125,
+      "best_time_s": 35.099998474121094,
+      "worst_finished_time_s": 44.56999969482422,
+      "median_finished_time_s": 37.16999816894531
+    }
+  ],
+  "figures": [
+    "Diplomová práca/Latex/images/evaluation/evaluation_small_map_comparison.pdf",
+    "Diplomová práca/Latex/images/evaluation/evaluation_final_training_ranked_times.pdf"
+  ]
+}

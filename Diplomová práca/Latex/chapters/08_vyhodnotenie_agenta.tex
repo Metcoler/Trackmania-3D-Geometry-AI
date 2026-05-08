@@ -1,25 +1,60 @@
 \chapter{Vyhodnotenie výsledného agenta}
+\label{chap:vyhodnotenie_agenta}
 
-Tu pôjde kapitola o finálnom vyhodnotení agenta.
+Predchádzajúca kapitola ukázala, ako sme politiku správania postupne hľadali: najprv cez učenie z dát, potom cez neuroevolúciu, výber hodnotiacej funkcie, architektúry siete, hyperparametrov a tréningových vylepšení. V tejto kapitole už nejde o ďalšie ladenie. Cieľom je stručne zhodnotiť, akú kvalitu má výsledný agent, či sa zlepšil oproti bakalárskej verzii a či sa jeho správanie nepripútalo iba k jednej tréningovej trati.
 
-\section{Cieľ finálneho vyhodnotenia}
+\section{Porovnanie na novej mape}
 
-\section{Výber agentov na porovnanie}
+Najdôležitejší test mimo tréningovej trate sme spravili na mape \texttt{small\_map}. Agent použitý v tomto teste bol najlepší jedinec z tréningu na mape \texttt{single\_surface\_flat}. Bez ďalšieho dotrénovania sme ho spustili na novej mape a zaznamenali jeho prejazd. Ide teda o hodnotenie prenosu konkrétnej najlepšej politiky na inú trať, nie o nový výber alebo dodatočné ladenie na mape \texttt{small\_map}. Test napriek tomu neoveruje iba zapamätanie jednej konkrétnej trasy, ale aj to, či naučená politika dokáže reagovať na iné rozloženie trate.
 
-\section{Výber testovacích tratí}
+Najlepší jedinec dokončil mapu \texttt{small\_map} bez nárazu za \(19{,}68\,\mathrm{s}\). Pre porovnanie, agent z bakalárskej verzie dosiahol na tej istej mape čas \(23{,}064\,\mathrm{s}\) \cite{melkovic2024bachelor}. Rozdiel \(3{,}38\,\mathrm{s}\) je na krátkej trati výrazný. Zároveň však treba držať mieru interpretácie: ľudský prejazd na tejto mape mal čas \(17{,}89\,\mathrm{s}\), takže nový agent sa k ľudskému výkonu priblížil, ale ešte ho neprekonal.
 
-\section{Metriky finálneho hodnotenia}
+\begin{table}[htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Porovnanie času na mape \texttt{small\_map}]{Porovnanie času na mape \texttt{small\_map}. Agent diplomovej práce vznikol na mape \texttt{single\_surface\_flat} a na tejto mape bol iba vyhodnotený.}
+    \label{tab:evaluation_small_map_times}
+    \begin{tabular}{lr}
+        \toprule
+        Jazdec / agent & Čas \\
+        \midrule
+        Ľudský hráč & \(17{,}89\,\mathrm{s}\) \\
+        Agent diplomovej práce & \(19{,}68\,\mathrm{s}\) \\
+        Agent bakalárskej práce & \(23{,}064\,\mathrm{s}\) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-\section{Trajektórie a správanie na mape}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.86\textwidth]{evaluation/evaluation_small_map_trajectory.pdf}
+    \caption[Trajektória agenta na mape \texttt{small\_map}]{Trajektória najlepšieho agenta na porovnávacej mape \texttt{small\_map}. Farba trajektórie vyjadruje rýchlosť v km/h; studené farby označujú rýchlejšie úseky a teplé pomalšie úseky.}
+    \label{fig:evaluation_small_map_trajectory}
+\end{figure}
 
-\section{Vyhodnotenie generalizácie}
+Tabuľka~\ref{tab:evaluation_small_map_times} a obrázok~\ref{fig:evaluation_small_map_trajectory} sú pre prácu dôležité najmä preto, že porovnávajú agenta na mape, na ktorej neprebiehal jeho tréning. Nejde ešte o dôkaz všeobecnej schopnosti jazdiť ľubovoľnú mapu v \Trackmania{}. Ukazuje však, že najlepšia politika z tréningovej trate nebola viazaná iba na jednu konkrétnu stopu. V porovnaní s bakalárskou verziou sa zlepšil nielen čas, ale aj spôsob práce s traťou: jazda je plynulejšia, využíva spojité ovládanie a vychádza z geometrických meraní namiesto slabšieho pôvodného prototypu.
 
-\section{Vyhodnotenie výškových rozdielov}
+\section{Porovnanie s ľudskými prejazdmi}
 
-\section{Vyhodnotenie rôznych povrchov}
+Okrem porovnania s bakalárskym agentom je dôležité ukázať aj širší ľudský kontext. Pre mapu \texttt{single\_surface\_flat} máme z hry k dispozícii \(100\) uložených hráčskych časov. Nejde o štatisticky reprezentatívnu vzorku všetkých hráčov, ale je to vhodnejšia referencia než porovnanie iba s najlepšími prejazdmi. Namiesto otázky, či agent porazil najlepšieho človeka, sa preto pýtame skromnejšie: kde približne leží jeho čas v rozdelení hráčskych časov na tej istej trati.
 
-\section{Časové porovnanie}
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{evaluation/evaluation_human_vs_agent_single_surface_flat.pdf}
+    \caption[Porovnanie agenta s ľudskými prejazdmi]{Histogram hráčskych časov na mape \texttt{single\_surface\_flat}. Modré stĺpce označujú počet hráčskych časov v danom intervale, prerušovaná čiara medián hráčskych časov a červená čiara čas výsledného agenta.}
+    \label{fig:evaluation_human_vs_agent_single_surface_flat}
+\end{figure}
 
-\section{Diskusia správania agenta}
+Obrázok~\ref{fig:evaluation_human_vs_agent_single_surface_flat} ukazuje, že najlepší hráčsky čas vo vzorke bol \(23{,}05\,\mathrm{s}\), medián \(25{,}12\,\mathrm{s}\) a najpomalší uložený čas \(29{,}68\,\mathrm{s}\). Agent dokončil trať za \(27{,}96\,\mathrm{s}\). To znamená, že je stále pomalší než väčšina hráčskych časov vo vzorke: \(96\) z \(100\) časov je kratších. Zároveň však neleží mimo ľudského rozsahu tejto trate, preto výsledok čítame opatrne: agent človeka neprekonáva, ale po autonómnom tréningu dosahuje dokončujúcu jazdu, ktorá sa už dá porovnávať s pomalšou časťou hráčskych prejazdov.
 
-\section{Prechod do záveru}
+\section{Zhodnotenie cieľov}
+
+Z pohľadu cieľov práce považujeme za najdôležitejšie tri výsledky. Prvým je zlepšenie oproti bakalárskej verzii. Na porovnávacej mape \texttt{small\_map} nový agent zlepšil čas z \(23{,}064\,\mathrm{s}\) na \(19{,}68\,\mathrm{s}\). Takéto zlepšenie je na krátkej trati veľké, najmä keď ľudský referenčný čas bol \(17{,}89\,\mathrm{s}\).
+
+Druhým výsledkom je samostatnosť tréningu. To neznamená, že práca nepoužíva ľudské dáta: tie slúžili najmä na počiatočné učenie a porovnávací kontext. Podstatné je, že následná optimalizácia politiky prebieha v uzavretom tréningovom cykle. Agent sa vyhodnocuje priamo jazdou, genetický algoritmus pracuje s celou populáciou, priebežne sa ukladajú metriky, checkpointy aj trajektórie a výsledky možno spätne analyzovať. Experimenty teda nie sú iba jednorazové ukážky, ale merateľné behy s reprodukovateľnými výstupmi.
+
+Tretím výsledkom je rozšírenie prostredia. Agent sa nenaučil jazdiť iba po jednoduchej rovinnej trati. Rovnaký prístup sme použili aj pri trati s výškovými zmenami a pri trati s rôznymi povrchmi. Tieto režimy zväčšujú vektor pozorovania a zvyšujú náročnosť úlohy, no tréning aj v nich našiel dokončujúce politiky. To neznamená, že agent je hotový univerzálny vodič pre každú mapu v \Trackmania{}. Znamená to však, že navrhnutý spôsob reprezentácie a tréningu sa dá rozširovať bez toho, aby bolo potrebné celý systém navrhnúť od začiatku.
+
+Kapitolu dopĺňa elektronická príloha A, v ktorej sú priložené aj videá vybraných prejazdov agenta. Tie nie sú náhradou číselného vyhodnotenia, ale pomáhajú overiť kvalitatívnu stránku výsledku: či agent jazdí plynulo, kde spomaľuje, ako prechádza zákruty a či jeho správanie zodpovedá číslam v grafoch.
+
+\FloatBarrier

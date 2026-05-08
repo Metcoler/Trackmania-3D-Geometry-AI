@@ -1,152 +1,153 @@
-# Autonómne jazdiaci agent pre hru Trackmania – Diplomová práca
-**Školiteľ:** Ing. Alexander Šimko, PhD.
+# Trackmania Autonomous Driving Agent
 
-Tento repozitár obsahuje zdrojový kód a súvisiace materiály k bakalárskej a diplomovej práci zameranej na vývoj autonómneho jazdiaceho agenta pre počítačovú hru Trackmania.  
+This repository contains the code, experiments, figures, and thesis materials for a diploma project about an autonomous driving agent for **Trackmania**.  
+Instead of treating the game only as a stream of pixels, the project reconstructs a geometric copy of the track and gives the agent compact observations derived from that geometry.  
+The final policy is a small neural network trained mainly through lexicographic neuroevolution, with supervised learning, imitation learning, reinforcement learning, and Pareto experiments used as supporting comparisons.
 
-Projekt nadväzuje na bakalársku prácu, v ktorej bol navrhnutý a implementovaný agent využívajúci učenie posilňovaním (RL). V rámci diplomovej práce vzniká nová vetva založená na evolučných algoritmoch a neuroevolúcii, ktorá umožňuje porovnať RL prístup s evolučným učením neurónových sietí.
+The full thesis methodology, citations, and detailed discussion are in `Diplomová práca/Latex/main.pdf`.
 
----
+## Demo Videos
 
-## Prehľad
+Videos are intended to be attached as GitHub release assets. If a link opens the release page, choose the matching video file from the release assets.
 
-Cieľom projektu je vytvoriť agenta schopného samostatne prechádzať trate v hre Trackmania bez zásahu človeka. Agent sa učí pomocou experimentovania a spätnej väzby z prostredia, pričom dôraz je kladený na:
+| Demo | Link | What it shows |
+|---|---|---|
+| `single_surface_flat` | [release video](https://github.com/Metcoler/Trackmania-BC/releases) | Final agent on a flat single-surface map. |
+| `single_surface_height` | [release video](https://github.com/Metcoler/Trackmania-BC/releases) | Agent using height-aware observations. |
+| `multi_surface_flat` | [release video](https://github.com/Metcoler/Trackmania-BC/releases) | Agent driving on a map with multiple surface types. |
+| `small_map` transfer | [trajectory figure](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_small_map_trajectory.png) | Transfer evaluation on a map not used for training. |
 
-- reálne časové obmedzenia (interakcia s bežiacou hrou v reálnom čase),
-- reprezentáciu trate a stavového priestoru,
-- návrh odmeny / hodnotenia jazdy,
-- architektúru učenia (RL vs. evolučné algoritmy).
+## How The System Works
 
-Repozitár aktuálne obsahuje **dve hlavné vetvy prístupu**:
+The agent runs in a closed loop. Trackmania provides the real-time environment, a game-side script streams car state, Python projects the state into a reconstructed virtual map, the observation encoder builds a compact input vector, a neural policy chooses an action, and the action is applied through a virtual gamepad.
 
-1. **Agent s učením posilňovaním (RL, PPO)**  
-   - neurónová sieť sa trénuje pomocou algoritmu Proximal Policy Optimization (PPO),
-   - tréning prebieha v simulovanom prostredí nad mapou Trackmanie,
-   - politika sa učí end-to-end z pozorovaní na akcie (plyn, brzda, zatáčanie).
+![Game-agent loop](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_game_agent_loop.png)
 
-2. **Evolučný agent (neuroevolúcia)**  
-   - populácia jedincov reprezentuje politiky v podobe neurónových sietí,
-   - genetický algoritmus evolvuje váhy siete na základe kvality jazdy (multi-metrické hodnotenie),
-   - prostredie je spúšťané sekvenčne pre každého jedinca, výsledkom je „fitness“ a štatistiky jazdy,
-   - experimentuje sa s viacnásobnými metrikami (progress, čas, prejdená vzdialenosť, kolízie…).
+In short:
 
----
+1. Trackmania is the real environment.
+2. Game telemetry gives car position, orientation, velocity, time, and state flags.
+3. Python keeps a geometric copy of the map.
+4. Raycasting and track-progress logic produce the observation.
+5. `NeuralPolicy.py` maps observation to gas, brake, and steering.
+6. `XboxController.py` applies the action as a virtual controller input.
 
-## Štruktúra projektu
+## Environment And Geometry
 
-### Hlavné moduly (spoločné pre RL aj GA)
+Trackmania maps are built from blocks. The project exports block layouts and mesh data, then rebuilds the map as a geometric world in Python. This lets the agent reason about track shape, walls, surfaces, height changes, and progress without processing the full screen image.
 
-- `Actor.py` – logika agenta a výber akcií (rozhranie medzi politikou a prostredím)
-- `Car.py` – simulácia fyziky vozidla a jeho pohybu
-- `Driver.py` – riadi interakciu agenta s prostredím (napojenie na Trackmaniu)
-- `Enviroment.py` – prostredie/obálka Trackmanie pre učenie a testovanie agenta
-- `Map.py` – spracovanie a reprezentácia trate (bloky, checkpointy, geometria)
-- `Vizualizer.py` – vizualizácia výsledkov a správania agenta
-- `Plugins/get_data_driver` – skripty pre zber a spracovanie dát z hry
-- `Maps/` – použité mapy tratí
-- `Assets/BlockMeshes/` – knižnica blokových mesh súborov (aktuálne fallback: `Meshes/`)
-- `Maps/BlockLayouts/` – textové layouty máp (aktuálne fallback: `Maps/ExportedBlocks/`)
-- `Maps/Gbx/` – pôvodné Trackmania `.Map.Gbx` súbory (aktuálne fallback: `Maps/GameFiles/`)
-- `Maps/TrackMeshes/` – celé vyexportované mesh trate (aktuálne fallback: `Maps/Meshes/`)
-- `logs/` – logy z tréningov a experimentov
+<p align="center">
+  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_blocks_editor_view.png" width="49%" alt="Trackmania blocks">
+  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_game_map_overview.png" width="49%" alt="Trackmania map">
+</p>
 
-### RL (Reinforcement Learning) časť
+Individual blocks are represented as triangle meshes. By placing the exported meshes according to the block layout, the runtime builds a virtual copy of the track.
 
-- `Training.py` – tréningový proces pre RL agenta (PPO a súvisiaca RL slučka)
-- `ppo_racing_game.zip` – pôvodná implementácia PPO (Proximal Policy Optimization) pre racing hru
+<p align="center">
+  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/mesh_straight.png" width="32%" alt="Straight mesh">
+  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/mesh_curve.png" width="32%" alt="Curve mesh">
+  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/map_mesh.png" width="32%" alt="Map mesh">
+</p>
 
-### Evolučný / GA (neuroevolúcia) agent
+## What The Agent Observes
 
-- `Individual.py` – reprezentácia jedinca:
-  - chromozóm = parametre (váhy, biasy) neurónovej siete,
-  - pomocné metódy na hodnotenie, porovnávanie a prácu s multi-metrickým hodnotením.
-- `NeuralPolicy.py` – politika agenta založená na neurónovej sieti:
-  - mapuje stavový vektor (senzorické vstupy) na akcie,
-  - používa sa pri evaluácii jednotlivcov v prostredí.
-- `GeneticTrainer.py` – genetický algoritmus a tréningová slučka:
-  - inicializácia populácie,
-  - vyhodnocovanie jedincov v prostredí Trackmanie,
-  - selekcia, kríženie, mutácia, elitizmus,
-  - logovanie metrík (čas, progress, distance, stavy epizód).
-- `GADriver.py` – nástroje na spúšťanie a prehrávanie jazdy jedincov:
-  - načítanie uložených generácií,
-  - vizuálna demonstrácia najlepších agentov.
+The agent does not receive the whole map. It receives a compact vector of local and state-based measurements:
 
----
+- progress along an approximated centerline,
+- distances to track edges from ray-like sensors,
+- forward and lateral velocity components,
+- heading relative to the track,
+- upcoming curve instructions,
+- optional surface and traction information,
+- optional height-profile signals.
 
-## Denník práce
+![Observation from geometry](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_observation_from_geometry.png)
 
-**Týždeň 1 (22. 9. – 28. 9. 2025):**  
-- Začiatok semestra
+This representation keeps the input small and interpretable. It also separates the perception problem from the policy-learning problem: the neural network learns how to drive from geometric measurements, not from raw pixels.
 
-**Týždeň 2 (29. 9. – 5. 10. 2025):**  
-- Prvá prednáška
+## Training Story
 
-**Týždeň 3 (6. 10. – 12. 10. 2025):**  
-- Úvodné stretnutie so školiteľom
+The thesis follows a step-by-step experimental path:
 
-**Týždeň 4 (13. 10. – 19. 10. 2025):**  
-- Konzultovanie reinforcment learning vs. genetický algoritmus
+- **Supervised learning:** human driving data was used to check whether a small neural network can approximate the mapping from observation to action.
+- **Imitation learning:** mixed human-agent control was tested to collect recovery states that pure supervised learning misses.
+- **Lexicographic genetic algorithm:** the main training method evolved neural-network weights directly from driving outcomes using the tuple `(finished, progress, -time, -crashes)`.
+- **Activation and hyperparameter studies:** closed-loop experiments supported `ReLU,tanh` networks and a practical GA baseline.
+- **RL and Pareto branches:** PPO/SAC/TD3 and NSGA-II style experiments were tested as comparison paths, but the lexicographic GA remained the most practical direction in these experiments.
+- **Final training:** the selected setup was tested on flat, height-aware, and multi-surface maps.
 
-**Týždeň 5 (20. 10. – 26. 10. 2025):**  
-- Programovanie genetického algoritmu - základ
+![Final GA progress](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/training_policy/final_ga_training_progress.png)
 
-**Týždeň 6 (27. 10. – 2. 11. 2025):**  
-- Programovanie genetického algoritmu - funkčný prototyp
+![Final GA trajectories](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/training_policy/final_ga_training_trajectories.png)
 
-**Týždeň 7 (3. 11. – 9. 11. 2025):**  
-- Multikriteriálne hodnotenie jedincov
+## Results Snapshot
 
-**Týždeň 8 (10. 11. – 16. 11. 2025):**  
-- Trénovanie agenta
+These numbers summarize selected thesis experiments. They are practical experimental results from the tested runs, not a broad statistical benchmark across many independent seeds.
 
-**Týždeň 9 (17. 11. – 23. 11. 2025):**  
-- Zrušené stretnutie
+| Scenario | Best time | Finishers | Note |
+|---|---:|---:|---|
+| `single_surface_flat` | `27.96 s` | `82` | Flat map with one surface type. |
+| `single_surface_height` | `32.55 s` | `351` | Map with height changes and height-aware observation. |
+| `multi_surface_flat` | `35.10 s` | `125` | Flat map with multiple surface types. |
+| `small_map` transfer | `19.68 s` | - | Agent transferred from the flat-map generation. |
 
-**Týždeň 10 (24. 11. – 30. 11. 2025):**  
-- Trénovanie agenta - multikriteriálne hodnotenie
+On `small_map`, the transferred diploma agent improved over the original bachelor implementation:
 
-**Týždeň 11 (1. 12. – 7. 12. 2025):**  
-- Písanie práce
+| Driver | Time |
+|---|---:|
+| Human reference | `17.89 s` |
+| Diploma agent | `19.68 s` |
+| Bachelor agent | `23.064 s` |
 
-**Týždeň 12 (8. 12. – 14. 12. 2025):**  
-- Pŕiprava prezentácie, písanie práce
+<p align="center">
+  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_small_map_comparison.png" width="45%" alt="Small map comparison">
+  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_small_map_trajectory.png" width="45%" alt="Small map trajectory">
+</p>
 
----
+The final evaluation also compares the trained agent against a wider set of player times on the `single_surface_flat` map.
 
-## Výsledky tréningu
+![Human vs agent times](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_human_vs_agent_single_surface_flat.png)
 
-Nižšie sú ukážky výsledkov evolučného tréningu agenta na jednej vybranej trati.  
-Tréning prebiehal niekoľko desiatok generácií, v každej generácii bola populácia
-jedincov vyhodnotená podľa progressu po trati a času jazdy.
+## Repository Guide
 
-### Prejdená vzdialenosť
+### Runtime and agent
 
-![Distance traveled during training](ga_training_distance.png)
+- `Driver.py` - replay and live driving entry point for a trained policy.
+- `Enviroment.py` - Trackmania environment wrapper used by the agent.
+- `Car.py` - car state, movement, and runtime measurements.
+- `ObservationEncoder.py` - converts car state and geometry into the neural-network input vector.
+- `NeuralPolicy.py` - neural network policy used by supervised, imitation, and GA paths.
+- `XboxController.py` - virtual controller output used to apply actions in the game.
 
-Graf zobrazuje vývoj percenta prejdenej trate v závislosti od generácie:
+### Training
 
-- **Generation average** – priemerný jedinec v danej generácii,  
-- **Generation best** – najlepší jedinec v generácii,  
-- **Global best individual** – globálne najlepší jedinec naprieč všetkými generáciami.
+- `GeneticTrainer.py` - main neuroevolution trainer.
+- `Individual.py` - one population member, including policy weights and metrics.
+- `RankingKey.py` - lexicographic ranking logic.
+- `SupervisedTraining.py` - supervised training from recorded human data.
+- `ImitationTrainer.py` - mixed human-agent imitation learning.
 
-### Čas jazdy
+### Maps and geometry
 
-![Finish time during training](ga_training_time.png)
+- `Maps/` - game maps, exported block layouts, player times, and map meshes.
+- `Meshes/` - block-level mesh assets used for reconstruction.
+- `Map.py` - map loading, block graph logic, geometry, and progress handling.
+- `Map Extractor C#/` - extractor tooling used to obtain map/block data.
 
-Druhý graf ukazuje čas jazdy v sekundách (nedokončené jazdy sú penalizované
-časom 60 s):
+### Game integration
 
-- postupný pokles času globálne najlepšieho jedinca naznačuje,  
-  že evolučný algoritmus nachádza stále rýchlejších agentov,
-- priemerný čas zostáva vyšší, čo odráža diverzitu populácie
-  a prítomnosť slabších jedincov.
+- `Plugins/` - Trackmania/OpenPlanet-side scripts for game-state communication.
+- `ProjectPaths.py` - central path helpers used by the Python runtime.
 
----
+### Experiments and thesis assets
 
-## Plány do budúcna
+- `Experiments/` - raw and working experiment tools.
+- `Diplomová práca/Experiments/` - curated thesis experiment packages with reports and summaries.
+- `Diplomová práca/Latex/images/` - thesis-ready figures used in the PDF and this README.
+- `Diplomová práca/Latex/` - thesis source and final PDF build.
 
-- S použitím miltikriteriálneho trénovania natrénovať čo najlepšieho jedinca.
-- Napísanie diplomovej práce
+## Notes
 
-
-
+- This is research code developed for a diploma thesis, not a polished general-purpose Trackmania AI framework.
+- Some large logs, trained checkpoints, and videos may be distributed through GitHub releases or electronic appendix assets instead of being committed directly to the repository.
+- The full academic argument, citations, limitations, and detailed experiment interpretation are in the thesis PDF.

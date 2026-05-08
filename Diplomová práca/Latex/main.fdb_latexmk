@@ -1,14 +1,14 @@
 # Fdb version 4
-["bibtex main"] 1778202765.29954 "main.aux" "main.bbl" "main" 1778202771.8721 0
+["bibtex main"] 1778202765.29954 "main.aux" "main.bbl" "main" 1778205983.20733 0
   "./references.bib" 1778199389 21960 9faf9cc3fd61bfab18dee033e9569392 ""
   "c:/texlive/2026/texmf-dist/bibtex/bst/base/plain.bst" 1777201575 20613 bd3fbfa9f64872b81ac57a0dd2ed855f ""
-  "main.aux" 1778202770 38504 dac59e18909729dce5dab90db68cd953 "pdflatex"
+  "main.aux" 1778205981 38504 dac59e18909729dce5dab90db68cd953 "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1778202765.98904 "c:/Users/sampu/Desktop/Trackmania-BC/Diplomová práca/Latex/main.tex" "main.pdf" "main" 1778202771.87287 0
-  "appendices/appendix_a_elektronicka_priloha.tex" 1778198754 1026 deae0f140ee0b4eba3c6e03ebbcb51b5 ""
+["pdflatex"] 1778205977.65088 "c:/Users/sampu/Desktop/Trackmania-BC/Diplomová práca/Latex/main.tex" "main.pdf" "main" 1778205983.20842 0
+  "appendices/appendix_a_elektronicka_priloha.tex" 1778205976 1459 6f06e01bd2ef38678e29d1f336f7b1a0 ""
   "c:/Users/sampu/Desktop/Trackmania-BC/Diplomová práca/Latex/main.tex" 1778136088 1695 5f205864a26d72bd1741d06b5d40e500 ""
   "c:/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc" 1777202829 2971 def0b6c1f0b107b3b936def894055589 ""
   "c:/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc" 1777202829 2900 1537cc8184ad1792082cd229ecc269f4 ""
@@ -180,10 +180,10 @@
   "chapters/05_suvisiace_prace.tex" 1778201640 21139 c2a75196e814d3073dd265c1f921d651 ""
   "chapters/06_navrh_riesenia.tex" 1778202163 33119 3f6746ae45a4eb701ead6c53511921ff ""
   "chapters/07_trening_policy.tex" 1778202526 61664 21f1b1b72bee37ca198c3fc50fc30391 ""
-  "chapters/08_vyhodnotenie_agenta.tex" 1778201461 7007 b48058f11a16f7622ea64517b0b660a3 ""
+  "chapters/08_vyhodnotenie_agenta.tex" 1778204214 7004 1a12be59a9e50b6da6951d9eeeff68ff ""
   "chapters/09_zaver.tex" 1778201659 4600 e4ea1d708a47bbf8d3fd378b11b39c49 ""
   "definitions.tex" 1778066759 323 74657a3ba59472b1762e05304272eb8b ""
-  "images/evaluation/evaluation_human_vs_agent_single_surface_flat.pdf" 1778198480 17787 31c2bd2b93dd2cf2a39a21863880de0b ""
+  "images/evaluation/evaluation_human_vs_agent_single_surface_flat.pdf" 1778204393 17137 66241a132e3a837533010e0a80386908 ""
   "images/evaluation/evaluation_small_map_trajectory.pdf" 1778202370 53163 a56e30792a0a987e3c74605b3ed77054 ""
   "images/solution_proposal/map_mesh.png" 1778145529 308383 630149ae1a6f3e6c862bd2cc298cb7cc ""
   "images/solution_proposal/mesh_curve.png" 1778145529 408574 1e597898735200c9a6cd564ad2a624bd ""
@@ -238,13 +238,13 @@
   "images/training_policy/supervised_behavior_cloning_butterfly_p04_left_120.pdf" 1778179068 41363 82aaf3fe76d3378caa93654cdd8b0a41 ""
   "images/training_policy/supervised_behavior_cloning_teacher_agent_paths.pdf" 1778184354 517741 5895af9e68c0c45685df7eaebb32a27e ""
   "images/zadanie.pdf" 1778066759 340892 d121efa67341b75d534f92c8f3c1e16e ""
-  "main.aux" 1778202770 38504 dac59e18909729dce5dab90db68cd953 "pdflatex"
+  "main.aux" 1778205981 38504 dac59e18909729dce5dab90db68cd953 "pdflatex"
   "main.bbl" 1778202765 12802 826cb5343fc9afa8194ab6c5daaabffd "bibtex main"
-  "main.lof" 1778202770 6171 ba1b4df6bc05857e357b6cc947d648d7 "pdflatex"
-  "main.lot" 1778202770 1309 b2a21fb5727c09bef05fabc99c903c3b "pdflatex"
-  "main.out" 1778202770 12632 33c695f575331c9832e5361afd67ed24 "pdflatex"
+  "main.lof" 1778205981 6171 ba1b4df6bc05857e357b6cc947d648d7 "pdflatex"
+  "main.lot" 1778205981 1309 b2a21fb5727c09bef05fabc99c903c3b "pdflatex"
+  "main.out" 1778205981 12632 33c695f575331c9832e5361afd67ed24 "pdflatex"
   "main.tex" 1778136088 1695 5f205864a26d72bd1741d06b5d40e500 ""
-  "main.toc" 1778202770 9331 5aaed346e2e49911b146fd2eefd7e5ee "pdflatex"
+  "main.toc" 1778205981 9331 5aaed346e2e49911b146fd2eefd7e5ee "pdflatex"
   "preamble.tex" 1778136088 706 cf8ab38e640d17ea6d246819ff2eda4a ""
   "variables.tex" 1778066759 716 16bd96c9fda2f2c27efa7b57bd72ce05 ""
   (generated)

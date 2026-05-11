@@ -1,0 +1,62 @@
+\chapter{Evaluation of the Final Agent}
+\label{chap:vyhodnotenie_agenta}
+
+The previous chapter showed how the behavior policy was gradually searched for: first through learning from data, then through neuroevolution, the choice of evaluation function, network architecture, hyperparameters, and training improvements. This chapter no longer tunes the system. Its goal is to briefly evaluate the quality of the final agent, whether it improved over the bachelor-thesis version, and whether its behavior remained tied only to a single training track.
+
+\section{Comparison on a New Map}
+
+The most important test outside the training track was performed on the map \texttt{small\_map}. The agent used in this test was a finishing individual selected from training on the flat map with a single surface. Without any additional fine-tuning, we ran it on the new map and recorded its trajectory. This is therefore an evaluation of transferring a concrete policy to a different track, not a new selection or additional tuning on \texttt{small\_map}. Even so, the test does not only check memorization of one particular racing line, but also whether the learned policy can react to a different track layout.
+
+The selected individual finished \texttt{small\_map} without a crash in \(19.68\,\mathrm{s}\). For comparison, the agent from the bachelor thesis achieved \(23.064\,\mathrm{s}\) on the same map \cite{melkovic2024bachelor}. The difference of \(3.38\,\mathrm{s}\) is substantial on a short track. At the same time, the interpretation must remain measured: the human reference run on this map had a time of \(17.89\,\mathrm{s}\), so the new agent approached human performance but did not surpass it.
+
+\begin{table}[htbp]
+    \centering
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Time comparison on \texttt{small\_map}]{Time comparison on \texttt{small\_map}. The diploma-thesis agent was trained on \texttt{single\_surface\_flat} and only evaluated on this map.}
+    \label{tab:evaluation_small_map_times}
+    \begin{tabular}{lr}
+        \toprule
+        Driver / agent & Time \\
+        \midrule
+        Human player & \(17.89\,\mathrm{s}\) \\
+        Diploma-thesis agent & \(19.68\,\mathrm{s}\) \\
+        Bachelor-thesis agent & \(23.064\,\mathrm{s}\) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.86\textwidth]{evaluation/evaluation_small_map_trajectory.pdf}
+    \caption[Agent trajectory on \texttt{small\_map}]{Trajectory of the best agent on the comparison map \texttt{small\_map}. The trajectory color represents speed in km/h; cold colors denote faster sections and warm colors slower sections.}
+    \label{fig:evaluation_small_map_trajectory}
+\end{figure}
+
+Table~\ref{tab:evaluation_small_map_times} and Figure~\ref{fig:evaluation_small_map_trajectory} are important mainly because they compare the agent on a map that was not used for its training. This is still not proof of a general ability to drive arbitrary \Trackmania{} maps. It does, however, show that the best policy from the training track was not tied only to one concrete racing line. Compared with the bachelor-thesis version, not only the time improved, but also the way the agent works with the track: the driving is smoother, uses continuous control, and relies on more precise geometric measurements.
+
+\section{Comparison with Human Runs}
+
+In addition to the comparison with the bachelor-thesis agent, it is important to provide a broader human context. For the map \texttt{single\_surface\_flat}, we have \(113\) saved player times from the game. This is not a statistically representative sample of all players, but it is a more useful reference than comparing only against the best runs. Instead of asking whether the agent beat the best human, we therefore ask a more modest question: where does its time approximately lie within the distribution of player times on the same track?
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{evaluation/evaluation_human_vs_agent_single_surface_flat.pdf}
+    \caption[Comparison with human runs]{Histogram of player times on \texttt{single\_surface\_flat}. Blue bars show the number of player times in each interval, the dashed line marks the median player time, and the red line marks the time of the final agent.}
+    \label{fig:evaluation_human_vs_agent_single_surface_flat}
+\end{figure}
+
+Figure~\ref{fig:evaluation_human_vs_agent_single_surface_flat} shows that the best player time in the sample was \(23.05\,\mathrm{s}\), the median was \(25.12\,\mathrm{s}\), the mean was \(25.30\,\mathrm{s}\), and the slowest saved time was \(31.10\,\mathrm{s}\). The agent finished the track in \(25.92\,\mathrm{s}\). It is therefore still slower than the best group of players, but it already lies close to the center of the saved sample: it is approximately \(0.81\,\mathrm{s}\) behind the median and \(0.62\,\mathrm{s}\) behind the mean. We therefore read this result more positively than the earlier run, but still cautiously. The agent does not outperform the best players, but after autonomous training it successfully approached typical player performance on this track.
+
+\section{Evaluation of the Goals}
+
+From the perspective of the thesis goals, we consider three results the most important. The first is the improvement over the bachelor-thesis version. On the comparison map \texttt{small\_map}, the new agent improved the time from \(23.064\,\mathrm{s}\) to \(19.68\,\mathrm{s}\). Such an improvement is large on a short track, especially given that the human reference time was \(17.89\,\mathrm{s}\).
+
+Equally important is that, on the training map \texttt{single\_surface\_flat}, the agent reached the vicinity of average player performance in our sample after longer autonomous training. This does not mean that the agent reached the level of the best players, but it shows that the result is not merely a technically completed run. The policy can already finish the track with a time comparable to ordinary saved human runs.
+
+The second result is the autonomy of training. This does not mean that the thesis does not use human data: these data were used mainly for initial learning and comparison. The essential point is that the subsequent policy optimization runs in a closed training cycle. The agent is evaluated directly by driving, the genetic algorithm works with the whole population, and metrics, model checkpoints, and trajectories are saved continuously and can be analyzed afterwards. The experiments are therefore not only one-off demonstrations, but measured runs with reproducible outputs.
+
+The third result is the extension of the environment. The agent did not learn to drive only on a simple flat track. We used the same approach also on a track with height changes and on a track with different surfaces. These modes increase the observation vector and make the task harder, yet training still found finishing policies. This does not mean that the agent is a finished universal driver for every \Trackmania{} map. It does show, however, that the proposed representation and training method can be extended without redesigning the whole system from scratch.
+
+The chapter is complemented by electronic Appendix A, which also includes videos of selected agent runs. These videos do not replace the numerical evaluation, but they help verify the qualitative side of the result: whether the agent drives smoothly, where it slows down, how it takes corners, and whether its behavior corresponds to the numbers shown in the plots.
+
+\FloatBarrier

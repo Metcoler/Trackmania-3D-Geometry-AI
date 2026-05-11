@@ -1,0 +1,362 @@
+\chapter[Environment Representation Design]{Design of the Environment Representation and Agent Decision Loop}
+
+The previous chapters established the vocabulary used in the thesis and compared approaches from related work. We now turn to the concrete question of this thesis: how can a running \Trackmania{} game be turned into an environment in which an agent can obtain an observation, make a decision, and apply its action back into the game?
+
+The design is based on separating environment perception from the search for the behavior policy. The main input of the agent will not be a screen image. Instead, we combine the car state from the game, the reconstructed track geometry, and computations over this geometry. The result of the chapter is a closed decision loop: the game provides the car state, our program turns it into an observation, the policy selects an action, and this action is returned to the game.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{solution_proposal/solution_dataflow_loop.pdf}
+    \caption[Data flow between the game and the agent]{Basic data flow between the game and the agent. The game provides the car state through a game script, the Python part of the system combines it with the virtual map and creates an observation for the behavior policy. The selected action is then applied back into the game.}
+    \label{fig:solution_dataflow_loop}
+\end{figure}
+
+The same process can also be read as an adaptation of the general agent--environment loop from the theoretical chapter. The environment is \Trackmania{}, the gateway from the world to the agent is formed by the game script together with a 3D projection of the data into our virtual world, and the action returns to the game through a virtual controller. This view is shown in Figure~\ref{fig:solution_game_agent_loop}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.94\textwidth]{solution_proposal/solution_game_agent_loop.pdf}
+    \caption[Trackmania as an environment for the agent]{Adapting the \Trackmania{} game environment into the agent--environment loop. The game script and 3D projection into the virtual world replace the sensory gateway, the policy selects an action, and the virtual controller transfers it back into the game.}
+    \label{fig:solution_game_agent_loop}
+\end{figure}
+
+\section{Building on the Bachelor Thesis}
+
+The master's thesis directly builds on the bachelor thesis \emph{Training an Autonomous Vehicle in the Game Trackmania Using Machine Learning} \cite{melkovic2024bachelor}. That work had a prototype character. It verified whether \Trackmania{} could be connected to a programming environment, whether a map could be reconstructed outside the game, and whether an agent could drive using such a representation.
+
+The most important idea of the bachelor prototype was correct: the agent does not have to perceive the world only as an image. Already then, the system used data from the game, exported map blocks, virtual track geometry, and rays measuring local distances from obstacles. This created the first bridge between a commercial game and a research environment for an agent.
+
+The prototype, however, did not yet provide a sufficiently precise and systematically evaluable solution. The reward and driving metrics were not described with the necessary precision, the experiments served more as a demonstration of feasibility, and the representation of the car surroundings was simplified. The master's thesis therefore does not change the main direction, but divides it into clearer parts: obtaining state from the game, reconstructing the virtual world, geometric perception, observation construction, the action space, and the decision loop.
+
+The difference between the prototype and the current work is also visible in the size of the software part. Table~\ref{tab:code_scope_bc_vs_diploma} does not interpret this as a measure of quality, only as an indicative measure showing that the master's thesis is no longer a one-off prototype, but a broader experimental and runtime system. Only program files \texttt{.py}, \texttt{.cs}, \texttt{.as}, and \texttt{.ps1} were counted; maps, data, models, figures, LaTeX, documentation, and prepared text notes were not included.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \renewcommand{\arraystretch}{1.15}
+    \caption[Indicative scope of the software part]{Indicative scope of the software part of the bachelor prototype and the current master's thesis. The values serve only as a measure of development scope, not as an evaluation of solution quality.}
+    \label{tab:code_scope_bc_vs_diploma}
+    \begin{tabular}{lrr}
+        \toprule
+        System part & Number of files & Lines of code \\
+        \midrule
+        Bachelor thesis: Python runtime and training & 7 & 973 \\
+        Bachelor thesis: plugin and map export & 6 & 506 \\
+        \midrule
+        Master's thesis: runtime core & 19 & 10\,690 \\
+        Master's thesis: experiments and training scripts & 56 & 15\,598 \\
+        Master's thesis: plugins and map export & 30 & 4\,120 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Why Not Use Image as the Main Input}
+
+Related work showed that image-based driving is possible \cite{bojarski2016endtoend}, but for our goal it does not appear to be the most practical main input. It combines perception and decision-making: the model first has to learn what in the image represents the road, an edge, or an obstacle, and only then derive an action. As Table~\ref{tab:related_input_frequency} showed, image input also introduces a timing problem because its frequency depends on rendering, capture, and processing.
+
+\Trackmania{} allows us to choose a different path. The track is a digital object, it is composed of blocks, and its geometry can be represented outside the game. The car state can be obtained during game runtime through game scripting; the \OpenPlanet{} documentation describes such extension mechanisms and access to game data \cite{openplanet_wiki2026}. Instead of asking how to reconstruct the world from pixels, we can build our own geometric representation of the world and compute a compact observation for the agent from it.
+
+This decision is not a claim that image-based approaches are generally worse. It is a design choice for this thesis. We want the policy input to be smaller, more readable, and directly connected to driving. Therefore, we first reconstruct the environment and only then search for the behavior policy over this representation.
+
+\section{Obtaining State from Trackmania}
+
+At the beginning we have a running game. \Trackmania{} internally knows the car position, orientation, speed, input state, and physics timing, but it does not provide these data as a ready-made research interface of the environment--agent type. The first design step is therefore to obtain a sufficiently fresh and usable car state from the game.
+
+We use a game script that continuously reads available data from the game state during runtime and sends them to the Python part of the system. The transfer is intentionally simple: the script does not send an image or the complete state of the game scene, but a compact TCP packet with data needed for one decision step. At this level, we are not yet solving policy training. We only need reliable transmission of information describing the current vehicle state: position in the game world, car heading, speed, lateral motion, game time, last physics step, and current or last inputs.
+
+\begin{lstlisting}[caption={High-level pseudocode of the game script},label={alg:game_script_tcp}]
+initialize TCP connection
+
+while True:
+    position = get_car_position()
+    direction = get_car_orientation()
+    velocity = get_car_velocity()
+    time = get_game_time()
+    finished, crashed = get_episode_status()
+    inputs = get_current_inputs()
+    send_metrics_via_tcp(position, direction, velocity,
+                         time, finished, crashed, inputs)
+    wait_until_next_frame()
+\end{lstlisting}
+
+Telemetry alone, however, is not enough. A car position is only a number in a coordinate system. Without map context, we do not know whether the car is on a straight, before a corner, near a wall, or outside the usable line. The car state must therefore be evaluated against the reconstructed track. Only then do the car data become an observation with driving meaning for the behavior policy. The overall data flow between the game, script, virtual map, and behavior policy is shown in Figure~\ref{fig:solution_dataflow_loop}.
+
+\begin{lstlisting}[caption={High-level pseudocode of the Python runtime},label={alg:python_runtime_loop}]
+load virtual map
+load policy
+initialize virtual gamepad
+
+while True:
+    metrics = read_tcp_packet()
+    update_virtual_car(metrics)
+    observation = get_observation_from_projection()
+    action = policy(observation)
+    perform_action_via_virtual_gamepad(action)
+\end{lstlisting}
+
+\section{Reconstructing the Virtual World}
+
+We combine the car data with a representation of the track. Trackmania is suitable for this step because tracks are composed from blocks and the track editor is one of the core elements of the game \cite{ubisoft_trackmania2026, trackmania_wiki2026}. For the agent this means that we do not have to treat the track as an unknown scene from an image. We can assemble it as digital geometry.
+
+When assembling the track, we also use a simple graph: a building block is a node, and an edge exists when the output of one block connects to the input of another. A valid map must contain a path from the start block to the finish block, which is a basic reachability problem in a graph \cite{cormen2009introduction}. The graph check therefore says whether the blocks form a connected drivable sequence; the geometry determines where this sequence lies in space.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{solution_proposal/solution_blocks_editor_view.png}
+    \caption[Separate blocks in the editor]{Separate blocks in the track editor. The blocks do not yet form a drivable map; their meaning emerges only after correct placement and connection.}
+    \label{fig:solution_blocks_editor}
+\end{figure}
+
+If the blocks are placed in compatible positions and orientations, a valid track is formed. Figure~\ref{fig:solution_game_map} shows a simple top-down example of such a map. The task of the player or agent is to drive from start to finish as quickly as possible, while the concrete track shape can vary significantly. Figure~\ref{fig:solution_track_drive_preview} adds a recorded run to the same idea; this is not yet an evaluation of a policy, but only an illustration that driving is a trajectory in the environment.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.82\textwidth]{solution_proposal/solution_game_map_overview.png}
+    \caption[Map assembled from blocks]{A valid map assembled from blocks. The start line is highlighted in green and the finish line in red.}
+    \label{fig:solution_game_map}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.86\textwidth]{solution_proposal/solution_track_drive_preview.pdf}
+    \caption[Track traversal as a trajectory]{Illustrative top-down track traversal. The curve shows the car trajectory from start to finish; the color gradient on the right highlights speed changes during the drive. Values in the legend are given in \(\mathrm{km/h}\), the unit used by the in-game speed display \cite{trackmania_wiki_units2026}. For readability, the lower end of the color scale is clipped to \(100\,\mathrm{km/h}\) so that the static start does not stretch the whole color range.}
+    \label{fig:solution_track_drive_preview}
+\end{figure}
+
+Blocks do not have to describe only the shape of the road in a plane. They can also carry surface and height information. Surface matters because it can later change the interpretation of driving, for example grip or risk of sliding. Height blocks show that the world does not have to be only a flat top-down projection. For the environment representation, it is therefore useful if the block world can be transferred into geometry that preserves shape, surface, and height changes.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{solution_proposal/solution_surface_blocks.png}
+    \vspace{0.35em}
+    \includegraphics[width=\textwidth]{solution_proposal/solution_height_blocks.png}
+    \caption[Surfaces and height blocks]{Examples of surface and height variants of blocks. The same track assembly principle can create maps with different surfaces and vertical structure.}
+    \label{fig:solution_surface_height_blocks}
+\end{figure}
+
+The reconstruction principle is gradual. First, we have a list of blocks in the map, their positions, and their rotations. Each block type is assigned a triangle mesh, that is, its geometric model. We then transform the individual blocks into a common coordinate system and assemble them into a virtual map. The same principle of composing objects, transformations, and triangle meshes is common in computer graphics \cite{dunn2011mathprimer, hughes2014computer_graphics}. Figure~\ref{fig:solution_block_meshes} shows a straight and a curved block already as simplified geometry suitable for computation.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{solution_proposal/mesh_straight.png}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{solution_proposal/mesh_curve.png}
+    \end{minipage}
+    \caption[Triangle representation of blocks]{Triangle representation of a straight and a curved block. The triangle geometry is simpler than the in-game visual model, but it is sufficient for computing intersections and distances.}
+    \label{fig:solution_block_meshes}
+\end{figure}
+
+After transforming multiple blocks into the common coordinate system, one assembled geometry is obtained. Figure~\ref{fig:solution_map_mesh} shows the assembled map as a single virtual object. This representation is important for the agent because the car state from the game can then be interpreted directly with respect to the track geometry.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{solution_proposal/map_mesh.png}
+    \caption[Assembled geometric map]{Assembled geometric map created from block geometry. The individual blocks are no longer isolated objects, but one connected scene against which the car position can be evaluated.}
+    \label{fig:solution_map_mesh}
+\end{figure}
+
+For this chapter, coordinate agreement is especially important. When the game script sends the car position, we can project the same position into the virtual map. Then we can ask questions that telemetry alone cannot answer: what is in front of the car, where is the nearest wall, how does the track continue, and how much space does the vehicle have around it?
+
+\section{Geometric Perception of the Environment}
+
+Once the car state and the virtual map are in the same space, we can build virtual sensors over them. The basis is raycasting, that is, finding the intersection of a ray with scene geometry. The theoretical chapter explained this principle; here we focus on its design meaning. A ray answers a practical question: how much space does the car have in a given direction before it hits the edge of the track or another obstacle? Intersection of a ray with triangle geometry can be computed, for example, by the Möller--Trumbore algorithm \cite{moller1997raytriangle}.
+
+The bachelor prototype used a simpler idea: rays originated from the center of the car and measured distance to the surroundings \cite{melkovic2024bachelor}. This approach is understandable and suitable as a first step, but the car is not actually a point. In a narrow space, the center of the car can still be safely on the road while the edge of the vehicle is already touching a barrier.
+
+Therefore, in the current design we interpret distances as free space with respect to the car dimensions. Instead of asking ``how far is the wall from the center of the car'', we ask ``how much space remains before the footprint of the car touches an obstacle''. A value close to zero then does not merely mean a nearby wall in an abstract sense, but directly indicates a risk of contact.
+
+This change is also important for learning the policy. The network does not have to infer from an image where the road edge is and whether the distance is still safe. It receives a processed geometric signal that is closer to what a driver needs when deciding in a corner.
+
+\section{Observation Vector}
+
+The observation is the input of the behavior policy. In our design, it is not a screen image or the complete internal game state, but a compact vector of features derived from the car state and virtual track geometry. The goal is to provide the policy with information that has driving meaning: free space around the car, the direction of the track, vehicle motion, contact with the surface, and timing context.
+
+The basis for part of these features is the logical track axis. We do not compute it as an ideal continuous centerline of the whole road. We use the block structure of the map and approximate it by a polyline connecting transition points between neighboring blocks. This choice is computationally simple and sufficient for determining continuous progress along the track. At each moment, it is enough to find the current segment of this polyline and project the car position onto it.
+
+If the car is at position
+\[
+    \mathbf{p} = (x, y)
+\]
+and the current part of the logical axis is the segment
+\[
+    \ell_i = \overline{\mathbf{q}_i \mathbf{q}_{i+1}},
+\]
+where \(\mathbf{q}_i\) and \(\mathbf{q}_{i+1}\) are two consecutive block transition points, we first denote the segment direction as
+\[
+    \mathbf{d}_i = \mathbf{q}_{i+1}-\mathbf{q}_i.
+\]
+The relative position of the car projection on this segment is
+\[
+    \alpha_i =
+    \operatorname{clip}_{[0,1]}
+    \left(
+        \frac{(\mathbf{p}-\mathbf{q}_i) \cdot \mathbf{d}_i}
+             {\|\mathbf{d}_i\|^2}
+    \right).
+\]
+The progress point then lies directly on the segment:
+\[
+    \hat{\mathbf{p}} = \mathbf{q}_i + \alpha_i \mathbf{d}_i.
+\]
+If \(s_i\) denotes the length of the logical axis from the start to the beginning of segment \(\ell_i\), the continuous progress of the car can be written as
+\[
+    s(\mathbf{p}) = s_i + \alpha_i \|\mathbf{d}_i\|.
+\]
+The function \(\operatorname{clip}_{[0,1]}\) ensures that the projection does not leave the current segment. The symbol \(\hat{\mathbf{p}}\) denotes the point on the logical axis used to determine local progress along the track and to derive the orientation of the car relative to the nearest part of the track.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{solution_proposal/solution_observation_from_geometry.pdf}
+    \caption[Observation from virtual geometry]{Illustration of constructing a local observation from virtual track geometry. Smooth edges represent the physical geometry of the road. The red part of the polyline denotes already completed progress, and the blue part future progress. Green points are block transitions and gray transverse lines show block boundaries. The orange point is the projection of the car onto the current segment of the logical axis. The detail on the right shows rays measuring distances to track edges, the perpendicular projection of the car onto the axis, and the decomposition of the velocity vector into forward and lateral components. The car icon used in the visualization comes from Flaticon by author mynamepong \cite{flaticon_car809998_mynamepong2026}.}
+    \label{fig:solution_observation_from_geometry}
+\end{figure}
+
+Figure~\ref{fig:solution_observation_from_geometry} is not an exact listing of the final observation vector. It shows the principle: the agent does not receive the whole map, but local measurements from the car position in virtual geometry, mainly track edges, distance from the logical axis, the direction of the upcoming track, and car motion relative to this direction.
+
+The same idea can also be seen in the concrete connection between the game and our agent. Figure~\ref{fig:solution_game_vs_agent_view} shows the same driving situation in the original game view and in the virtual representation used by the program.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{solution_proposal/solution_game_vs_agent_view.png}
+    \caption[Game view and virtual representation]{The same driving situation in the game and in the agent's virtual representation. The left view is a visually rich screenshot from the game, while the right view emphasizes only the track geometry, car position, and virtual rays needed to compute the observation.}
+    \label{fig:solution_game_vs_agent_view}
+\end{figure}
+
+In general, the observation can be divided into the following groups of features:
+
+\begin{itemize}
+    \item \(\tilde{d}_i \in [0,1]\): normalized ray distances or clearance values to track edges. A small value means that the car has little free space in the given direction.
+    \item \(u_{\parallel} \in \mathbb{R}\): the forward component of the car velocity. It expresses how fast the car moves in the driving direction.
+    \item \(u_{\perp} \in \mathbb{R}\): the lateral component of the car velocity. A significantly non-zero value does not automatically mean a crash, but it is an important signal of lateral sliding, which is relevant in vehicle dynamics \cite{rajamani2012vehicle_dynamics}.
+    \item \(\theta \in [-1,1]\): the car orientation relative to the current segment of the logical track axis. This feature helps distinguish a situation in which the car is on the road but not pointing in the correct direction.
+    \item \(c_j \in [-1,1]\): instructions for upcoming track segments. Negative values denote a left corner, positive values a right corner, and the absolute value expresses the sharpness of the direction change.
+    \item \(g \in [0,1]\): a grip or slip metric derived from wheel state or surface. It helps distinguish stable driving from a situation in which the car loses traction.
+    \item \(\Delta t\): timing context of the last step, for example time since the previous observation or normalized physics delay. This feature is useful because the game runs in real time and data may not arrive in perfectly equal intervals.
+    \item \(\Delta \tilde{d}_k\), \(\dot{u}_{\parallel}\), \(\dot{u}_{\perp}\), and \(\dot{\theta}\): temporal changes in distances, forward and lateral motion, and heading. They help the policy distinguish whether the car is approaching a wall, moving away from it, or stabilizing.
+    \item \(a_{t-1}\): the previous action, if used by the concrete observation variant. Such a feature can help the policy interpret a state change as a consequence of its own previous intervention.
+    \item Surface and height extensions: surface traction, height instructions, track slope, and the height profile of rays. These features are especially useful when the track is not a homogeneous flat asphalt road.
+\end{itemize}
+
+\paragraph{Surface information.}
+Figure~\ref{fig:solution_surface_height_blocks} showed that a block-based track does not have to consist of only one surface type. For the agent this means that the same action may not have the same consequence on asphalt, grass, snow, or ice. Instead of requiring the policy to learn this difference only indirectly from wheel slip, we can include the surface directly among input features.
+
+Each block \(B_i\) is assigned a traction value
+\[
+    \tau_i = \tau(B_i), \qquad \tau_i \in [0,1],
+\]
+where a higher value means higher expected grip and a lower value means a more slippery surface. The observation can carry the current value \(\tau_0\) as well as a short lookahead
+\[
+    \boldsymbol{\tau}
+    =
+    (\tau_0, \tau_1, \ldots, \tau_k),
+\]
+where \(\tau_1,\ldots,\tau_k\) belong to upcoming blocks on the logical track axis. The agent can therefore know in advance not only about an approaching corner, but also about a surface with worse traction.
+
+In the implementation, this corresponds to surface-instruction features and to summary information about wheel slip, for example \texttt{slip\_mean}. In the text, however, these should not be understood as the only possible format. The important design idea is that the observation can carry information about what the car is driving on now and what it will drive on several blocks later.
+
+\paragraph{Height changes and rays following the track profile.}
+On a flat map, it is enough for a ray to answer how far the nearest wall is in the top-down projection. With height differences, the situation is richer. The road can climb, descend, or break between blocks. If the ray remained only in one horizontal plane, the agent would not see that the track profile ahead changes height. Therefore, in the height-aware mode we interpret the ray as a measurement guided along the local geometry of the road surface.
+
+We use the same geometric foundation as in raycasting explained in the theoretical chapter: the world is represented by a triangle mesh, the ray searches for an intersection with geometry, and the local surface determines where the ray is projected in the next step \cite{hughes2014computer_graphics, dunn2011mathprimer, moller1997raytriangle}. The difference is that, on the road, we are not interested only in the first wall. If the ray continues along the drivable surface, its point is projected to the local plane or surface of the next block when it crosses into it. In this way, the ray approximately follows the track profile.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{solution_proposal/solution_height_raycast_profile.pdf}
+    \caption[Raycasting along the height profile of the track]{Schematic illustration of a ray guided along a flat--hill--flat height profile. For readability, the blue line is slightly lifted above the surface, but its projection follows the road surface. Orange planes highlight the local planes where the ray bends while climbing and descending, and the red point marks the endpoint of the measurement. The height component is intentionally emphasized in the visualization.}
+    \label{fig:solution_height_raycast_profile}
+\end{figure}
+
+At a high level, the procedure can be written as follows:
+
+\begin{lstlisting}[caption={High-level pseudocode of a ray under height changes},label={alg:height_profile_raycast}]
+for direction in ray_directions:
+    point = car_position
+    block = current_block
+    distance = 0
+
+    while distance < max_distance:
+        wall_hit = cast_wall(point, direction, block)
+        border = next_block_border(point, direction, block)
+
+        if wall_hit is before border:
+            return distance_to(wall_hit)
+
+        block = connected_block_after(border)
+        point = project_to_road_surface(border, block)
+        distance += travelled_surface_distance()
+
+    return max_distance
+\end{lstlisting}
+
+From such a measurement we can obtain not only distance, but also height information. If the ray in direction \(i\) travels distance \(d_i\) along the surface and its height changes by \(\Delta y_i\), a local height signal can be written, for example, as
+\[
+    h_i = \frac{\Delta y_i}{\max(d_i,\varepsilon)},
+\]
+where \(\varepsilon > 0\) prevents division by zero. A positive value of \(h_i\) means climbing, a negative value descending, and a value close to zero an approximately flat section. Height instructions for upcoming blocks can be written as
+\[
+    \boldsymbol{\eta}
+    =
+    (\eta_0, \eta_1, \ldots, \eta_k),
+\]
+where \(\eta_j\) describes the height change of a future track segment. In the implementation, this type of information appears as a height instruction, vertical velocity, slope, or sector height changes of rays.
+
+The observation defined in this way remains general. It is not tied to one fixed number of rays or to one experimental configuration. What matters is that each element has a direct relation to driving: it describes local geometry, orientation relative to the track, car motion, contact with the surface, height profile, or timing context of the decision.
+
+\section{Action Space}
+
+After processing the observation, the policy selects an action. In our case this is not a high-level command such as ``drive through the next corner'', but inputs similar to those sent by a player: throttle, brake, and steering.
+
+\textbf{Keyboard control} is naturally discrete. A key is either pressed or not pressed. For racing, this is enough for basic control, but it limits fine steering corrections. An \textbf{analog controller} enables smoother steering because the steering value does not have to be only ``left'', ``right'', or ``nothing''. At higher speed or when trying to hold a precise line, this fine control can be important.
+
+The choice between discrete and continuous control is a trade-off. Discrete actions reduce the search space because the policy chooses from a smaller set of possibilities. This can simplify training. At the same time, however, fine control becomes a problem: if the agent needs to steer only slightly, a discrete keyboard action allows it either to steer fully or not steer at all. In racing, this can remove precisely the small corrective behavior that decides whether the car stays on line.
+
+The second reason is related to policy representation. A neural network naturally returns real numbers. With a keyboard, these values would have to be thresholded into discrete key presses, which would introduce an artificial discontinuity into the decision: two similar network outputs could become different actions after thresholding. We therefore prefer continuous steering, which better preserves the information in the model output.
+
+We write the action as a simple vector
+\[
+    a_t = (g_t, b_t, u_t),
+\]
+where \(g_t\) denotes throttle, \(b_t\) brake, and \(u_t\) steering at time \(t\). Throttle and brake can be interpreted as separate inputs, while steering naturally has a continuous character.
+
+The actuator of the system is a virtual Xbox controller. We do not directly interfere with the game physics or with the internal car simulator; the policy output is translated only into throttle, brake, and analog stick steering. From the perspective of the game, the agent therefore behaves similarly to a human with a controller, and the continuous steering value does not have to be rounded to keyboard presses.
+
+This low-level action space places greater demands on the observation. The agent does not receive a ready-made route plan or a manually designed rule for a corner. It must select a concrete action at the current moment from the state-geometric description of the situation.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{solution_proposal/solution_keyboard_vs_controller.png}
+    \caption[Discrete and continuous control]{Comparison of discrete keyboard control and a continuous analog controller. The keyboard naturally represents direction as a pressed or unpressed key, while analog input allows a finer steering value.}
+    \label{fig:solution_keyboard_vs_controller}
+\end{figure}
+
+\section{Agent Decision Loop}
+
+The individual parts of the design connect into a closed loop. The game runs and the car has a current state. The game script sends the car data. The Python part combines them with the virtual map, computes geometric features, and creates an observation. The behavior policy computes an action from the observation, and this action is sent back into the game.
+
+Formally, observation construction can be written as
+\[
+    o_t = h(s_t^{TM}, \mathcal{G}),
+\]
+where \(s_t^{TM}\) denotes the available car and game state at time \(t\), \(\mathcal{G}\) is the geometric track representation, and \(h\) is the processing that creates the observation from them. The policy then selects an action
+\[
+    a_t = \pi(o_t).
+\]
+After applying the action, the game continues and a new state is produced:
+\[
+    s_{t+1}^{TM} = T(s_t^{TM}, a_t).
+\]
+We do not know \(T\) as a closed mathematical model. It represents the game dynamics, car physics, timing, and reaction to inputs.
+
+This formulation shows why the environment representation is the core of the chapter. We do not optimize the policy directly over pixels or over the complete internal game state. We optimize it over an observation that we design ourselves. If the observation is poor or misleading, the training algorithm will search for a solution in a badly described world. If the observation is sufficiently informative, the problem focuses on finding the policy parameters.
+
+\section{Summary of the Design}
+
+This chapter built the interface between the game and the agent. We have a way to obtain the car state from \Trackmania{}. We have reconstructed track geometry that gives this state map meaning. Over the geometry, we can compute virtual sensors and assemble an observation vector. We have an action space that can be translated into game inputs. And we have a closed loop in which the agent repeatedly observes, decides, and acts.
+
+This design does not yet say which policy will drive well. It does say, however, in what space the policy will act and what information it will receive. The hardest part is thus shifted from the question of how to provide the world to the agent to the question of how to find the parameters of a decision function that behaves reasonably in this world.

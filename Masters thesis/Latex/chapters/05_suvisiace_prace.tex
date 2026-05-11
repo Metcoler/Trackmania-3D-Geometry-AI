@@ -1,0 +1,183 @@
+\chapter{Related Work}
+
+This chapter follows the theoretical background by using the concepts already introduced there to read existing work. It is therefore not another explanation of agents, environments, or learning, but a comparison of approaches that address similar questions: how behavior is designed in games, how a driving agent perceives the world, how racing policies are trained, and what limitations these approaches bring to a real-time task such as \Trackmania{}.
+
+The goal of the chapter is not to compile the longest possible list of projects. What matters is to identify, for each direction, what it does well, where it is limited with respect to our task, and what motivation can be carried forward. We are especially interested in the tension between image input, manually designed representations, learning from demonstrations, reinforcement learning, and the practical need for fast and readable evaluation of agent behavior.
+
+\section{Artificial Intelligence in Games: From Rules to Learning}
+
+Games have long been a natural environment for both research and practical use of artificial intelligence. Yannakakis and Togelius point out that artificial intelligence in games does not have only one role: it can play the game, generate content, model the player, or create behavior that is interesting for humans \cite{yannakakis_togelius2018aigames}. For this thesis, the important distinction is between artificial intelligence as a scientific agent optimizing an objective and artificial intelligence as part of game design.
+
+In practical game development, rule-based systems, finite-state machines, pathfinding, and behavior trees have a strong position. Millington and Funge describe them as fundamental tools of game AI because they are readable, controllable, and allow the game author to determine relatively precisely how a character or vehicle should behave \cite{millington_funge2019ai_for_games}. This is an advantage for game design, but at the same time a limitation for our task: a manually designed driver can appear convincing, but by itself it does not search for a better behavior policy.
+
+\textbf{Behavior trees} are a good example of this compromise. The survey by Iovino et al. shows that they are used not only in games, but also in robotics and other areas where reactive behavior must be composed from smaller parts \cite{iovino2022behavior_trees}. Their strengths are modularity and interpretability. Their limitation for a racing agent is that the quality of behavior still depends on the human who designs the branches, orders them, and handles exceptions.
+
+For this thesis, the lesson is cautious. Traditional game AI offers a good way to keep behavior readable, but it does not answer the question of how an agent should improve its driving from data or from its own attempts. In the following related work, we therefore move toward input representation and methods in which behavior is not entirely written down as rules.
+
+\section{Representation of the Driver and the World in Racing Tasks}
+
+The choice of input strongly determines what the agent has to learn. \textbf{ALVINN} showed that a neural network can predict vehicle steering from available sensor inputs and thus learn driving from demonstrations \cite{pomerleau1989alvinn}. The contribution of this work is that it treats driving as a learnable mapping from input to action. For our task, however, it is also important that such a model depends on the quality of the input representation and on the data from which it learns.
+
+\textbf{PilotNet} by NVIDIA moves this idea toward image input: the model receives an image from the front camera and directly predicts steering \cite{bojarski2016endtoend}. The advantage is a reduced need for manually designed features. The limitation for this thesis is that image input combines perception and control into one high-dimensional problem. In a real-time racing task this increases the demands on processing frequency, resolution, model size, and hardware. In Trackmania, there is also a timing problem: a screen frame is tied to rendering and to the method of image capture, so it may not be as current as the available game state. If the agent makes a mistake, it becomes harder to separate whether the error arose in situation recognition, track representation, or the decision itself.
+
+Learning from demonstrations also brings the closed-loop behavior problem, already introduced in the theoretical chapter under imitation learning. \textbf{DAgger} by Ross, Gordon, and Bagnell is important precisely because it shows how error in sequential decision-making can accumulate when the agent reaches states different from the expert data \cite{ross2011dagger}. For a driving agent this means that good prediction on a stored dataset is not necessarily sufficient for stable driving along its own trajectory.
+
+We take two things from these works. A neural network is usable as a decision function for driving, but the choice of input is just as important as the choice of model. Image input is rich, but it can be computationally more demanding and less readable. A more compact input based on telemetry or geometry can separate part of the perception problem from learning the policy itself.
+
+\begin{figure}[htbp]
+    \centering
+    \setlength{\fboxsep}{6pt}
+    \begin{minipage}{0.31\textwidth}
+        \centering
+        \fbox{\begin{minipage}{0.88\textwidth}
+            \centering
+            \textbf{Image}\\[0.4em]
+            pixels, camera, CNN\\[0.4em]
+            rich but high-dimensional input
+        \end{minipage}}
+    \end{minipage}\hfill
+    \begin{minipage}{0.31\textwidth}
+        \centering
+        \fbox{\begin{minipage}{0.88\textwidth}
+            \centering
+            \textbf{Telemetry and sensors}\\[0.4em]
+            speed, angle, distances\\[0.4em]
+            compact but designed input
+        \end{minipage}}
+    \end{minipage}\hfill
+    \begin{minipage}{0.31\textwidth}
+        \centering
+        \fbox{\begin{minipage}{0.88\textwidth}
+            \centering
+            \textbf{Environment geometry}\\[0.4em]
+            track, centerline, local map\\[0.4em]
+            readable but dependent on available geometry
+        \end{minipage}}
+    \end{minipage}
+    \caption[Input types for a driving agent]{Simplified comparison of input types for a driving agent. Image input is used, for example, by end-to-end approaches such as \textbf{PilotNet} \cite{bojarski2016endtoend}; a sensor model is typical for \textbf{ALVINN} and for racing competitions in \textbf{TORCS}/\textbf{SCRC} \cite{pomerleau1989alvinn, loiacono2010scrc}; explicit track representation is common in practical game AI \cite{game_ai_pro_racetrack2013}.}
+    \label{fig:related_input_types}
+\end{figure}
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.18}
+    \caption[Timing context of image input]{Timing context of different input sources in real-time Trackmania. The table does not measure our system; it summarizes the practical difference between the rhythm of the game, the image-processing pipeline, and compact state-geometric input.}
+    \label{tab:related_input_frequency}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{0.24\textwidth}
+                    >{\raggedright\arraybackslash}p{0.34\textwidth}
+                    >{\raggedright\arraybackslash}p{0.34\textwidth}}
+        \toprule
+        Input source & Timing character & Consequence for our task \\
+        \midrule
+        Game state and game tick &
+        Community documentation of Trackmania relates racing-time precision to hundredths of a second and the game tickrate \cite{trackmania_wiki_units2026}. In practice this corresponds to a rhythm of about \(10\,\mathrm{ms}\), or roughly \(100\) steps per second. &
+        If we want to react to the current car state, it is advantageous to work with data that are as close as possible to this rhythm and not tied to a rendered screen frame. \\
+        Screen and screenshot &
+        Image frequency depends on FPS, hardware, resolution, and the method of frame capture. The Hall of Dreams project note states a target of \(1600\times900\) at \(30\) FPS and describes that obtaining and processing frames can consume a large part of the available decision time \cite{hallofdreams_trackmania_eyes2026}. &
+        Image input is rich, but it can introduce delay, lower practical decision frequency, or require specialized GPU processing. \\
+        Geometry and telemetry &
+        The input consists of a smaller number of state and geometric features: position, speed, orientation, distances, and local track description. Processing the whole screen frame is not required. &
+        Part of perception is moved into an explicit world representation, and the policy receives a smaller, more readable input suitable for fast repeated evaluation. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Autonomous Racing in Simulators}
+
+\textbf{TORCS} is one of the well-known open environments for research on racing agents \cite{wymann2000torcs}. Its importance for this thesis is not that it is identical to \Trackmania{}, but that it frames racing as a repeatable research task with a defined interface, sensors, and actions. Such an interface makes it possible to compare approaches without requiring every author to first solve all technical details of a commercial game.
+
+\textbf{The Simulated Car Racing Championship} built on TORCS and provided a competitive environment and comparable conditions for different driving algorithms \cite{loiacono2010scrc}. Its contribution lies in standardizing evaluation. Its limitation for our task is that a research simulator can provide the agent directly with sensors and state information that a commercial game may not provide in a usable form.
+
+\emph{Game AI Pro} brings a more practical game-development perspective. Its chapter on representing a racetrack for AI-controlled vehicles shows that the description of the track, centerline, target speed, and local vehicle decisions is an important part of the solution \cite{game_ai_pro_racetrack2013}. This source is interesting for us because it does not emphasize only the training algorithm. It reminds us that a good world representation can substantially simplify the driver's decision-making.
+
+\textbf{Offline Mania} shows more recent interest in racing games as a benchmark for reinforcement learning and offline data \cite{offline_mania2024}. Its contribution is that it treats racing not just as a game curiosity, but as a sequential decision-making task suitable for systematic comparison. For this thesis, however, the difference remains important between a benchmark or prepared simulator and the target environment of live Trackmania, where inputs, timing, and practical availability of data introduce their own constraints.
+
+\section[Gran Turismo Sophy]{Modern Successes: Gran Turismo Sophy and the Limits of Deep Reinforcement Learning}
+
+\textbf{Gran Turismo Sophy} is the most prominent modern example of a racing agent in a commercial game. Wurman et al. presented a system that could defeat top human players in Gran Turismo \cite{wurman2022gt_sophy}. Earlier work by Fuchs et al. also demonstrated superhuman performance in Gran Turismo Sport using deep reinforcement learning \cite{gt_sport_drl_fuchs2021}. For this thesis, the important point is that this is not a simple toy task, but a fast and dynamic racing environment.
+
+Sophy also shows that success in deep reinforcement learning is not based only on the choice of algorithm. It requires a suitable state representation, large amounts of training, carefully designed rewards, and infrastructure for repeated evaluation of behavior. It also solves topics outside the core of this thesis, such as interaction with opponents, overtaking, and fair-racing rules. Sophy is therefore a strong inspiration, but not a directly repeatable recipe for a smaller project with a different goal, data, and training infrastructure.
+
+\section{Trackmania and Existing AI Approaches}
+
+The closest practical related project is \textbf{TMRL}, or TrackMania Reinforcement Learning \cite{tmrl_github2024}. It is a software framework for training agents in real-time applications, and it also provides a processing pipeline for \Trackmania{}. Its contribution to this thesis is clear: it shows that the game can be connected to a training interface and used as an environment for reinforcement learning. At the same time, it should be cited as software and documentation, not as a peer-reviewed article with complete scientific evaluation.
+
+TMRL is also important as a contrast in the question of input. Practical Trackmania projects often work with images, screenshots, or simpler sensors derived from data available during the game runtime. This approach is natural because it uses data that can be obtained directly from the game. For our goal, however, the question remains whether part of the problem can be moved from image perception into a more explicit geometric representation.
+
+\textbf{OpenPlanet} is relevant in this chapter only as practical context. Its documentation shows scripting possibilities and access to data during the runtime of Trackmania \cite{openplanet_wiki2026}. This supports the claim that a tooling ecosystem exists around the game through which information about game state can be obtained. We do not describe our way of using it here, because that belongs to the proposed solution.
+
+Preprints and student projects on Trackmania should also be handled carefully. The works by Authier and Carcelen or by Neinders are useful as context showing interest in learning agents in Trackmania \cite{trackmania_drl_preprint2024, neinders_trackmania_sophy2023}. Their limitation is that they do not carry the same weight as peer-reviewed articles and often do not provide the methodological comparison needed for strong general claims.
+
+Historically, our own bachelor prototype is also important. It pointed toward a geometric track representation, but it did not yet provide sufficiently systematic evaluation of robustness, behavior scoring, and training decisions. In related work, we therefore do not treat it as proof of a finished solution, but as motivation to separate the question of world perception more precisely from the question of searching for the behavior policy.
+
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \renewcommand{\arraystretch}{1.18}
+    \caption[Overview of selected related work]{Overview of selected related work by input, method, contribution, and limitation with respect to our task. The table is not a quality ranking, but an orientation map of approaches.}
+    \label{tab:related_work_overview}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{0.15\textwidth}
+                    >{\raggedright\arraybackslash}p{0.19\textwidth}
+                    >{\raggedright\arraybackslash}p{0.18\textwidth}
+                    >{\raggedright\arraybackslash}p{0.22\textwidth}
+                    >{\raggedright\arraybackslash}p{0.19\textwidth}}
+        \toprule
+        Work/project & Input & Method & Contribution & Limitation for our task \\
+        \midrule
+        \textbf{ALVINN} \cite{pomerleau1989alvinn} &
+        camera image and laser rangefinder &
+        neural network trained from demonstrations &
+        shows that driving can be treated as a mapping from input to steering &
+        older road scenario; the result strongly depends on input and demonstrations \\
+        \textbf{PilotNet} \cite{bojarski2016endtoend} &
+        front-camera image &
+        convolutional network predicting steering directly from image &
+        reduces the need for manually designed features &
+        high-dimensional image combines perception and control into one problem \\
+        \textbf{SCRC/TORCS} \cite{loiacono2010scrc, wymann2000torcs} &
+        sensor model of track, opponents, and car state &
+        competitive driving algorithms in a simulator &
+        standardized interface and comparable evaluation &
+        the research simulator provides sensors directly; it is not real-time Trackmania \\
+        \emph{Game AI Pro} \cite{game_ai_pro_racetrack2013} &
+        explicit track representation and local driving goals &
+        practical game AI and vehicle control &
+        emphasizes that track description is an essential part of the problem &
+        behavior is mostly human-designed, not learned from own performance \\
+        \textbf{Gran Turismo Sophy} \cite{wurman2022gt_sophy} &
+        game state and racing context &
+        deep reinforcement learning &
+        shows the strength of RL in a dynamic commercial racing game &
+        requires large infrastructure and reward design, and also solves racing against opponents \\
+        \textbf{TMRL} \cite{tmrl_github2024} &
+        image, speed, and game inputs in Trackmania &
+        software framework for real-time deep reinforcement learning, e.g. SAC/REDQ &
+        shows practical connection of Trackmania to policy training &
+        software and documentation; not a peer-reviewed experimental comparison \\
+        \textbf{Offline Mania} \cite{offline_mania2024} &
+        pre-collected racing data &
+        benchmark for offline RL &
+        reduces the need for online interaction with the environment &
+        a benchmark is not the target game and does not directly solve live real-time connection \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section[Problems of Existing Approaches]{Problems of Existing Approaches Relevant to This Thesis}
+
+Several themes repeat in the comparison of related work. The first is image input. Works such as \textbf{PilotNet} show that driving from images is possible \cite{bojarski2016endtoend}. For a real-time racing game, however, it is questionable whether image should be the main input if part of the world information can be represented more compactly. Image input combines perception and control, increases model requirements, can reduce the practical evaluation frequency, and makes it harder to interpret a concrete decision.
+
+The second theme is dependence on human data. Demonstrations are useful for initial learning or for verifying that the input contains information needed for driving. At the same time, the agent imitates behavior it has seen and does not necessarily optimize the driving objective directly. DAgger shows that the problem is not only prediction accuracy, but also the states the agent reaches through its own actions \cite{ross2011dagger}.
+
+The third theme is the cost of pure reinforcement learning in a real-time environment. \textbf{Gran Turismo Sophy} shows that this direction can be extremely powerful with sufficient infrastructure \cite{wurman2022gt_sophy}. For a smaller project, however, the practical question remains how to obtain enough attempts, how to design feedback, and how to interpret large numbers of failed drives without turning training into opaque reward tuning.
+
+The fourth theme is manually designed behavior. Rules, automata, and behavior trees are readable and useful, but they can be brittle for continuous racing control. The more exceptions and special cases we add, the more the solution becomes a description of our expectations rather than a search for behavior according to a measurable objective.
+
+\section{Summary for Our Task}
+
+Related work shows that an autonomous racing agent can be studied from several directions. Traditional game AI offers readable decision structures, end-to-end approaches show the strength of neural networks in control, demonstration learning provides a natural starting point from human data, and deep reinforcement learning can achieve very strong results with large infrastructure. Trackmania projects also show that the game itself can be connected to a training system in practice.
+
+None of these directions alone removes the combination of limitations that matters most for this thesis: a real-time environment, the need for fast sensing, readable inputs, evaluation of the whole trajectory, and practically feasible repeated evaluation of policies. This is why it is meaningful to study a direction in which image is not the main input, behavior is evaluated by explicit metrics, and the decision policy is searched over a more compact world representation.

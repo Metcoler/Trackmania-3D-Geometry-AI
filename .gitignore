@@ -1,5 +1,9 @@
-﻿GameData/
+GameData/
 Mesh Extractor/blocksExport/
+.dotnet_home/
+.tmp/
+.tmp_page_review/
+tmp/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -26,14 +30,27 @@ Experiments/physics_research/gbx_probe_v2/obj/
 Experiments/physics_research/gbx_py_probe/.venv/
 Experiments/physics_research/gbx_py_probe/__pycache__/
 
-
 # Local-only folders
-
 
 # Thesis workspace: keep only curated thesis assets in git.
 
-
 # LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.toc
+*.synctex.gz
+*.run.xml
+*.bcf
+*.nav
+*.snm
+*.vrb
 
 # Local SAC model checkpoints
 logs/sb3_runs/**/*.zip
@@ -43,7 +60,6 @@ RL_test/logs/sb3_runs/**/*.zip
 Experiments/runs/
 Experiments/_discarded/
 Experiments/analysis/**/combined_individual_metrics.csv
-
 
 Maps/Meshes/material_0.png
 Bakalárska práca/Implementacia/agent_driver.mp4

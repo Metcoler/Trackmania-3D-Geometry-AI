@@ -1,123 +1,216 @@
-# Trackmania Autonomous Driving Agent
+# Trackmania 3D Geometry AI
 
-This repository contains the code, experiments, figures, and thesis materials for a diploma project about an autonomous driving agent for **Trackmania**.  
-Instead of treating the game only as a stream of pixels, the project reconstructs a geometric copy of the track and gives the agent compact observations derived from that geometry.  
-The final policy is a small neural network trained mainly through lexicographic neuroevolution, with supervised learning, imitation learning, reinforcement learning, and Pareto experiments used as supporting comparisons.
+Autonomous Trackmania driving agent built around a **geometry-first** idea: instead of learning directly from screen pixels, the project reconstructs the track as a 3D geometric world, projects the live car into that world, and trains a neural policy from compact observations.
 
-The full thesis methodology, citations, and detailed discussion are in `Diplomová práca/Latex/main.pdf`.
+The repository contains the Trackmania runtime, map/mesh tooling, supervised and imitation-learning experiments, neuroevolution training, evaluation scripts, videos, and the English thesis PDF:
+
+[**Trackmania-3D-Geometry-AI-Masters-Thesis.pdf**](Trackmania-3D-Geometry-AI-Masters-Thesis.pdf)
 
 ## Demo Videos
 
-Videos are intended to be attached as GitHub release assets. If a link opens the release page, choose the matching video file from the release assets.
-
-| Demo | Link | What it shows |
+| Demo | Video | What it shows |
 |---|---|---|
-| `single_surface_flat` | [release video](https://github.com/Metcoler/Trackmania-BC/releases) | Final agent on a flat single-surface map. |
-| `single_surface_height` | [release video](https://github.com/Metcoler/Trackmania-BC/releases) | Agent using height-aware observations. |
-| `multi_surface_flat` | [release video](https://github.com/Metcoler/Trackmania-BC/releases) | Agent driving on a map with multiple surface types. |
-| `small_map` transfer | [trajectory figure](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_small_map_trajectory.png) | Transfer evaluation on a map not used for training. |
+| Flat track | [single_surface_flat.mp4](Videos/single_surface_flat.mp4) | Final agent on a flat map with one road surface. |
+| Height-aware track | [single_surface_height.mp4](Videos/single_surface_height.mp4) | Agent using height-aware observations. |
+| Multi-surface track | [multi_surface_flat.mp4](Videos/multi_surface_flat.mp4) | Agent driving with different surface types. |
+| Bachelor baseline | [bachelor_thesis_version.mp4](Videos/bachelor_thesis_version.mp4) | Original bachelor-thesis version. |
+| Transfer map | [diploma_agent_small_map.mp4](Videos/diploma_agent_small_map.mp4) | Diploma agent transferred to a different map. |
 
-## How The System Works
+## Project In One Picture
 
-The agent runs in a closed loop. Trackmania provides the real-time environment, a game-side script streams car state, Python projects the state into a reconstructed virtual map, the observation encoder builds a compact input vector, a neural policy chooses an action, and the action is applied through a virtual gamepad.
-
-![Game-agent loop](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_game_agent_loop.png)
-
-In short:
-
-1. Trackmania is the real environment.
-2. Game telemetry gives car position, orientation, velocity, time, and state flags.
-3. Python keeps a geometric copy of the map.
-4. Raycasting and track-progress logic produce the observation.
-5. `NeuralPolicy.py` maps observation to gas, brake, and steering.
-6. `XboxController.py` applies the action as a virtual controller input.
-
-## Environment And Geometry
-
-Trackmania maps are built from blocks. The project exports block layouts and mesh data, then rebuilds the map as a geometric world in Python. This lets the agent reason about track shape, walls, surfaces, height changes, and progress without processing the full screen image.
+The agent is wrapped into the classic environment-agent loop, but the observation path is custom: game telemetry and exported geometry are combined inside Python before the neural policy chooses the next gamepad action.
 
 <p align="center">
-  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_blocks_editor_view.png" width="49%" alt="Trackmania blocks">
-  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_game_map_overview.png" width="49%" alt="Trackmania map">
+  <img src="docs/images/system_loop.png" width="88%" alt="Trackmania agent-environment loop">
 </p>
 
-Individual blocks are represented as triangle meshes. By placing the exported meshes according to the block layout, the runtime builds a virtual copy of the track.
+**Runtime loop:** Trackmania environment -> game script / telemetry -> Python runtime -> virtual geometry -> observation -> neural policy -> virtual gamepad action.
+
+## The Core Approach: Blocks -> Meshes -> Geometry -> Observation
+
+Trackmania maps are assembled from reusable blocks. The project uses that structure directly: if we can understand the placed blocks, we can rebuild the track outside the game.
 
 <p align="center">
-  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/mesh_straight.png" width="32%" alt="Straight mesh">
-  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/mesh_curve.png" width="32%" alt="Curve mesh">
-  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/map_mesh.png" width="32%" alt="Map mesh">
+  <img src="docs/images/trackmania_blocks.png" width="48%" alt="Separate Trackmania blocks">
+  <img src="docs/images/trackmania_map_overview.png" width="48%" alt="Composed Trackmania map">
 </p>
 
-## What The Agent Observes
+The same blocks are exported as 3D meshes. A map is then reconstructed by placing those meshes into a common coordinate system.
 
-The agent does not receive the whole map. It receives a compact vector of local and state-based measurements:
+<p align="center">
+  <img src="docs/images/mesh_straight.png" width="30%" alt="Straight block mesh">
+  <img src="docs/images/mesh_curve.png" width="30%" alt="Curve block mesh">
+  <img src="docs/images/map_mesh.png" width="30%" alt="Full reconstructed map mesh">
+</p>
 
-- progress along an approximated centerline,
-- distances to track edges from ray-like sensors,
+This gives us a geometric copy of the Trackmania world that can be queried by the agent.
+
+<p align="center">
+  <img src="docs/images/virtual_map_render.png" width="42%" alt="Virtual reconstructed map">
+  <img src="docs/images/game_vs_agent_view.png" width="52%" alt="Game view versus agent view">
+</p>
+
+## Driving Task And Map Variability
+
+The goal is still simple to state: drive from start to finish as fast as possible. The important part is that the track can change shape, surface, and height.
+
+<p align="center">
+  <img src="docs/images/track_drive_preview.png" width="72%" alt="Track traversal preview">
+</p>
+
+Different surfaces matter because they change traction. Height changes matter because a flat 2D ray is not enough when the road climbs or breaks over a crest.
+
+<p align="center">
+  <img src="docs/images/surface_blocks.png" width="45%" alt="Different Trackmania surfaces">
+  <img src="docs/images/height_blocks.png" width="45%" alt="Trackmania height blocks">
+</p>
+
+<p align="center">
+  <img src="docs/images/height_raycast_profile.png" width="70%" alt="Height-aware raycast profile">
+</p>
+
+## What The Agent Sees
+
+The policy does not receive the full map. It receives a compact observation vector derived from local geometry and car state:
+
+- progress along the track,
+- distance rays to the road boundaries,
 - forward and lateral velocity components,
 - heading relative to the track,
 - upcoming curve instructions,
-- optional surface and traction information,
-- optional height-profile signals.
+- optional surface/traction features,
+- optional height-profile features,
+- timing and previous-action features when useful.
 
-![Observation from geometry](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/solution_proposal/solution_observation_from_geometry.png)
+<p align="center">
+  <img src="docs/images/observation_from_geometry.png" width="90%" alt="Observation from virtual geometry">
+</p>
 
-This representation keeps the input small and interpretable. It also separates the perception problem from the policy-learning problem: the neural network learns how to drive from geometric measurements, not from raw pixels.
+Actions are applied through a virtual gamepad, so steering can be continuous rather than only keyboard-like left/right taps.
+
+<p align="center">
+  <img src="docs/images/keyboard_vs_controller.png" width="74%" alt="Keyboard versus controller action space">
+</p>
 
 ## Training Story
 
-The thesis follows a step-by-step experimental path:
+The thesis does not jump directly to one final algorithm. It builds the agent step by step.
 
-- **Supervised learning:** human driving data was used to check whether a small neural network can approximate the mapping from observation to action.
-- **Imitation learning:** mixed human-agent control was tested to collect recovery states that pure supervised learning misses.
-- **Lexicographic genetic algorithm:** the main training method evolved neural-network weights directly from driving outcomes using the tuple `(finished, progress, -time, -crashes)`.
-- **Activation and hyperparameter studies:** closed-loop experiments supported `ReLU,tanh` networks and a practical GA baseline.
-- **RL and Pareto branches:** PPO/SAC/TD3 and NSGA-II style experiments were tested as comparison paths, but the lexicographic GA remained the most practical direction in these experiments.
-- **Final training:** the selected setup was tested on flat, height-aware, and multi-surface maps.
+### 1. Supervised learning: can a small network imitate driving?
 
-![Final GA progress](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/training_policy/final_ga_training_progress.png)
+Human driving data is first used to test whether a small neural network can approximate:
 
-![Final GA trajectories](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/training_policy/final_ga_training_trajectories.png)
+```text
+observation -> action
+```
 
-## Results Snapshot
+<p align="center">
+  <img src="docs/images/supervised_architecture_training.png" width="84%" alt="Supervised architecture training curves">
+</p>
 
-These numbers summarize selected thesis experiments. They are practical experimental results from the tested runs, not a broad statistical benchmark across many independent seeds.
+This proves that the observation is usable, but not that the agent is robust. A small early deviation can put the policy into a state not covered by the human data.
 
-| Scenario | Best time | Finishers | Note |
-|---|---:|---:|---|
-| `single_surface_flat` | `25.92 s` | `654` | Flat map with one surface type. |
-| `single_surface_height` | `32.55 s` | `351` | Map with height changes and height-aware observation. |
-| `multi_surface_flat` | `35.10 s` | `125` | Flat map with multiple surface types. |
-| `small_map` transfer | `19.68 s` | - | Agent transferred from the flat-map generation. |
+<p align="center">
+  <img src="docs/images/supervised_teacher_agent_paths.png" width="48%" alt="Teacher and agent paths">
+  <img src="docs/images/butterfly_effect.png" width="48%" alt="Small action change causing a different trajectory">
+</p>
 
-On `small_map`, the transferred diploma agent improved over the original bachelor implementation:
+### 2. Lexicographic neuroevolution: optimize driving directly
 
-| Driver | Time |
+The main method evolves the neural-network weights. Instead of hiding the objective inside one weighted reward sum, individuals are ranked by interpretable priorities:
+
+```text
+(finished, progress, -time, -crashes)
+```
+
+Meaning: finish first, then get farther, then be faster, then avoid crashes.
+
+<p align="center">
+  <img src="docs/images/lexicographic_reward_progress.png" width="84%" alt="Lexicographic reward progress">
+</p>
+
+Closed-loop tests also supported the final activation choice: ReLU followed by tanh behaved better in the tested driving setting than ReLU/ReLU variants.
+
+<p align="center">
+  <img src="docs/images/activation_ablation.png" width="84%" alt="Closed-loop activation comparison">
+</p>
+
+### 3. Comparison branches: RL and Pareto search
+
+Reinforcement learning and Pareto/NSGA-II style multi-objective search were tested as comparison branches. They helped diagnose the problem, but the lexicographic genetic algorithm remained the clearest practical path in the thesis experiments.
+
+<p align="center">
+  <img src="docs/images/rl_comparison.png" width="48%" alt="Reinforcement learning comparison">
+  <img src="docs/images/pareto_comparison.png" width="48%" alt="Pareto comparison">
+</p>
+
+### 4. GA settings and training improvements
+
+Mutation strength, parent count, elite count, and training improvements were selected through practical sweeps. The goal was not to claim universal optimality, but to find a robust working configuration for this project.
+
+<p align="center">
+  <img src="docs/images/ga_mutation_grid.png" width="31%" alt="GA mutation grid">
+  <img src="docs/images/ga_selection_pressure.png" width="31%" alt="GA selection pressure">
+  <img src="docs/images/ga_training_improvements.png" width="31%" alt="GA training improvements">
+</p>
+
+## Final Training Runs
+
+The final setup was tested on three track variants.
+
+| Scenario | Best time in thesis run | What changes |
+|---|---:|---|
+| `single_surface_flat` | `25.92 s` | Flat map, one surface type. |
+| `single_surface_height` | `32.55 s` | Height-aware observation. |
+| `multi_surface_flat` | `35.10 s` | Different surface types and traction cues. |
+
+<p align="center">
+  <img src="docs/images/final_ga_training_progress.png" width="88%" alt="Final GA training progress">
+</p>
+
+<p align="center">
+  <img src="docs/images/trajectory_single_surface_flat.png" width="31%" alt="Final flat-track trajectory">
+  <img src="docs/images/trajectory_single_surface_height.png" width="31%" alt="Final height-track trajectory">
+  <img src="docs/images/trajectory_multi_surface_flat.png" width="31%" alt="Final multi-surface trajectory">
+</p>
+
+The final trained agents are also compared by ranked finishing times.
+
+<p align="center">
+  <img src="docs/images/final_training_ranked_times.png" width="78%" alt="Ranked final training times">
+</p>
+
+## Evaluation Snapshot
+
+The diploma agent was tested on `small_map`, a different map from the main training track. It improved over the bachelor-thesis version and moved closer to the human reference.
+
+| Driver | Time on `small_map` |
 |---|---:|
 | Human reference | `17.89 s` |
 | Diploma agent | `19.68 s` |
 | Bachelor agent | `23.064 s` |
 
 <p align="center">
-  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_small_map_comparison.png" width="45%" alt="Small map comparison">
-  <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_small_map_trajectory.png" width="45%" alt="Small map trajectory">
+  <img src="docs/images/small_map_comparison.png" width="42%" alt="Small map comparison">
+  <img src="docs/images/small_map_trajectory.png" width="50%" alt="Small map trajectory">
 </p>
 
-The final evaluation also compares the trained agent against a wider set of player times on the `single_surface_flat` map. In the tested run, the agent reached `25.92 s`, which is close to the average stored player time for that map.
+The thesis also places the flat-track agent into a wider distribution of stored player times.
 
-![Human vs agent times](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_human_vs_agent_single_surface_flat.png)
+<p align="center">
+  <img src="docs/images/human_vs_agent_times.png" width="74%" alt="Human versus agent finishing times">
+</p>
 
 ## Repository Guide
 
 ### Runtime and agent
 
 - `Driver.py` - replay and live driving entry point for a trained policy.
-- `Enviroment.py` - Trackmania environment wrapper used by the agent.
+- `Enviroment.py` - Trackmania environment wrapper.
 - `Car.py` - car state, movement, and runtime measurements.
-- `ObservationEncoder.py` - converts car state and geometry into the neural-network input vector.
-- `NeuralPolicy.py` - neural network policy used by supervised, imitation, and GA paths.
-- `XboxController.py` - virtual controller output used to apply actions in the game.
+- `ObservationEncoder.py` - converts car state and geometry into neural-network inputs.
+- `NeuralPolicy.py` - neural policy used by supervised, imitation, and GA training.
+- `XboxController.py` - virtual controller output.
 
 ### Training
 
@@ -129,25 +222,26 @@ The final evaluation also compares the trained agent against a wider set of play
 
 ### Maps and geometry
 
-- `Maps/` - game maps, exported block layouts, player times, and map meshes.
-- `Meshes/` - block-level mesh assets used for reconstruction.
+- `Maps/` - maps, exported layouts, player times, and map meshes.
+- `Meshes/` - block-level mesh assets.
 - `Map.py` - map loading, block graph logic, geometry, and progress handling.
-- `Map Extractor C#/` - extractor tooling used to obtain map/block data.
+- `Map Extractor C#/` - helper tooling used to obtain map/block data.
 
 ### Game integration
 
 - `Plugins/` - Trackmania/OpenPlanet-side scripts for game-state communication.
-- `ProjectPaths.py` - central path helpers used by the Python runtime.
+- `ProjectPaths.py` - path helpers used by the Python runtime.
 
-### Experiments and thesis assets
+### Thesis and documentation
 
-- `Experiments/` - raw and working experiment tools.
-- `Diplomová práca/Experiments/` - curated thesis experiment packages with reports and summaries.
-- `Diplomová práca/Latex/images/` - thesis-ready figures used in the PDF and this README.
-- `Diplomová práca/Latex/` - thesis source and final PDF build.
+- `Trackmania-3D-Geometry-AI-Masters-Thesis.pdf` - English thesis PDF in the repository root.
+- `Masters thesis/Latex/` - English LaTeX project.
+- `Diplomová práca/Latex/` - original Slovak LaTeX project.
+- `docs/images/` - README-friendly visual assets.
+- `Diplomová práca/Experiments/` - curated thesis experiment packages.
 
 ## Notes
 
 - This is research code developed for a diploma thesis, not a polished general-purpose Trackmania AI framework.
-- Some large logs, trained checkpoints, and videos may be distributed through GitHub releases or electronic appendix assets instead of being committed directly to the repository.
-- The full academic argument, citations, limitations, and detailed experiment interpretation are in the thesis PDF.
+- Some raw logs and checkpoints are large and may be omitted or distributed separately.
+- The thesis PDF contains the full methodology, citations, limitations, and detailed experiment interpretation.

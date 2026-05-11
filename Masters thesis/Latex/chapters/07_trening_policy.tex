@@ -1,0 +1,437 @@
+\chapter[Searching for the Behavior Policy]{Searching for the Behavior Policy and Training the Agent}
+
+\section{Problem: Searching for a Behavior Policy}
+
+The previous chapter defined the environment interface: the agent receives an observation computed from virtual geometry and applies actions through a virtual controller. What remains is the policy itself. We represent it as
+\[
+    \pi_\theta(o_t)=a_t,
+\]
+where \(o_t\) is the observation, \(a_t\) is the action, and \(\theta\) are the parameters of the neural network policy.
+
+Using a multilayer neural network is a natural choice because such networks are flexible function approximators \cite{goodfellow2016deep, cybenko1989approximation}. This does not solve the problem by itself. It only changes its form: instead of writing a hand-crafted rule, we must choose an architecture and find parameters that produce useful driving behavior.
+
+Unless stated otherwise, the experiments in this chapter are performed on the same training map, \texttt{AI Training \#5}. This keeps the results comparable while we investigate architecture, evaluation functions, genetic-algorithm settings, and training improvements.
+
+\section{Choosing the Neural-Network Architecture}
+
+The first question is how large the policy network should be. We used supervised learning on recorded human driving data as a capacity test. The goal was not to prove that the agent can drive autonomously, but to compare architectures under the same data, loss, and training budget.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Architecture comparison setup]{Supervised-learning setup used for the architecture comparison. The same data, loss, and training budget make it possible to compare networks by validation error and number of parameters.}
+    \label{tab:supervised_architecture_setup}
+    \begin{tabular}{ll}
+        \toprule
+        Item & Value \\
+        \midrule
+        Training samples & 43\,898 \\
+        Validation samples & 10\,858 \\
+        Observation dimension & 34 \\
+        Action dimension & 3 \\
+        Optimizer & Adam \\
+        Loss & SmoothL1Loss \\
+        Loss weights & \([1,1,3]\) \\
+        Epochs & 120 \\
+        Batch size & 4096 \\
+        Learning rate & 0.001 \\
+        Weight decay & \(10^{-5}\) \\
+        Mirroring & training split only \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/supervised_architecture_training_curves_all.pdf}
+    \caption[Learning curves of all architectures]{Validation loss during supervised learning for all compared architectures. The left panel shows the full training, and the right panel zooms in on the final epochs. The plot is used to assess learning stability, not autonomous driving quality.}
+    \label{fig:supervised_architecture_training_curves_all}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{training_policy/supervised_architecture_training_curves_practical.pdf}
+    \caption[Learning curves of practical candidates]{Detail of practical candidates after the initial loss drop. For smaller networks, ReLU,ReLU gives slightly lower validation loss than ReLU,\(\tanh\), but the \(128\times64\) capacity reference performs best with the ReLU,\(\tanh\) combination.}
+    \label{fig:supervised_architecture_training_curves_practical}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/supervised_architecture_val_loss_vs_params.pdf}
+    \caption[Supervised comparison of architectures]{Architectures compared by best validation loss and number of parameters. Lower loss means better prediction of human action on validation data, not better autonomous driving. The practical candidate networks \(32\times16\) and \(48\times24\) with ReLU,\(\tanh\) activations are highlighted; the larger \(128\times64\) network serves as a capacity reference.}
+    \label{fig:supervised_architecture_val_loss_vs_params}
+\end{figure}
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Selected architectures from the comparison]{Selected architectures from the supervised comparison. The table shows that a larger model reduces validation loss but also increases the parameter search space.}
+    \label{tab:supervised_architecture_candidates}
+    \begin{tabular}{lrrr}
+        \toprule
+        Architecture & Activations & Parameters & Role \\
+        \midrule
+        \(32\times16\) & ReLU,\(\tanh\) & small & experimental baseline \\
+        \(48\times24\) & ReLU,\(\tanh\) & medium & stronger candidate \\
+        \(128\times64\) & ReLU,\(\tanh\) & large & capacity reference \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The supervised results selected two practical candidates. The \(32\times16\) network is small enough for fast genetic experiments, while \(48\times24\) is a stronger model for longer training and richer observations. The choice of ReLU,\(\tanh\) remains cautious at this point: supervised loss alone does not prove closed-loop driving quality.
+
+\section{Behavior Cloning in a Closed Loop}
+
+The next step was to run a supervised policy directly in the environment. This test is important because validation loss measures prediction on saved data, while driving in the game creates new states through the agent's own actions.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/supervised_behavior_cloning_teacher_agent_paths.pdf}
+    \caption[Trajectory of a supervised agent compared with the teacher]{Comparison of recorded teacher drives and a deterministic run of a policy trained by behavior cloning. Trajectory color represents speed in \(\mathrm{km/h}\). The agent finishes the track, but its trajectory is less smooth, deviates from teacher runs, and contains more wall contacts.}
+    \label{fig:supervised_behavior_cloning_teacher_agent_paths}
+\end{figure}
+
+Figure~\ref{fig:supervised_behavior_cloning_teacher_agent_paths} shows the central limitation of behavior cloning. The policy can finish the track, so the observation and network are usable. At the same time, the driving is fragile: once the policy deviates from the data distribution, later decisions can become less reliable.
+
+To illustrate this sensitivity, we performed a diagnostic intervention in which a small action change was forced early in the run.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/supervised_behavior_cloning_butterfly_p04_left_120.pdf}
+    \caption[Diagnostic action change for a supervised policy]{Diagnostic action change for a policy trained by behavior cloning. The blue line shows the original run and the orange line the run after a short forced steering action to the left. The red segment marks the intervention and black points mark wall contacts. In this run the intervention did not lead to a worse time, but it changed the later trajectory, illustrating sensitivity to small past deviations.}
+    \label{fig:supervised_behavior_cloning_butterfly}
+\end{figure}
+
+The behavior resembles the well-known sensitivity of dynamical systems to initial conditions \cite{lorenz1963deterministic}. In our context the point is practical: a small earlier difference can place the agent into a state not sufficiently represented in supervised data.
+
+\section{Interactive Imitation Learning}
+
+Interactive imitation learning addresses this problem by collecting data while the agent already participates in control. Human control and agent control are mixed, and after each run the collected corrections extend the dataset. This is close in spirit to the motivation behind DAgger \cite{ross2011dagger}, although our implementation remains practical and tailored to this project.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/imitation_learning_final_agent_path.pdf}
+    \caption[Run after interactive imitation learning]{Run of the agent after interactive imitation learning. Gray traces belong to teacher runs, the colored trace shows the agent under full control, and the color denotes speed in \(\mathrm{km/h}\). Black points mark positions where the trajectory touched the track edge.}
+    \label{fig:imitation_learning_final_agent_path}
+\end{figure}
+
+The result is better than pure supervised cloning, but it remains imitation. The agent still depends on the teacher's quality and on the diversity of collected recovery states. This motivates a different question: can the policy be improved by evaluating complete autonomous drives directly?
+
+\section{From Imitation to Neuroevolution}
+
+Neuroevolution turns the neural-network parameters into a genome and evaluates individuals by driving in the environment \cite{goldberg1989ga, stanley2002neat, yao1999_evolving_ann}. We use the smaller \(32\times16\) ReLU,\(\tanh\) network for the main reward-function sweep because it keeps the search space manageable.
+
+\subsection{Behavior Metrics}
+
+We evaluate an individual using primitive driving metrics:
+\begin{itemize}
+    \item \texttt{finished}: whether the track was completed,
+    \item \texttt{progress}: how far the car got along the logical track,
+    \item \texttt{time}: time of the run,
+    \item \texttt{crashes}: number of contacts or crashes,
+    \item \texttt{timeout}: whether the run ended by reaching the time limit,
+    \item dense progress: a smoother version of progress along the track.
+\end{itemize}
+
+The important design choice is not only which metrics to measure, but how to compare them. A weighted sum would require constants whose meaning is hard to defend. We therefore test lexicographic ranking.
+
+\subsection{Composing a Lexicographic Evaluation Function}
+
+The tested ranking functions were:
+\begin{center}
+\small
+\begin{tabular}{l}
+\texttt{(finish, progress)} \\
+\texttt{(finish, progress, -time)} \\
+\texttt{(finish, progress, -time, -crashes)} \\
+\texttt{(finish, progress, -crashes, -time)}
+\end{tabular}
+\end{center}
+The order expresses priority. Finishing is more important than progress, progress more important than time, and so on. This makes the evaluation readable and avoids mixing all goals into one opaque scalar.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[GA lexicographic comparison setup]{Common setup of the lexicographic evaluation-function experiment. The experiment selects a behavior evaluation method; it is not the final evaluation of the agent.}
+    \label{tab:lex_reward_sweep_setup}
+    \begin{tabular}{ll}
+        \toprule
+        Item & Value \\
+        \midrule
+        Map & \texttt{AI Training \#5} \\
+        Network & \(32\times16\), ReLU,\(\tanh\) \\
+        Population & 48 \\
+        Elites & 4 \\
+        Parents & 16 \\
+        Generations & 300 \\
+        Maximum episode time & \(30\,\mathrm{s}\) \\
+        Mutation probability & 0.2 \\
+        Mutation sigma & 0.2 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Result of the Evaluation-Function Comparison}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/lex_reward_progress_best_mean.pdf}
+    \caption[Progress under lexicographic evaluation functions]{Population progress under four lexicographic evaluation functions. Solid lines mark the best progress in a generation, dashed lines the mean of the whole population.}
+    \label{fig:lex_reward_progress_best_mean}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=0.92\textwidth]{training_policy/lex_reward_finish_count.pdf}
+        \caption[Track completion under lexicographic rankings]{Number of finished runs per generation, smoothed by a moving average. Rankings with the crash metric began producing finished runs earlier and more often than simpler variants.}
+        \label{fig:lex_reward_finish_count}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=0.92\textwidth]{training_policy/lex_reward_best_time.pdf}
+        \caption[Best time under lexicographic rankings]{Best finished time found during training. The plot shows only generations after the first finish in the given variant.}
+        \label{fig:lex_reward_best_time}
+    \end{minipage}
+\end{figure}
+
+The most practical baseline was \texttt{(finish, progress, -time, -crashes)}. It found a best time of \(17.33\,\mathrm{s}\), produced the first finish around generation 137, and gave a good compromise between completing the track and improving time.
+
+\subsection{Detail of the Two Strongest Rankings}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/lex_reward_top1_progress_detail.pdf}
+    \caption[Progress detail for \texttt{(finish, progress, -time, -crashes)}]{Training detail for \texttt{(finish, progress, -time, -crashes)}. The gray dashed line is the whole-population mean, the teal line the parent mean, and the orange line the elite mean. Bands show within-generation population spread.}
+    \label{fig:lex_reward_top1_progress_detail}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/lex_reward_top1_time_detail.pdf}
+    \caption[Penalized time for \texttt{(finish, progress, -time, -crashes)}]{Population time for \texttt{(finish, progress, -time, -crashes)}. An unfinished run, crash, or timeout enters the penalized mean as the maximum episode time \(30\,\mathrm{s}\).}
+    \label{fig:lex_reward_top1_time_detail}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/lex_reward_top2_progress_detail.pdf}
+    \caption[Progress detail for \texttt{(finish, progress, -crashes, -time)}]{Training detail for \texttt{(finish, progress, -crashes, -time)}. This variant reaches a similar ability to finish the track, but optimizes time only after the number of crashes.}
+    \label{fig:lex_reward_top2_progress_detail}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/lex_reward_top2_time_detail.pdf}
+    \caption[Penalized time for \texttt{(finish, progress, -crashes, -time)}]{Population time for \texttt{(finish, progress, -crashes, -time)}. The penalized mean again counts an unsuccessful run as the maximum episode time.}
+    \label{fig:lex_reward_top2_time_detail}
+\end{figure}
+
+\subsection{Closed-Loop Check of Activation Functions}
+
+The supervised architecture sweep only measured prediction on data. Once we had a usable lexicographic ranking, we could test activations directly in the environment.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/architecture_closed_loop_activation_comparison.pdf}
+    \caption[Closed-loop activation comparison]{Comparison of activation combinations under the same lexicographic evaluation function \texttt{(finish, progress, -time, -crashes)}. The left panel shows the best-so-far progress, and the right panel compares the number of finishing individuals and the best finished time. The result is a single ablation run, so we read it as design evidence, not as a general statement about activation functions.}
+    \label{fig:architecture_closed_loop_activation_comparison}
+\end{figure}
+
+The closed-loop evidence supported ReLU,\(\tanh\), especially for the \(48\times24\) network. It produced the first finish earlier, found a better time, and produced more finishing individuals than the corresponding ReLU,ReLU variant.
+
+\section{Brief Comparison with Reinforcement Learning}
+
+As a side branch, we translated the same priority idea into a scalar reward and tested PPO, SAC, and TD3. The goal was not to deeply tune reinforcement learning, but to check whether the metrics carry a useful learning signal also outside the genetic algorithm. One episode in reinforcement learning is not directly equivalent to one GA generation or to one evaluated individual; the comparison is therefore only indicative.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[RL comparison setup]{Simplified setup of the reinforcement-learning comparison branch. The reward follows the same priorities as the lexicographic GA.}
+    \label{tab:rl_reward_equivalent_setup}
+    \begin{tabular}{ll}
+        \toprule
+        Item & Value \\
+        \midrule
+        Algorithms & PPO, SAC, TD3 \\
+        Episodes & 1000 \\
+        Action layout & throttle, brake, steering \\
+        Network & \(32\times16\), ReLU \\
+        Reward idea & progress, finish, time, crash penalty \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/rl_reward_progress_over_episodes.pdf}
+    \caption[Progress in the RL comparison]{Progress during the PPO, SAC, and TD3 comparison. The left panel shows the best achieved progress up to a given episode, and the right panel shows a moving average of progress.}
+    \label{fig:rl_reward_progress_over_episodes}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/rl_reward_results_summary.pdf}
+    \caption[Summary of the RL comparison]{Summary of the RL algorithm comparison. PPO finished the track \(76\) times in the available runs and the best time was \(25.04\,\mathrm{s}\). SAC and TD3 did not finish the track in this comparison.}
+    \label{fig:rl_reward_results_summary}
+\end{figure}
+
+The result shows that the reward signal is not meaningless: PPO was able to learn finishes. At the same time, the result also shows that a reasonable reward is not sufficient by itself. The algorithm, action dynamics, and training budget matter. For this thesis, reinforcement learning remains a comparison branch, while lexicographic neuroevolution stays the main practical path.
+
+\section{Conflict of Objectives and Pareto Comparison}
+
+Driving objectives conflict. A policy that prioritizes time can become risky, while a policy that prioritizes safety can become slow. Pareto comparison and NSGA-II are a principled response to such conflicts \cite{coello1999survey, deb2002nsga2}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/pareto_moo_progress_comparison.pdf}
+    \caption[Progress under Pareto comparison of objectives]{Comparison of the original Pareto variant with direct metrics and the modified variant in which speed, safety, and efficiency are tied to achieved progress. Direct metrics did not provide a sufficiently strong signal; the modified variant reached track completion. The transparent band in the lower panel shows the spread of individuals in the population between the 25th and 75th percentile, not variance across independent repetitions.}
+    \label{fig:pareto_moo_progress_comparison}
+\end{figure}
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Summary of the Pareto branch]{Summary of the Pareto branch compared with the lexicographic reference from the evaluation-function section.}
+    \label{tab:pareto_moo_summary}
+    \begin{tabular}{lccc}
+        \toprule
+        Variant & Max progress & Finishes & Best time \\
+        \midrule
+        Direct metrics & about \(20\%\) & 0 & -- \\
+        Progress-weighted metrics & \(100\%\) & yes & \(18.55\,\mathrm{s}\) \\
+        Lexicographic baseline & \(100\%\) & yes & \(17.33\,\mathrm{s}\) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The direct Pareto formulation failed because a fast crash could remain non-dominated. It had some progress and low time, even though it was not a useful drive. The modified metrics tied objectives to progress and therefore produced finishes, but at the cost of additional design transformations. For the rest of the thesis, lexicographic ranking remains simpler, more readable, and stronger in this experiment.
+
+\section{Choosing Genetic-Algorithm Hyperparameters}
+
+After selecting the ranking function and architecture, the genetic algorithm still needs practical settings: number of parents, number of elites, mutation probability, and mutation size. We treat the following results as a baseline selection, not as a statistical proof of optimality.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/ga_hyperparam_selection_pressure.pdf}
+    \caption[Selection pressure of the genetic algorithm]{Effect of the number of parents and elite individuals for population \(48\). The left panel shows the finish rate in the late generations, and the right panel the generation of the first finish. The solid frame marks the best refinement point with \(14\) parents and \(1\) elite; the dashed frame marks the practical baseline with two elites.}
+    \label{fig:ga_hyperparam_selection_pressure}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/ga_hyperparam_mutation_grid.pdf}
+    \caption[Mutation probability and mutation size]{Effect of mutation probability \(p\) and noise standard deviation \(\sigma\). The left panel shows late finish rate, and the right panel penalized mean time. The solid frame marks the safe interior point \(p=0.10\), \(\sigma=0.25\); the dashed frame marks a strong edge candidate \(p=0.05\), \(\sigma=0.325\).}
+    \label{fig:ga_hyperparam_mutation_grid}
+\end{figure}
+
+As a working baseline we use population \(48\), \(14\) parents, \(2\) elites, mutation probability \(0.10\), and mutation sigma \(0.25\). The two elites are a practical choice: while one elite looked slightly better in the refinement table, two elites provide additional protection for good policies in later experiments.
+
+\section{Training Improvements for the Genetic Algorithm}
+
+With a baseline configuration, we tested several small improvements. Each improvement was motivated by a concrete problem: how to move from exploration to fine-tuning, whether mirroring helps avoid one-sided behavior, and whether preserving elites is useful when evaluation timing varies.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/ga_training_improvements_summary.pdf}
+    \caption[Summary of GA training improvements]{Summary of tested training improvements. The plot compares best finished time, total number of finishing individuals, and late finish rate. We read the improvements as a comparison with one random setting, not as a definitive statistical optimum.}
+    \label{fig:ga_training_improvements_summary}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/ga_training_improvements_focus.pdf}
+    \caption[Detail of mutation decay and elite cache]{Detail of two important interventions. The left panel compares the baseline run with mutation decay after the first finish. The right panel shows that, under variable evaluation, elite memory substantially changes the ability of the population to find and keep finishing drives.}
+    \label{fig:ga_training_improvements_focus}
+\end{figure}
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Verdict of training improvements]{Short verdict of the tested training improvements.}
+    \label{tab:ga_training_improvements_verdict}
+    \begin{tabular}{lp{0.55\textwidth}}
+        \toprule
+        Improvement & Verdict \\
+        \midrule
+        Mutation decay from start & Can reduce exploration too early. \\
+        Mutation decay after first finish & Improved best time, but not stability. \\
+        Both mirror evaluations & No clear advantage in the tested run. \\
+        Mirror probability & Did not produce a useful finish in the tested run. \\
+        Elite memory & Strong positive effect under variable evaluation. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The strongest positive intervention was elite memory. In a stable deterministic evaluation it mainly saves time, but under variable timing it also protects a strong individual from being lost because of one unlucky repeated evaluation.
+
+\section{Final Training Runs}
+
+The previous experiments selected the main ingredients: lexicographic ranking, policy networks with ReLU and \(\tanh\), a practical GA setup, and selected training improvements. We then ran final training on three variants of the environment.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \caption[Final GA training runs]{Summary of the final GA training runs. All use a \(48\times24\) network with ReLU and \(\tanh\) activations, population \(48\), \(14\) parents, \(2\) elites, and the ranking \texttt{(finish, progress, -time, -crashes)}.}
+    \label{tab:final_ga_training_runs}
+    \begin{tabular}{lrrr}
+        \toprule
+        Track variant & Observation dim. & First finish & Best time \\
+        \midrule
+        \texttt{single\_surface\_flat} & 34 & generation 49 & \(25.92\,\mathrm{s}\) \\
+        \texttt{single\_surface\_height} & 48 & generation 48 & \(32.55\,\mathrm{s}\) \\
+        \texttt{multi\_surface\_flat} & 39 & generation 128 & \(35.10\,\mathrm{s}\) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{training_policy/final_ga_training_progress.pdf}
+    \caption[Progress of final training runs]{Progress of the final training runs. The \(x\)-axis is normalized separately for each run because the trainings do not have the same number of logged generations. The blue line shows the best progress in the generation, the gray dashed line the population mean, and the green area the finish rate.}
+    \label{fig:final_ga_training_progress}
+\end{figure}
+
+\subsection{Flat Track with One Surface}
+
+The flat single-surface variant is the base case. Its observation vector has \(34\) components and does not include height or surface extensions. Training found the first finish in generation \(49\), and the best individual improved to \(25.92\,\mathrm{s}\).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.88\textwidth]{training_policy/final_ga_training_trajectory_single_surface_flat.pdf}
+    \caption[Best trajectory on the flat track]{Best recorded trajectory of the final run on the flat track with one surface. Trajectory color shows speed in \(\mathrm{km/h}\); cold colors mean higher speed and warm colors lower speed.}
+    \label{fig:final_ga_training_trajectory_single_surface_flat}
+\end{figure}
+
+\subsection{Height Changes}
+
+The height-aware variant extends the observation with height-related signals, such as slope, vertical motion, and the height profile ahead of the car. The observation dimension increased to \(48\). Even so, training found the first finish in generation \(48\), approximately as early as in the flat case, and the best time was \(32.55\,\mathrm{s}\).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.88\textwidth]{training_policy/final_ga_training_trajectory_single_surface_height.pdf}
+    \caption[Best trajectory on the track with height changes]{Best recorded trajectory of the final run on the track with height changes. Trajectory color shows speed in \(\mathrm{km/h}\); cold colors mean higher speed and warm colors lower speed. The gray gradient on the map denotes relative track height in map units.}
+    \label{fig:final_ga_training_trajectory_single_surface_height}
+\end{figure}
+
+\subsection{Different Surfaces}
+
+The multi-surface variant increases the difficulty by changing surface information along the track. The observation vector has \(39\) components: the basic geometric and state measurements are extended by surface instructions. Training found the first finish later, in generation \(128\), and the best time was \(35.10\,\mathrm{s}\). The result still shows that surface information does not break the training logic.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.88\textwidth]{training_policy/final_ga_training_trajectory_multi_surface_flat.pdf}
+    \caption[Best trajectory on the multi-surface track]{Best recorded trajectory of the final run on the track with different surfaces. Trajectory color shows speed in \(\mathrm{km/h}\); the legend on the right explains the colors of track blocks.}
+    \label{fig:final_ga_training_trajectory_multi_surface_flat}
+\end{figure}
+
+The final runs close the training chapter. The agent can be trained not only on a simple flat map, but also on variants with height and surface information. The next chapter evaluates the final agent and compares it with the bachelor-thesis version and with human driving context.

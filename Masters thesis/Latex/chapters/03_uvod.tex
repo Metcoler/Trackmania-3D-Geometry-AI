@@ -1,0 +1,43 @@
+\chapter*{Introduction}
+\addcontentsline{toc}{chapter}{Introduction}
+\markboth{Introduction}{Introduction}
+
+At first sight, a racing game may look like a simple environment: a car stands at the start, a track lies ahead, and the goal is to reach the finish as quickly as possible. From the perspective of an autonomous agent, however, this is a real-time sequential decision-making problem. Every steering, braking, or acceleration action changes the future position of the car and the situation in which the agent will later have to decide. A small mistake therefore does not necessarily appear immediately, but it can influence the entire remaining trajectory.
+
+\Trackmania{} is a suitable environment for this thesis precisely because it has a clearly measurable objective, block-based tracks, and a strong emphasis on precise lap time. On short technical maps, even tenths of a second can matter. For an autonomous agent this creates three practical questions: how should it perceive the track, how should its behavior be evaluated, and how can we find a policy that drives both quickly and reliably?
+
+This master's thesis builds on the bachelor thesis \emph{Training an Autonomous Vehicle in the Game Trackmania Using Machine Learning} \cite{melkovic2024bachelor}. The bachelor prototype demonstrated an important idea: an agent does not have to perceive the game only through screen pixels. Since the track is a digital object, it can be exported, reconstructed as geometry, and used for computing virtual sensors. The prototype, however, did not yet contain a sufficiently systematic evaluation of behavior, precisely defined metrics, or a fully automated training process. This thesis therefore develops the original idea into a more complete system, from environment representation to empirical evaluation of the resulting agent.
+
+\section*{Goals of the Thesis}
+
+The main goal of the thesis is to design and implement an improved autonomous driving agent for \Trackmania{}. Improvement is understood on several levels: the agent should drive better than the original bachelor-thesis version, the training process should be automated, and the result should be evaluated using clear metrics and visualizations.
+
+The thesis focuses mainly on the following tasks:
+
+\begin{itemize}
+    \item create an environment representation without image input, based on the car state and reconstructed track geometry,
+    \item design an observation vector for flat tracks, height changes, and different surfaces,
+    \item represent the behavior policy by a neural network and find a suitable way to train it,
+    \item design a readable evaluation of driving behavior that takes track completion, progress, time, and crashes into account,
+    \item compare the resulting agent with the bachelor-thesis version and with an indicative human run.
+\end{itemize}
+
+The thesis does not aim to create a universal driver for arbitrary \Trackmania{} maps or to outperform the best human players. Its goal is narrower: to show that a geometric environment representation and automated policy training can produce an agent that improves substantially over the original prototype and can also handle extended environment modes.
+
+\section*{Approach}
+
+The proposed system combines three parts. The first is the running game, from which we obtain the car state and to which we return actions through a virtual controller. The second is a virtual world in which the track is reconstructed from blocks and their geometry. The third is a behavior policy represented by a neural network, which maps a compact observation to an action.
+
+The search for the policy is experimental. We first use human driving data to select a network architecture and to verify that the proposed observation carries information needed for control. We then show the limitations of pure imitation and choose neuroevolution as the main path. The network parameters form a genome, and the genetic algorithm selects policies according to their driving behavior in the environment. An important component is the lexicographic evaluation \texttt{(finish, progress, -time, -crashes)}, which names the driving priorities without an opaque weighted sum of constants.
+
+\section*{Thesis Structure}
+
+The first chapter introduces the theoretical concepts needed in the rest of the text: agent, environment, policy, evaluation, neural networks, learning methods, genetic algorithms, multi-objective optimization, and geometric virtual sensors.
+
+The second chapter compares related work and explains why a compact geometric input is interesting for this task instead of pure image-based perception.
+
+The third chapter describes the proposed solution: obtaining state from the game, reconstructing the virtual map, constructing the observation, defining the action space, and closing the agent decision loop.
+
+The fourth chapter forms the experimental core of the thesis. It gradually examines supervised learning, interactive imitation, neuroevolution, comparison branches based on reinforcement learning and Pareto optimization, hyperparameter selection, and final training runs.
+
+The fifth chapter evaluates the resulting agent and compares it with the bachelor-thesis version and with an indicative human run. The conclusion then summarizes the fulfillment of the goals, the main contributions, and the limitations of the thesis.

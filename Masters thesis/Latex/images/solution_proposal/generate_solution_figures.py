@@ -143,22 +143,6 @@ def draw_block_meshes() -> None:
     plt.close(fig)
 
 
-def draw_pallete2_virtual_map() -> None:
-    mesh = trimesh.load(ROOT / "Maps" / "Meshes" / "pallete2.obj", force="mesh")
-    mesh = mesh.copy()
-    mesh.apply_transform(
-        trimesh.transformations.rotation_matrix(np.deg2rad(34.0), [0, 1, 0], point=mesh.centroid)
-    )
-    fig = plt.figure(figsize=(4.8, 7.0), facecolor="white")
-    ax = fig.add_subplot(111, projection="3d")
-    add_mesh(ax, mesh, edge_lw=0.28, equal_axes=False)
-    ax.view_init(elev=50, azim=-52)
-    fig.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
-    fig.savefig(OUT_DIR / "solution_pallete2_virtual_map.pdf", bbox_inches="tight", pad_inches=0.02)
-    fig.savefig(OUT_DIR / "solution_pallete2_virtual_map.png", dpi=180, bbox_inches="tight", pad_inches=0.02)
-    plt.close(fig)
-
-
 def _surface_profile_points(mesh: trimesh.Trimesh, *, num_points: int = 9) -> np.ndarray:
     bounds = np.asarray(mesh.bounds, dtype=np.float64)
     span = bounds[1] - bounds[0]
@@ -739,7 +723,6 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stable_screenshot_assets()
     draw_block_meshes()
-    draw_pallete2_virtual_map()
     draw_height_raycast_profile()
     draw_track_drive_preview()
     draw_game_vs_agent_view()

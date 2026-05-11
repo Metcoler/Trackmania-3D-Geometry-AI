@@ -46,8 +46,7 @@ The same blocks are exported as 3D meshes. A map is then reconstructed by placin
 This gives us a geometric copy of the Trackmania world that can be queried by the agent.
 
 <p align="center">
-  <img src="docs/images/virtual_map_render.png" width="42%" alt="Virtual reconstructed map">
-  <img src="docs/images/game_vs_agent_view.png" width="52%" alt="Game view versus agent view">
+  <img src="docs/images/game_vs_agent_view.png" width="82%" alt="Game view versus agent view">
 </p>
 
 ## Driving Task And Map Variability

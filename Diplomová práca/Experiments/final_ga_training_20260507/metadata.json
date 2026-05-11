@@ -3,7 +3,7 @@
   "generated_by": "prepare_thesis_figures.py",
   "purpose": "Curated final GA training runs for thesis chapter 7.",
   "source_runs": [
-    "logs\\tm_finetune_runs\\20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model",
+    "logs\\tm_finetune_runs\\20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0170",
     "logs\\tm_finetune_runs\\20260506_160030_tm_seed_map_single_surface_height_v3d_asphalt_h48x24_p48_src_best_model",
     "logs\\tm_finetune_runs\\20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model"
   ],

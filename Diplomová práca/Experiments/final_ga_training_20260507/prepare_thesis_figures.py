@@ -35,8 +35,26 @@ RUNS = [
         "description": "Rovinná trať s jedným povrchom",
         "run_dir": Path(
             "logs/tm_finetune_runs/"
-            "20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model"
+            "20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0170"
         ),
+        "generation_run_dirs": [
+            Path(
+                "logs/tm_finetune_runs/"
+                "20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model"
+            ),
+            Path(
+                "logs/tm_finetune_runs/"
+                "20260509_144133_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0110"
+            ),
+            Path(
+                "logs/tm_finetune_runs/"
+                "20260510_024403_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0150"
+            ),
+            Path(
+                "logs/tm_finetune_runs/"
+                "20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0170"
+            ),
+        ],
     },
     {
         "key": "single_surface_height",
@@ -116,10 +134,38 @@ def _load_trajectory(run_dir: Path, row: dict[str, str]) -> dict[str, np.ndarray
     return {key: np.asarray(data[key]) for key in data.files}
 
 
+def _read_generation_history(spec: dict[str, Any]) -> pd.DataFrame:
+    run_dirs = spec.get("generation_run_dirs")
+    if not run_dirs:
+        return _read_csv((ROOT / spec["run_dir"]) / "generation_summary.csv")
+
+    frames: list[pd.DataFrame] = []
+    for order, relative in enumerate(run_dirs):
+        path = ROOT / relative / "generation_summary.csv"
+        if not path.exists():
+            raise FileNotFoundError(path)
+        frame = pd.read_csv(path)
+        if frame.empty:
+            continue
+        frame["_source_order"] = order
+        frames.append(frame)
+
+    if not frames:
+        return _read_csv((ROOT / spec["run_dir"]) / "generation_summary.csv")
+
+    merged = pd.concat(frames, ignore_index=True)
+    merged["generation"] = pd.to_numeric(merged["generation"], errors="coerce")
+    merged = merged.dropna(subset=["generation"])
+    merged = merged.sort_values(["generation", "_source_order"])
+    merged = merged.drop_duplicates(subset=["generation"], keep="last")
+    merged = merged.drop(columns=["_source_order"])
+    return merged.sort_values("generation").reset_index(drop=True)
+
+
 def _load_run(spec: dict[str, Any]) -> RunData:
     run_dir = ROOT / spec["run_dir"]
     config = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
-    generation = _read_csv(run_dir / "generation_summary.csv")
+    generation = _read_generation_history(spec)
     individual = _read_csv(run_dir / "individual_metrics.csv")
     manifest = _read_manifest(run_dir / "trajectories" / "trajectory_manifest.csv")
     best_row = _choose_best_trajectory(manifest)
@@ -129,8 +175,12 @@ def _load_run(spec: dict[str, Any]) -> RunData:
     finish_count_total = int(len(finishes))
     first_finish_generation = None
     best_time = None
+    generation_finish = pd.to_numeric(generation.get("finish_count"), errors="coerce").fillna(0)
+    if generation_finish.gt(0).any():
+        first_finish_generation = int(
+            pd.to_numeric(generation.loc[generation_finish.gt(0), "generation"], errors="coerce").min()
+        )
     if finish_count_total > 0:
-        first_finish_generation = int(pd.to_numeric(finishes["generation"], errors="coerce").min())
         best_time = float(pd.to_numeric(finishes["time"], errors="coerce").min())
 
     best_progress = float(pd.to_numeric(individual["progress"], errors="coerce").max())

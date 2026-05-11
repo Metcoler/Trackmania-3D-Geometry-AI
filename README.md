@@ -86,7 +86,7 @@ These numbers summarize selected thesis experiments. They are practical experime
 
 | Scenario | Best time | Finishers | Note |
 |---|---:|---:|---|
-| `single_surface_flat` | `27.96 s` | `82` | Flat map with one surface type. |
+| `single_surface_flat` | `25.92 s` | `654` | Flat map with one surface type. |
 | `single_surface_height` | `32.55 s` | `351` | Map with height changes and height-aware observation. |
 | `multi_surface_flat` | `35.10 s` | `125` | Flat map with multiple surface types. |
 | `small_map` transfer | `19.68 s` | - | Agent transferred from the flat-map generation. |
@@ -104,7 +104,7 @@ On `small_map`, the transferred diploma agent improved over the original bachelo
   <img src="Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_small_map_trajectory.png" width="45%" alt="Small map trajectory">
 </p>
 
-The final evaluation also compares the trained agent against a wider set of player times on the `single_surface_flat` map.
+The final evaluation also compares the trained agent against a wider set of player times on the `single_surface_flat` map. In the tested run, the agent reached `25.92 s`, which is close to the average stored player time for that map.
 
 ![Human vs agent times](Diplomov%C3%A1%20pr%C3%A1ca/Latex/images/evaluation/evaluation_human_vs_agent_single_surface_flat.png)
 

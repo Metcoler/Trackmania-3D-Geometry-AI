@@ -9,19 +9,19 @@ The runs demonstrate the same lexicographic neuroevolution pipeline on a flat tr
 
 ### Rovinná trať s jedným povrchom
 
-- Source: `logs\tm_finetune_runs\20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model`
+- Source: `logs\tm_finetune_runs\20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0170`
 - Map: `single_surface_flat`
 - Observation dimension: `34`
 - Network: `48x24 relu,tanh`
 - Ranking: `(finished, progress, -time, -crashes)`
 - Population/parents/elites: `48/14/2`
 - Mutation: `p=0.15`, `sigma=0.3`
-- Logged generations: `82`
+- Logged generations: `202`
 - First finish generation: `49`
-- Total finishing individuals: `82`
-- Best finish time: `27,96 s`
+- Total finishing individuals: `654`
+- Best finish time: `25,92 s`
 - Best progress: `100,00 %`
-- Best trajectory: `trajectories/gen_0051_rank_001_idx_004_finish_1.npz`
+- Best trajectory: `trajectories/gen_0202_rank_001_idx_028_finish_1.npz`
 
 ### Trať s výškovými rozdielmi
 

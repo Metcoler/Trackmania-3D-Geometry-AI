@@ -27,7 +27,7 @@ FINAL_RUNS = [
         "run_dir": ROOT
         / "logs"
         / "tm_finetune_runs"
-        / "20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model",
+        / "20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0170",
     },
     {
         "key": "single_surface_height",

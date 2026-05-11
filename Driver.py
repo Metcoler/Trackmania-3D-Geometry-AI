@@ -19,6 +19,25 @@ MAP_SPECIALIST_NAMES = (
     "multi_surface_flat",
     "single_surface_height",
 )
+BEST_SINGLE_SURFACE_FLAT_MODEL = Path(
+    "logs/tm_finetune_runs/"
+    "20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_"
+    "src_resume_population_gen_0170/best_individual.pt"
+)
+BEST_SINGLE_SURFACE_FLAT_MAP = "single_surface_flat"
+BEST_SINGLE_SURFACE_HEIGHT_MODEL = Path(
+    "logs/tm_finetune_runs/"
+    "20260506_160030_tm_seed_map_single_surface_height_v3d_asphalt_h48x24_p48_"
+    "src_best_model/best_individual.pt"
+)
+BEST_SINGLE_SURFACE_HEIGHT_MAP = "single_surface_height"
+BEST_MULTI_SURFACE_FLAT_MODEL = Path(
+    "logs/tm_finetune_runs/"
+    "20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_"
+    "src_best_model/best_individual.pt"
+)
+BEST_MULTI_SURFACE_FLAT_MAP = "multi_surface_flat"
+SMALL_MAP_TRANSFER_MAP = "small_map"
 PRACTICAL_INFINITY_TOUCHES = 1_000_000
 TM_REAL_POPULATION_PATTERNS = [
     "logs/tm_finetune_runs/**/checkpoints/population_gen_*.npz",
@@ -69,6 +88,44 @@ def load_population_run_config(filename: str) -> Dict[str, Any]:
     with open(config_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data if isinstance(data, dict) else {}
+
+
+def load_model_run_config(filename: str) -> Dict[str, Any]:
+    """Load run config stored next to deployable .pt models when available."""
+    config_path = Path(filename).parent / "config.json"
+    if not config_path.exists():
+        return {}
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, dict) else {}
+
+
+def resolve_model_file_arg(model_file: Optional[str]) -> Optional[str]:
+    if model_file is None:
+        return None
+    text = str(model_file).strip()
+    normalized = text.lower()
+    if normalized in {"auto", "latest", "latest-map-specialist"}:
+        return None
+    if normalized in {"best-single-surface-flat", "single_surface_flat_best", "best-flat"}:
+        if not BEST_SINGLE_SURFACE_FLAT_MODEL.exists():
+            raise FileNotFoundError(
+                f"Best single_surface_flat model not found: {BEST_SINGLE_SURFACE_FLAT_MODEL}"
+            )
+        return str(BEST_SINGLE_SURFACE_FLAT_MODEL)
+    if normalized in {"best-single-surface-height", "single_surface_height_best", "best-height"}:
+        if not BEST_SINGLE_SURFACE_HEIGHT_MODEL.exists():
+            raise FileNotFoundError(
+                f"Best single_surface_height model not found: {BEST_SINGLE_SURFACE_HEIGHT_MODEL}"
+            )
+        return str(BEST_SINGLE_SURFACE_HEIGHT_MODEL)
+    if normalized in {"best-multi-surface-flat", "multi_surface_flat_best", "best-surface"}:
+        if not BEST_MULTI_SURFACE_FLAT_MODEL.exists():
+            raise FileNotFoundError(
+                f"Best multi_surface_flat model not found: {BEST_MULTI_SURFACE_FLAT_MODEL}"
+            )
+        return str(BEST_MULTI_SURFACE_FLAT_MODEL)
+    return text
 
 
 def find_latest_population(patterns: Optional[List[str]] = None) -> str:
@@ -662,32 +719,50 @@ def drive_model(
     debug_actions: int = 0,
 ) -> None:
     policy, extra = NeuralPolicy.load(model_file, map_location="cpu")
+    run_config = load_model_run_config(model_file)
     map_name = normalize_map_name_arg(map_name)
     if map_name is None or str(map_name).strip().lower() == "auto":
-        map_name = infer_map_name_from_model(model_file, extra)
+        map_name = normalize_map_name_arg(run_config.get("map_name")) or infer_map_name_from_model(model_file, extra)
     if not map_name:
         raise ValueError("Map name could not be inferred. Pass --map-name explicitly.")
     if action_mode is None:
-        action_mode = str(getattr(policy, "action_mode", "target"))
+        action_mode = str(
+            getattr(policy, "action_mode", None)
+            or run_config.get("policy_action_mode")
+            or run_config.get("action_mode")
+            or "target"
+        )
     if vertical_mode is None:
         if extra and "vertical_mode" in extra:
             vertical_mode = bool(extra["vertical_mode"])
+        elif "vertical_mode" in run_config:
+            vertical_mode = bool(run_config["vertical_mode"])
         else:
             vertical_mode = int(policy.obs_dim) >= 44
     if multi_surface_mode is None:
         if extra and "multi_surface_mode" in extra:
             multi_surface_mode = bool(extra["multi_surface_mode"])
+        elif "multi_surface_mode" in run_config:
+            multi_surface_mode = bool(run_config["multi_surface_mode"])
         else:
             multi_surface_mode = int(policy.obs_dim) >= 39
     if invert_steer is None:
         invert_steer = False
-    resolved_env_max_time = 60.0 if env_max_time is None else float(env_max_time)
-    resolved_max_touches = 1 if max_touches is None else int(max_touches)
+    resolved_env_max_time = float(
+        env_max_time if env_max_time is not None else run_config.get("env_max_time", 60.0)
+    )
+    resolved_max_touches = int(
+        max_touches if max_touches is not None else run_config.get("max_touches", 1)
+    )
     resolved_target_steer_deadzone = (
-        0.05 if target_steer_deadzone is None else float(target_steer_deadzone)
+        float(target_steer_deadzone)
+        if target_steer_deadzone is not None
+        else float(run_config.get("target_steer_deadzone", 0.05))
     )
 
     print(f"Loaded model from: {model_file}")
+    if run_config:
+        print(f"Loaded run config from: {Path(model_file).parent / 'config.json'}")
     print(f"Replay map: {map_name}")
     print(
         f"Replay config: action_mode={action_mode}, vertical_mode={vertical_mode}, "
@@ -778,8 +853,20 @@ def parse_auto_bool_arg(value: str) -> Optional[bool]:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Drive a trained NeuralPolicy in live Trackmania.")
-    parser.add_argument("--map-name", default="auto", help="Map to replay. Use 'all' for all map specialists.")
-    parser.add_argument("--model-file", default=None, help="Exact .pt model path. If omitted, latest map specialist is used.")
+    parser.add_argument(
+        "--map-name",
+        default=SMALL_MAP_TRANSFER_MAP,
+        help="Map to replay. Use 'all' for all map specialists.",
+    )
+    parser.add_argument(
+        "--model-file",
+        default="best-single-surface-flat",
+        help=(
+            "Exact .pt model path, 'best-single-surface-flat', 'best-single-surface-height', "
+            "'best-multi-surface-flat', or 'latest-map-specialist'. Default replays the best "
+            "single_surface_flat GA model on small_map."
+        ),
+    )
     parser.add_argument(
         "--specialist-root",
         default="logs/supervised_runs_map_specialists_20260505",
@@ -861,6 +948,7 @@ def main() -> None:
     invert_steer = parse_auto_bool_arg(args.invert_steer)
     action_mode = None if args.action_mode == "auto" else args.action_mode
     map_arg = normalize_map_name_arg(args.map_name)
+    resolved_model_file_arg = resolve_model_file_arg(args.model_file)
 
     if args.population_file:
         population_file = args.population_file
@@ -900,7 +988,7 @@ def main() -> None:
         map_names = [None if str(map_arg).strip().lower() == "auto" else str(map_arg)]
 
     for index, map_name in enumerate(map_names):
-        model_file = args.model_file
+        model_file = resolved_model_file_arg
         if model_file is None:
             model_file = find_latest_map_specialist_model(
                 specialist_root=args.specialist_root,

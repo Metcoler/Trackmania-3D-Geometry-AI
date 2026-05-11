@@ -3,6 +3,7 @@ import numpy as np
 import socket
 import vgamepad
 import time
+import shutil
 
 from Car import Car
 from Map import Map
@@ -223,7 +224,14 @@ class RacingGameEnviroment(gym.Env):
         ]
 
         line = " | ".join(parts)
-        print(line.ljust(self._live_status_width), end="\r", flush=True)
+        terminal_width = shutil.get_terminal_size(fallback=(self._live_status_width, 20)).columns
+        status_width = max(40, min(self._live_status_width, max(1, terminal_width - 1)))
+        if len(line) > status_width:
+            line = line[: max(0, status_width - 3)] + "..."
+        # Keep the status line shorter than the terminal width. Windows
+        # PowerShell otherwise wraps long lines, and '\r' can no longer return
+        # to the visual beginning of the original line.
+        print("\r\033[2K" + line.ljust(status_width), end="\r", flush=True)
 
     def _neutralize_controller(self) -> None:
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)

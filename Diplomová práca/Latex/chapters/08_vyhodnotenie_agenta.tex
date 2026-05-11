@@ -5,9 +5,9 @@ Predchádzajúca kapitola ukázala, ako sme politiku správania postupne hľadal
 
 \section{Porovnanie na novej mape}
 
-Najdôležitejší test mimo tréningovej trate sme spravili na mape \texttt{small\_map}. Agent použitý v tomto teste bol najlepší jedinec z tréningu na mape \texttt{single\_surface\_flat}. Bez ďalšieho dotrénovania sme ho spustili na novej mape a zaznamenali jeho prejazd. Ide teda o hodnotenie prenosu konkrétnej najlepšej politiky na inú trať, nie o nový výber alebo dodatočné ladenie na mape \texttt{small\_map}. Test napriek tomu neoveruje iba zapamätanie jednej konkrétnej trasy, ale aj to, či naučená politika dokáže reagovať na iné rozloženie trate.
+Najdôležitejší test mimo tréningovej trate sme spravili na mape \texttt{small\_map}. Agent použitý v tomto teste bol vybraný dokončujúci jedinec z tréningu na rovinnej mape s jedným povrchom. Bez ďalšieho dotrénovania sme ho spustili na novej mape a zaznamenali jeho prejazd. Ide teda o hodnotenie prenosu konkrétnej politiky na inú trať, nie o nový výber alebo dodatočné ladenie na mape \texttt{small\_map}. Test napriek tomu neoveruje iba zapamätanie jednej konkrétnej trasy, ale aj to, či naučená politika dokáže reagovať na iné rozloženie trate.
 
-Najlepší jedinec dokončil mapu \texttt{small\_map} bez nárazu za \(19{,}68\,\mathrm{s}\). Pre porovnanie, agent z bakalárskej verzie dosiahol na tej istej mape čas \(23{,}064\,\mathrm{s}\) \cite{melkovic2024bachelor}. Rozdiel \(3{,}38\,\mathrm{s}\) je na krátkej trati výrazný. Zároveň však treba držať mieru interpretácie: ľudský prejazd na tejto mape mal čas \(17{,}89\,\mathrm{s}\), takže nový agent sa k ľudskému výkonu priblížil, ale ešte ho neprekonal.
+Vybraný jedinec dokončil mapu \texttt{small\_map} bez nárazu za \(19{,}68\,\mathrm{s}\). Pre porovnanie, agent z bakalárskej verzie dosiahol na tej istej mape čas \(23{,}064\,\mathrm{s}\) \cite{melkovic2024bachelor}. Rozdiel \(3{,}38\,\mathrm{s}\) je na krátkej trati výrazný. Zároveň však treba držať mieru interpretácie: ľudský prejazd na tejto mape mal čas \(17{,}89\,\mathrm{s}\), takže nový agent sa k ľudskému výkonu priblížil, ale ešte ho neprekonal.
 
 \begin{table}[htbp]
     \centering
@@ -32,11 +32,11 @@ Najlepší jedinec dokončil mapu \texttt{small\_map} bez nárazu za \(19{,}68\,
     \label{fig:evaluation_small_map_trajectory}
 \end{figure}
 
-Tabuľka~\ref{tab:evaluation_small_map_times} a obrázok~\ref{fig:evaluation_small_map_trajectory} sú pre prácu dôležité najmä preto, že porovnávajú agenta na mape, na ktorej neprebiehal jeho tréning. Nejde ešte o dôkaz všeobecnej schopnosti jazdiť ľubovoľnú mapu v \Trackmania{}. Ukazuje však, že najlepšia politika z tréningovej trate nebola viazaná iba na jednu konkrétnu stopu. V porovnaní s bakalárskou verziou sa zlepšil nielen čas, ale aj spôsob práce s traťou: jazda je plynulejšia, využíva spojité ovládanie a vychádza z geometrických meraní namiesto slabšieho pôvodného prototypu.
+Tabuľka~\ref{tab:evaluation_small_map_times} a obrázok~\ref{fig:evaluation_small_map_trajectory} sú pre prácu dôležité najmä preto, že porovnávajú agenta na mape, na ktorej neprebiehal jeho tréning. Nejde ešte o dôkaz všeobecnej schopnosti jazdiť ľubovoľnú mapu v \Trackmania{}. Ukazuje však, že najlepšia politika z tréningovej trate nebola viazaná iba na jednu konkrétnu stopu. V porovnaní s bakalárskou verziou sa zlepšil nielen čas, ale aj spôsob práce s traťou: jazda je plynulejšia, využíva spojité ovládanie a opiera sa o presnejšie geometrické merania.
 
 \section{Porovnanie s ľudskými prejazdmi}
 
-Okrem porovnania s bakalárskym agentom je dôležité ukázať aj širší ľudský kontext. Pre mapu \texttt{single\_surface\_flat} máme z hry k dispozícii \(100\) uložených hráčskych časov. Nejde o štatisticky reprezentatívnu vzorku všetkých hráčov, ale je to vhodnejšia referencia než porovnanie iba s najlepšími prejazdmi. Namiesto otázky, či agent porazil najlepšieho človeka, sa preto pýtame skromnejšie: kde približne leží jeho čas v rozdelení hráčskych časov na tej istej trati.
+Okrem porovnania s bakalárskym agentom je dôležité ukázať aj širší ľudský kontext. Pre mapu \texttt{single\_surface\_flat} máme z hry k dispozícii \(113\) uložených hráčskych časov. Nejde o štatisticky reprezentatívnu vzorku všetkých hráčov, ale je to vhodnejšia referencia než porovnanie iba s najlepšími prejazdmi. Namiesto otázky, či agent porazil najlepšieho človeka, sa preto pýtame skromnejšie: kde približne leží jeho čas v rozdelení hráčskych časov na tej istej trati.
 
 \begin{figure}[htbp]
     \centering
@@ -45,13 +45,15 @@ Okrem porovnania s bakalárskym agentom je dôležité ukázať aj širší ľud
     \label{fig:evaluation_human_vs_agent_single_surface_flat}
 \end{figure}
 
-Obrázok~\ref{fig:evaluation_human_vs_agent_single_surface_flat} ukazuje, že najlepší hráčsky čas vo vzorke bol \(23{,}05\,\mathrm{s}\), medián \(25{,}12\,\mathrm{s}\) a najpomalší uložený čas \(29{,}68\,\mathrm{s}\). Agent dokončil trať za \(27{,}96\,\mathrm{s}\). To znamená, že je stále pomalší než väčšina hráčskych časov vo vzorke: \(96\) z \(100\) časov je kratších. Zároveň však neleží mimo ľudského rozsahu tejto trate, preto výsledok čítame opatrne: agent človeka neprekonáva, ale po autonómnom tréningu dosahuje dokončujúcu jazdu, ktorá sa už dá porovnávať s pomalšou časťou hráčskych prejazdov.
+Obrázok~\ref{fig:evaluation_human_vs_agent_single_surface_flat} ukazuje, že najlepší hráčsky čas vo vzorke bol \(23{,}05\,\mathrm{s}\), medián \(25{,}12\,\mathrm{s}\), priemer \(25{,}30\,\mathrm{s}\) a najpomalší uložený čas \(31{,}10\,\mathrm{s}\). Agent dokončil trať za \(25{,}92\,\mathrm{s}\). Je teda stále pomalší než najlepšia časť hráčov, ale už leží blízko stredu uloženej vzorky: od mediánu ho delí približne \(0{,}81\,\mathrm{s}\) a od priemeru približne \(0{,}62\,\mathrm{s}\). Výsledok preto čítame pozitívnejšie než pri skoršom behu, ale stále opatrne. Agent neprekonáva najlepších hráčov, no po autonómnom tréningu sa úspešne priblížil k bežnému hráčskemu výkonu na tejto trati.
 
 \section{Zhodnotenie cieľov}
 
 Z pohľadu cieľov práce považujeme za najdôležitejšie tri výsledky. Prvým je zlepšenie oproti bakalárskej verzii. Na porovnávacej mape \texttt{small\_map} nový agent zlepšil čas z \(23{,}064\,\mathrm{s}\) na \(19{,}68\,\mathrm{s}\). Takéto zlepšenie je na krátkej trati veľké, najmä keď ľudský referenčný čas bol \(17{,}89\,\mathrm{s}\).
 
-Druhým výsledkom je samostatnosť tréningu. To neznamená, že práca nepoužíva ľudské dáta: tie slúžili najmä na počiatočné učenie a porovnávací kontext. Podstatné je, že následná optimalizácia politiky prebieha v uzavretom tréningovom cykle. Agent sa vyhodnocuje priamo jazdou, genetický algoritmus pracuje s celou populáciou, priebežne sa ukladajú metriky, checkpointy aj trajektórie a výsledky možno spätne analyzovať. Experimenty teda nie sú iba jednorazové ukážky, ale merateľné behy s reprodukovateľnými výstupmi.
+Rovnako dôležité je, že na tréningovej mape \texttt{single\_surface\_flat} sa agent po dlhšom autonómnom tréningu dostal do blízkosti priemerného hráčskeho výkonu v našej vzorke. Tento výsledok neznamená, že agent dosiahol úroveň najlepších hráčov, ale ukazuje, že nejde iba o technicky dokončenú jazdu. Politika už dokáže prejsť trať časom, ktorý je porovnateľný s bežnými uloženými ľudskými prejazdmi.
+
+Druhým výsledkom je samostatnosť tréningu. To neznamená, že práca nepoužíva ľudské dáta: tie slúžili najmä na počiatočné učenie a porovnávací kontext. Podstatné je, že následná optimalizácia politiky prebieha v uzavretom tréningovom cykle. Agent sa vyhodnocuje priamo jazdou, genetický algoritmus pracuje s celou populáciou, priebežne sa ukladajú metriky, kontrolné body modelu aj trajektórie a výsledky možno spätne analyzovať. Experimenty teda nie sú iba jednorazové ukážky, ale merateľné behy s reprodukovateľnými výstupmi.
 
 Tretím výsledkom je rozšírenie prostredia. Agent sa nenaučil jazdiť iba po jednoduchej rovinnej trati. Rovnaký prístup sme použili aj pri trati s výškovými zmenami a pri trati s rôznymi povrchmi. Tieto režimy zväčšujú vektor pozorovania a zvyšujú náročnosť úlohy, no tréning aj v nich našiel dokončujúce politiky. To neznamená, že agent je hotový univerzálny vodič pre každú mapu v \Trackmania{}. Znamená to však, že navrhnutý spôsob reprezentácie a tréningu sa dá rozširovať bez toho, aby bolo potrebné celý systém navrhnúť od začiatku.
 

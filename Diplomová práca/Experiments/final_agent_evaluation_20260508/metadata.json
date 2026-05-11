@@ -10,11 +10,11 @@
   "ranked_final_training_times": [
     {
       "key": "single_surface_flat",
-      "run_dir": "logs\\tm_finetune_runs\\20260506_004011_tm_seed_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_best_model",
-      "finishers": 82,
-      "best_time_s": 27.959999084472656,
-      "worst_finished_time_s": 29.979999542236328,
-      "median_finished_time_s": 28.5
+      "run_dir": "logs\\tm_finetune_runs\\20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0170",
+      "finishers": 654,
+      "best_time_s": 25.920000076293945,
+      "worst_finished_time_s": 35.20000076293945,
+      "median_finished_time_s": 28.02500057220459
     },
     {
       "key": "single_surface_height",

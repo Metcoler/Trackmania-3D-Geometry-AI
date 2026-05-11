@@ -33,9 +33,9 @@ OUTPUT_NAMES = {
 }
 
 TITLE_LABELS = {
-    "single_surface_flat": "Rovinná trať",
-    "single_surface_height": "Výšková trať",
-    "multi_surface_flat": "Rôzne povrchy",
+    "single_surface_flat": "Flat track",
+    "single_surface_height": "Height track",
+    "multi_surface_flat": "Different surfaces",
 }
 
 
@@ -45,11 +45,11 @@ def fmt(value: float) -> str:
 
 def _draw_block_legend(fig: plt.Figure) -> None:
     block_legend = [
-        Patch(facecolor="#b9b9b9", edgecolor="#555555", label="asfalt"),
-        Patch(facecolor="#b7d984", edgecolor="#6b8f3a", label="tráva"),
-        Patch(facecolor="#a2642f", edgecolor="#6b3d1e", label="hlina"),
-        Patch(facecolor="#16a34a", edgecolor="#0f6f32", label="štart"),
-        Patch(facecolor="#dc2626", edgecolor="#8f1d1d", label="cieľ"),
+        Patch(facecolor="#b9b9b9", edgecolor="#555555", label="asphalt"),
+        Patch(facecolor="#b7d984", edgecolor="#6b8f3a", label="grass"),
+        Patch(facecolor="#a2642f", edgecolor="#6b3d1e", label="dirt"),
+        Patch(facecolor="#16a34a", edgecolor="#0f6f32", label="start"),
+        Patch(facecolor="#dc2626", edgecolor="#8f1d1d", label="finish"),
     ]
     fig.legend(
         handles=block_legend,
@@ -57,7 +57,7 @@ def _draw_block_legend(fig: plt.Figure) -> None:
         bbox_to_anchor=(0.995, 0.54),
         frameon=True,
         fontsize=8,
-        title="Bloky",
+        title="Blocks",
         title_fontsize=9,
         borderpad=0.55,
         labelspacing=0.45,
@@ -92,8 +92,8 @@ def _draw_height_legend(fig: plt.Figure, height_min: float, height_max: float) -
         ],
         fontsize=8,
     )
-    cax.set_title("výška", fontsize=8, pad=4)
-    cax.set_ylabel("jednotky mapy", fontsize=8, labelpad=3)
+    cax.set_title("height", fontsize=8, pad=4)
+    cax.set_ylabel("map units", fontsize=8, labelpad=3)
     for spine in cax.spines.values():
         spine.set_linewidth(0.6)
         spine.set_edgecolor("#555555")
@@ -120,9 +120,9 @@ def plot_single_trajectory(run_data) -> Path:
     ax.add_collection(collection)
 
     time_text = fmt(float(run_data.summary["best_trajectory_time_s"]))
-    progress_text = f"{float(run_data.summary['best_trajectory_progress_pct']):.1f}".replace(".", ",")
+    progress_text = f"{float(run_data.summary['best_trajectory_progress_pct']):.1f}"
     title_label = TITLE_LABELS.get(run_data.key, run_data.label)
-    ax.set_title(f"{title_label}: najlepší prejazd, čas {time_text} s, progres {progress_text} %")
+    ax.set_title(f"{title_label}: best run, time {time_text} s, progress {progress_text} %")
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_xlabel("")
@@ -136,7 +136,7 @@ def plot_single_trajectory(run_data) -> Path:
         height_min, height_max = _height_range(game_map)
         _draw_height_legend(fig, height_min, height_max)
     colorbar = fig.colorbar(collection, ax=ax, orientation="horizontal", fraction=0.052, pad=0.055)
-    colorbar.set_label("Rýchlosť [km/h]  (modrá = rýchlejšie, červená = pomalšie)", fontsize=8)
+    colorbar.set_label("Speed [km/h]  (blue = faster, red = slower)", fontsize=8)
     colorbar.ax.tick_params(labelsize=8)
 
     right_margin = 0.88 if (has_surface_variants or has_height_variants) else 0.985

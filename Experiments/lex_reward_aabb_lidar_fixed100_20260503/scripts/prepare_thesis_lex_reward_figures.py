@@ -16,7 +16,7 @@ import pandas as pd
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = PACKAGE_ROOT.parents[1]
-THESIS_IMAGES = REPO_ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+THESIS_IMAGES = REPO_ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 
 ANALYSIS_ID = "lex_sweep_aabb_lidar_fixed100_20260503"
 
@@ -25,25 +25,25 @@ VARIANTS = [
     {
         "variant": "finished_progress",
         "ranking_key": "(finished, progress)",
-        "label": "(cieľ, progres)",
+        "label": "(finish, progress)",
         "color": "#4c6ef5",
     },
     {
         "variant": "finished_progress_time",
         "ranking_key": "(finished, progress, -time)",
-        "label": "(cieľ, progres, -čas)",
+        "label": "(finish, progress, -time)",
         "color": "#12b886",
     },
     {
         "variant": "finished_progress_time_crashes",
         "ranking_key": "(finished, progress, -time, -crashes)",
-        "label": "(cieľ, progres, -čas, -nárazy)",
+        "label": "(finish, progress, -time, -crashes)",
         "color": "#f08c00",
     },
     {
         "variant": "finished_progress_crashes_time",
         "ranking_key": "(finished, progress, -crashes, -time)",
-        "label": "(cieľ, progres, -nárazy, -čas)",
+        "label": "(finish, progress, -crashes, -time)",
         "color": "#e03131",
     },
 ]
@@ -53,14 +53,14 @@ TOP_DETAIL_VARIANTS = [
     {
         "variant": "finished_progress_time_crashes",
         "ranking_key": "(finished, progress, -time, -crashes)",
-        "label": "(cieľ, progres, -čas, -nárazy)",
+        "label": "(finish, progress, -time, -crashes)",
         "short": "lex_reward_top1",
         "color": "#f08c00",
     },
     {
         "variant": "finished_progress_crashes_time",
         "ranking_key": "(finished, progress, -crashes, -time)",
-        "label": "(cieľ, progres, -nárazy, -čas)",
+        "label": "(finish, progress, -crashes, -time)",
         "short": "lex_reward_top2",
         "color": "#e03131",
     },
@@ -162,7 +162,7 @@ def plot_global_progress(data: dict[str, tuple[dict, pd.DataFrame, pd.DataFrame]
             gen["best_dense_progress"],
             color=info["color"],
             linewidth=2.1,
-            label=f"{info['label']} - najlepší",
+            label=f"{info['label']} - best",
         )
         ax.plot(
             x,
@@ -171,10 +171,10 @@ def plot_global_progress(data: dict[str, tuple[dict, pd.DataFrame, pd.DataFrame]
             linewidth=1.5,
             linestyle="--",
             alpha=0.62,
-            label=f"{info['label']} - priemer populácie",
+            label=f"{info['label']} - population mean",
         )
-    ax.set_title("Postup populácie pri rôznych lexikografických rankingoch")
-    ax.set_xlabel("Generácia")
+    ax.set_title("Population progress for lexicographic ranking variants")
+    ax.set_xlabel("Generation")
     ax.set_ylabel("Progress [%]")
     ax.set_ylim(-2, 103)
     legend_below(ax, ncol=2, y=-0.20)
@@ -190,9 +190,9 @@ def plot_finish_count(data: dict[str, tuple[dict, pd.DataFrame, pd.DataFrame]], 
         x = gen["generation"].to_numpy()
         finish = gen["finish_count"].rolling(window=window, min_periods=1).mean()
         ax.plot(x, finish, color=info["color"], linewidth=2.0, label=info["label"])
-    ax.set_title(f"Dokončené jazdy v generácii, kĺzavý priemer {window} generácií")
-    ax.set_xlabel("Generácia")
-    ax.set_ylabel("Počet dokončených jedincov")
+    ax.set_title(f"Finished runs per generation, {window}-generation moving average")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Number of finishing individuals")
     ax.set_ylim(bottom=0)
     legend_below(ax, ncol=2, y=-0.20)
     save_figure(fig, output_dir, "lex_reward_finish_count")
@@ -213,9 +213,9 @@ def plot_best_time(data: dict[str, tuple[dict, pd.DataFrame, pd.DataFrame]], out
             linewidth=2.1,
             label=info["label"],
         )
-    ax.set_title("Najlepší dokončený čas nájdený počas tréningu")
-    ax.set_xlabel("Generácia")
-    ax.set_ylabel("Čas [s]")
+    ax.set_title("Best finished time found during training")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Time [s]")
     ax.set_ylim(16.5, 31.0)
     legend_below(ax, ncol=2, y=-0.20)
     save_figure(fig, output_dir, "lex_reward_best_time")
@@ -271,7 +271,7 @@ def plot_detail_progress(info: dict, stats: pd.DataFrame, output_dir: Path) -> N
         stats["progress_p90"],
         color="#8ecae6",
         alpha=0.16,
-        label="p10-p90 celej populácie",
+        label="p10-p90 of the population",
     )
     ax.fill_between(
         x,
@@ -279,33 +279,33 @@ def plot_detail_progress(info: dict, stats: pd.DataFrame, output_dir: Path) -> N
         stats["progress_p75"],
         color="#219ebc",
         alpha=0.22,
-        label="p25-p75 celej populácie",
+        label="p25-p75 of the population",
     )
-    ax.plot(x, stats["progress_best"], color="#c92a2a", linewidth=2.1, label="najlepší jedinec")
+    ax.plot(x, stats["progress_best"], color="#c92a2a", linewidth=2.1, label="best individual")
     ax.plot(
         x,
         stats["progress_mean_all"],
         color="#868e96",
         linewidth=1.3,
         linestyle="--",
-        label="priemer celej populácie",
+        label="population mean",
     )
     ax.plot(
         x,
         stats["progress_mean_parent"],
         color="#0b7285",
         linewidth=2.0,
-        label="priemer rodičov",
+        label="parent mean",
     )
     ax.plot(
         x,
         stats["progress_mean_elite"],
         color=info["color"],
         linewidth=2.0,
-        label="priemer elity",
+        label="elite mean",
     )
-    ax.set_title(f"Detail progressu: {info['label']}")
-    ax.set_xlabel("Generácia")
+    ax.set_title(f"Progress detail: {info['label']}")
+    ax.set_xlabel("Generation")
     ax.set_ylabel("Progress [%]")
     ax.set_ylim(-2, 103)
     legend_below(ax, ncol=3, y=-0.20)
@@ -321,7 +321,7 @@ def plot_detail_time(info: dict, stats: pd.DataFrame, output_dir: Path, max_time
         stats["penalized_p75"],
         color="#ffd43b",
         alpha=0.20,
-        label="p25-p75 penalizovaného času celej populácie",
+        label="p25-p75 of population penalized time",
     )
     ax.plot(
         x,
@@ -329,21 +329,21 @@ def plot_detail_time(info: dict, stats: pd.DataFrame, output_dir: Path, max_time
         color="#868e96",
         linestyle="--",
         linewidth=1.35,
-        label="priemer celej populácie",
+        label="population mean",
     )
     ax.plot(
         x,
         stats["penalized_mean_parent"],
         color="#e67700",
         linewidth=2.0,
-        label="priemer rodičov",
+        label="parent mean",
     )
     ax.plot(
         x,
         stats["penalized_mean_elite"],
         color="#9c36b5",
         linewidth=2.0,
-        label="priemer elity",
+        label="elite mean",
     )
     ax.scatter(
         x,
@@ -351,16 +351,16 @@ def plot_detail_time(info: dict, stats: pd.DataFrame, output_dir: Path, max_time
         color="#1c7ed6",
         s=13,
         alpha=0.45,
-        label="najlepší dokončený čas v generácii",
+        label="best finished time in generation",
     )
     ax.plot(
         x,
         stats["best_finished_time_so_far"],
         color="#1864ab",
         linewidth=2.25,
-        label="najlepší dokončený čas doteraz",
+        label="best finished time so far",
     )
-    ax.axhline(float(max_time), color="#495057", linestyle=":", linewidth=1.1, label=f"max. čas epizódy {max_time:.0f} s")
+    ax.axhline(float(max_time), color="#495057", linestyle=":", linewidth=1.1, label=f"max. episode time {max_time:.0f} s")
     finite_values = stats[
         [
             "penalized_p25",
@@ -375,9 +375,9 @@ def plot_detail_time(info: dict, stats: pd.DataFrame, output_dir: Path, max_time
     finite_values = finite_values[np.isfinite(finite_values)]
     if finite_values.size:
         ax.set_ylim(max(0.0, float(np.min(finite_values)) - 1.0), max_time + 0.7)
-    ax.set_title(f"Čas populácie: {info['label']}")
-    ax.set_xlabel("Generácia")
-    ax.set_ylabel("Čas [s]")
+    ax.set_title(f"Population time: {info['label']}")
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Time [s]")
     legend_below(ax, ncol=2, y=-0.22)
     save_figure(fig, output_dir, f"{info['short']}_time_detail")
 

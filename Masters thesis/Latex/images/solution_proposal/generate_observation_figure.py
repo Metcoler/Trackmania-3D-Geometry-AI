@@ -428,9 +428,9 @@ def draw_observation_from_geometry():
     draw_road(ax_top, road_center, left, right, center, projection, lw_center=3.2)
     transition_indices = [
         (0, "vstup bloku", 0.12),
-        (BLOCK_SAMPLES - 1, "prechod bloku", -0.10),
-        (2 * BLOCK_SAMPLES - 2, "prechod bloku", -0.10),
-        (len(center_base) - 1, "výstup bloku", 0.12),
+        (BLOCK_SAMPLES - 1, "block transition", -0.10),
+        (2 * BLOCK_SAMPLES - 2, "block transition", -0.10),
+        (len(center_base) - 1, "output bloku", 0.12),
     ]
     draw_transition_points(
         ax_top,
@@ -695,15 +695,15 @@ def draw_observation_from_geometry():
         legend_box_bottom + legend_box_height * 0.21,
     ]
     unified_legend = [
-        (col[0], row[0], "prejdený progress", COLORS["center_passed"], "-"),
-        (col[0], row[1], "budúci progress", COLORS["center_future"], "-"),
-        (col[0], row[2], "prechod blokov", COLORS["transition"], "o"),
-        (col[1], row[0], "progress bod", COLORS["projection"], "o"),
-        (col[1], row[1], "kolmica na os", COLORS["projection"], "-"),
-        (col[1], row[2], "vzdialenosti k stenám", COLORS["ray"], "--"),
-        (col[2], row[0], "rýchlostný vektor", COLORS["heading"], "->"),
-        (col[2], row[1], "dopredná zložka rýchl.", COLORS["velocity"], "->"),
-        (col[2], row[2], "bočná zložka rýchl.", COLORS["side_velocity"], "->"),
+        (col[0], row[0], "completed progress", COLORS["center_passed"], "-"),
+        (col[0], row[1], "future progress", COLORS["center_future"], "-"),
+        (col[0], row[2], "block transitions", COLORS["transition"], "o"),
+        (col[1], row[0], "progress point", COLORS["projection"], "o"),
+        (col[1], row[1], "perpendicular to axis", COLORS["projection"], "-"),
+        (col[1], row[2], "wall distances", COLORS["ray"], "--"),
+        (col[2], row[0], "velocity vector", COLORS["heading"], "->"),
+        (col[2], row[1], "forward velocity", COLORS["velocity"], "->"),
+        (col[2], row[2], "lateral velocity", COLORS["side_velocity"], "->"),
     ]
     for x, y, label, color, style in unified_legend:
         legend_item(x, y, label, color, style, fontsize=6.9)

@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parents[2]
 RAW_DIR = REPO_ROOT / "logs" / "supervised_architecture_sweep" / "20260503_214049_v2d_asphalt_capacity_sweep"
-LATEX_IMAGE_DIR = REPO_ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+LATEX_IMAGE_DIR = REPO_ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 
 ANALYSIS_DIR = PACKAGE_DIR / "analysis"
 RAW_COPY_DIR = PACKAGE_DIR / "raw"
@@ -140,15 +140,15 @@ def plot_all_training_curves(rows: list[dict[str, object]], epoch_rows: list[dic
             labels.append(activation_label)
             legend_seen.add(activation_label)
 
-    axes[0].set_title("Celý tréning")
-    axes[0].set_xlabel("Epocha")
-    axes[0].set_ylabel("Validačná strata")
+    axes[0].set_title("Full training")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Validation loss")
     axes[0].grid(True, alpha=0.24)
     axes[0].set_xlim(1, 120)
     axes[0].set_ylim(0.052, 0.49)
 
-    axes[1].set_title("Priblíženie posledných epoch")
-    axes[1].set_xlabel("Epocha")
+    axes[1].set_title("Zoom on final epochs")
+    axes[1].set_xlabel("Epoch")
     axes[1].grid(True, alpha=0.24)
     axes[1].set_xlim(80, 120)
     axes[1].set_ylim(0.052, 0.112)
@@ -170,7 +170,7 @@ def plot_all_training_curves(rows: list[dict[str, object]], epoch_rows: list[dic
             arrowprops={"arrowstyle": "-", "lw": 0.8, "color": "#333333"},
         )
 
-    fig.suptitle("Priebeh učenia všetkých architektúr", y=1.02)
+    fig.suptitle("Training curves for all architectures", y=1.02)
     fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=8, frameon=True, bbox_to_anchor=(0.5, -0.10))
     fig.tight_layout(rect=(0, 0.08, 1, 0.98))
     for directory in (ANALYSIS_DIR, LATEX_IMAGE_DIR):
@@ -213,9 +213,9 @@ def plot_practical_training_curves(rows: list[dict[str, object]], epoch_rows: li
             zorder=5,
         )
 
-    ax.set_xlabel("Epocha")
-    ax.set_ylabel("Validačná strata")
-    ax.set_title("Detail praktických kandidátov po úvodnom poklese")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Validation loss")
+    ax.set_title("Practical candidates after initial drop")
     ax.set_xlim(20, 120)
     ax.set_ylim(0.052, 0.115)
     ax.grid(True, alpha=0.24)
@@ -266,11 +266,11 @@ def plot_wide(rows: list[dict[str, object]]) -> None:
         )
 
     ax.set_xscale("log")
-    ax.set_xlabel("Počet parametrov siete")
-    ax.set_ylabel("Najlepšia validačná strata")
+    ax.set_xlabel("Count parametrov siete")
+    ax.set_ylabel("Best validation loss")
     ax.grid(True, which="both", axis="both", alpha=0.22)
     ax.legend(loc="upper right", fontsize=8, frameon=True, ncol=2)
-    ax.set_title("Učenie s učiteľom: sweep architektúr")
+    ax.set_title("Supervised architecture sweep")
     fig.tight_layout()
     for directory in (ANALYSIS_DIR, LATEX_IMAGE_DIR):
         fig.savefig(directory / f"{WIDE_STEM}.pdf", bbox_inches="tight")
@@ -302,8 +302,8 @@ def plot_focus(rows: list[dict[str, object]]) -> None:
     fig, ax = plt.subplots(figsize=(7.6, 4.2))
     bars = ax.bar(range(len(selected)), values, color=colors, edgecolor="#222222", linewidth=0.8)
     ax.set_xticks(range(len(selected)), labels)
-    ax.set_ylabel("Najlepšia validačná strata")
-    ax.set_title("Detail praktických kandidátov")
+    ax.set_ylabel("Best validation loss")
+    ax.set_title("Practical candidate detail")
     ax.grid(True, axis="y", alpha=0.25)
     ax.set_ylim(0.058, max(values) + 0.004)
     for bar, row in zip(bars, selected):
@@ -312,7 +312,7 @@ def plot_focus(rows: list[dict[str, object]]) -> None:
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
             value + 0.00035,
-            f"{value:.4f}\n{params} param.",
+            f"{value:.4f}\n{params} params",
             ha="center",
             va="bottom",
             fontsize=8.5,

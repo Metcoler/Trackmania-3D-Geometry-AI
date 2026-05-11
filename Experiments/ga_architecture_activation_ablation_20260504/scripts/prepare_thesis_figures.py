@@ -15,7 +15,7 @@ SUMMARY_CSV = (
     / "architecture_ablation_debug_20260504"
     / "architecture_ablation_debug_summary.csv"
 )
-OUT_DIR = ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+OUT_DIR = ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 
 
 VARIANTS = [
@@ -112,9 +112,9 @@ def draw_activation_comparison() -> None:
             label=variant["label"],
         )
 
-    ax_progress.set_title("Najlepší nájdený progres")
-    ax_progress.set_xlabel("Generácia")
-    ax_progress.set_ylabel("Progres [%]")
+    ax_progress.set_title("Best progress found")
+    ax_progress.set_xlabel("Generation")
+    ax_progress.set_ylabel("Progress [%]")
     ax_progress.set_ylim(-2, 104)
     ax_progress.set_xlim(0, 200)
     ax_progress.grid(True, color="#b0b0b0", alpha=0.25)
@@ -138,10 +138,10 @@ def draw_activation_comparison() -> None:
         finish_counts,
         color=colors,
         alpha=0.72,
-        label="Dokončujúci jedinci",
+        label="Finishing individuals",
     )
-    ax_summary.set_title("Kvalita dokončených jázd")
-    ax_summary.set_ylabel("Dokončujúci jedinci")
+    ax_summary.set_title("Quality of finished runs")
+    ax_summary.set_ylabel("Finishing individuals")
     ax_summary.set_xticks(list(x_positions), labels)
     ax_summary.set_ylim(0, max(finish_counts) * 1.18)
     ax_summary.grid(True, axis="y", color="#b0b0b0", alpha=0.25)
@@ -163,9 +163,9 @@ def draw_activation_comparison() -> None:
         color="#1C1C1C",
         marker="o",
         linewidth=2.2,
-        label="Najlepší čas",
+        label="Best time",
     )
-    ax_time.set_ylabel("Najlepší čas [s]")
+    ax_time.set_ylabel("Best time [s]")
     ax_time.set_ylim(17.0, 25.5)
     for x, value in zip(x_positions, best_times):
         ax_time.text(

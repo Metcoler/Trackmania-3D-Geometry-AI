@@ -41,7 +41,7 @@ IMITATION_ATTEMPT = (
     / "attempts"
     / "attempt_0003.npz"
 )
-OUTPUT_DIR = REPO_ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+OUTPUT_DIR = REPO_ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 FIGURE_STEM = "imitation_learning_final_agent_path"
 
 SPEED_TO_KMH = 3.6
@@ -203,7 +203,7 @@ def build_figure() -> None:
     ax.set_axis_off()
 
     path_handles = [
-        Line2D([0], [0], color=TEACHER_COLOR, lw=2.0, alpha=0.78, label="jazdy učiteľa"),
+        Line2D([0], [0], color=TEACHER_COLOR, lw=2.0, alpha=0.78, label="teacher runs"),
         Line2D([0], [0], color=AGENT_COLOR, lw=3.8, alpha=0.98, label="agent po učení"),
         Line2D(
             [0],
@@ -217,10 +217,10 @@ def build_figure() -> None:
         ),
     ]
     map_handles = [
-        Patch(facecolor="#16a34a", edgecolor="none", label="štart"),
-        Patch(facecolor="#dc2626", edgecolor="none", label="cieľ"),
-        Patch(facecolor="#b9b9b9", edgecolor="none", label="cesta"),
-        Patch(facecolor="#262626", edgecolor="none", label="okraj trate"),
+        Patch(facecolor="#16a34a", edgecolor="none", label="start"),
+        Patch(facecolor="#dc2626", edgecolor="none", label="finish"),
+        Patch(facecolor="#b9b9b9", edgecolor="none", label="road"),
+        Patch(facecolor="#262626", edgecolor="none", label="track boundary"),
     ]
     legend1 = ax.legend(
         handles=path_handles,
@@ -243,14 +243,14 @@ def build_figure() -> None:
     )
 
     if teacher_times and np.isfinite(finish_time):
-        status = "dokončené" if finished else "nedokončené"
+        status = "finished" if finished else "not finished"
         fig.text(
             0.805,
             0.235,
-            "čas prejazdu\n"
+            "run time\n"
             f"agent: {fmt_seconds(finish_time)} s\n"
-            f"učiteľ: {fmt_seconds(min(teacher_times))}-{fmt_seconds(max(teacher_times))} s\n"
-            f"stav: {status}",
+            f"teacher: {fmt_seconds(min(teacher_times))}-{fmt_seconds(max(teacher_times))} s\n"
+            f"status: {status}",
             ha="left",
             va="top",
             fontsize=9.4,
@@ -267,10 +267,10 @@ def build_figure() -> None:
     if mappable is not None:
         cax = fig.add_axes([0.848, 0.36, 0.014, 0.28])
         cbar = fig.colorbar(mappable, cax=cax)
-        cbar.set_label("rýchlosť [km/h]", fontsize=9.4, labelpad=7)
+        cbar.set_label("speed [km/h]", fontsize=9.4, labelpad=7)
         cbar.ax.tick_params(labelsize=8.4)
-        cbar.ax.text(-0.82, 0.02, "pomaly", transform=cbar.ax.transAxes, fontsize=8.4, ha="right", va="bottom")
-        cbar.ax.text(-0.82, 0.98, "rýchlo", transform=cbar.ax.transAxes, fontsize=8.4, ha="right", va="top")
+        cbar.ax.text(-0.82, 0.02, "slow", transform=cbar.ax.transAxes, fontsize=8.4, ha="right", va="bottom")
+        cbar.ax.text(-0.82, 0.98, "fast", transform=cbar.ax.transAxes, fontsize=8.4, ha="right", va="top")
 
     fig.subplots_adjust(left=0.02, right=0.765, top=0.98, bottom=0.10)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

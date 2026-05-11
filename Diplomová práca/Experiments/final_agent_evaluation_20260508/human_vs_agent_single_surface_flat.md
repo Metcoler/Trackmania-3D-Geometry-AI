@@ -4,9 +4,9 @@ The player times come from Maps/GameFiles/casy_single_surface_flat.csv.
 The figure shows the full local sample of player times, not only the best attempts.
 
 - Number of player times: 113
-- Best player time: 23,05 s
-- Median player time: 25,11 s
-- Slowest player time: 31,10 s
-- Agent time: 25,92 s
+- Best player time: 23.05 s
+- Median player time: 25.11 s
+- Slowest player time: 31.10 s
+- Agent time: 25.92 s
 - Player times faster than agent: 76
 - Player times slower than or equal to agent: 37

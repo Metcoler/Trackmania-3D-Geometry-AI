@@ -9,7 +9,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_DIR = Path(__file__).resolve().parent
-IMAGE_DIR = ROOT / "Diplomová práca" / "Latex" / "images" / "evaluation"
+IMAGE_DIR = ROOT / "Masters thesis" / "Latex" / "images" / "evaluation"
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 PLAYER_TIMES = ROOT / "Maps" / "GameFiles" / "casy_single_surface_flat.csv"
@@ -19,7 +19,7 @@ FINAL_EVALUATION_SUMMARY = (
 
 
 def fmt(value: float) -> str:
-    return f"{value:.2f}".replace(".", ",")
+    return f"{value:.2f}"
 
 
 def load_agent_time() -> float:
@@ -53,14 +53,14 @@ def plot_human_vs_agent_distribution() -> None:
         edgecolor="white",
         linewidth=1.0,
         alpha=0.88,
-        label="hráčske časy",
+        label="player times",
     )
     ax.axvline(
         median_time,
         color="#2b2b2b",
         linestyle="--",
         linewidth=1.6,
-        label=f"medián hráčov: {fmt(median_time)} s",
+        label=f"player median: {fmt(median_time)} s",
     )
     ax.axvline(
         agent_time,
@@ -69,9 +69,9 @@ def plot_human_vs_agent_distribution() -> None:
         label=f"agent: {fmt(agent_time)} s",
     )
 
-    ax.set_title("Poloha agenta v rozdelení hráčskych časov")
-    ax.set_xlabel("Čas prejazdu [s]")
-    ax.set_ylabel("Počet hráčskych časov")
+    ax.set_title("Agent position in the player-time distribution")
+    ax.set_xlabel("Run time [s]")
+    ax.set_ylabel("Number of player times")
     ax.grid(axis="y", alpha=0.25)
     ax.set_axisbelow(True)
 

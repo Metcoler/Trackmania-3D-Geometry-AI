@@ -23,7 +23,7 @@ from Map import Map
 
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-IMAGE_DIR = ROOT / "Diplomová práca" / "Latex" / "images" / "evaluation"
+IMAGE_DIR = ROOT / "Masters thesis" / "Latex" / "images" / "evaluation"
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 RUN_DIR = (
@@ -36,7 +36,7 @@ MANIFEST_PATH = RUN_DIR / "trajectories" / "trajectory_manifest.csv"
 
 
 def fmt(value: float) -> str:
-    return f"{value:.2f}".replace(".", ",")
+    return f"{value:.2f}"
 
 
 def load_best_row() -> dict[str, str]:
@@ -90,7 +90,7 @@ def plot_small_map_trajectory() -> None:
     ax.scatter(px[0], pz[0], s=42, color="#16a34a", edgecolor="white", linewidth=0.8, zorder=110)
     ax.scatter(px[-1], pz[-1], s=42, color="#dc2626", edgecolor="white", linewidth=0.8, zorder=110)
     ax.annotate(
-        "štart",
+        "start",
         xy=(px[0], pz[0]),
         xytext=(10, 12),
         textcoords="offset points",
@@ -99,7 +99,7 @@ def plot_small_map_trajectory() -> None:
         arrowprops={"arrowstyle": "-", "color": "#166534", "linewidth": 0.8},
     )
     ax.annotate(
-        "cieľ",
+        "finish",
         xy=(px[-1], pz[-1]),
         xytext=(10, -2),
         textcoords="offset points",
@@ -108,14 +108,14 @@ def plot_small_map_trajectory() -> None:
         arrowprops={"arrowstyle": "-", "color": "#991b1b", "linewidth": 0.8},
     )
 
-    ax.set_title(f"Trajektória agenta na mape small_map, čas {fmt(finish_time)} s", fontsize=14)
+    ax.set_title(f"Agent trajectory on small_map, time {fmt(finish_time)} s", fontsize=14)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_xlabel("")
     ax.set_ylabel("")
 
     colorbar = fig.colorbar(collection, ax=ax, orientation="horizontal", fraction=0.05, pad=0.055)
-    colorbar.set_label("Rýchlosť [km/h]  (modrá = rýchlejšie, červená = pomalšie)")
+    colorbar.set_label("Speed [km/h]  (blue = faster, red = slower)")
 
     fig.tight_layout()
     output = IMAGE_DIR / "evaluation_small_map_trajectory.pdf"

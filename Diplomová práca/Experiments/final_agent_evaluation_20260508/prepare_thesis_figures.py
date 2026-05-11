@@ -10,7 +10,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_DIR = Path(__file__).resolve().parent
-IMAGE_DIR = ROOT / "Diplomová práca" / "Latex" / "images" / "evaluation"
+IMAGE_DIR = ROOT / "Masters thesis" / "Latex" / "images" / "evaluation"
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 SMALL_MAP_RUN = (
@@ -23,7 +23,7 @@ SMALL_MAP_RUN = (
 FINAL_RUNS = [
     {
         "key": "single_surface_flat",
-        "title": "Rovinná trať",
+        "title": "Flat track",
         "run_dir": ROOT
         / "logs"
         / "tm_finetune_runs"
@@ -31,7 +31,7 @@ FINAL_RUNS = [
     },
     {
         "key": "single_surface_height",
-        "title": "Výškové zmeny",
+        "title": "Height changes",
         "run_dir": ROOT
         / "logs"
         / "tm_finetune_runs"
@@ -39,7 +39,7 @@ FINAL_RUNS = [
     },
     {
         "key": "multi_surface_flat",
-        "title": "Rôzne povrchy",
+        "title": "Different surfaces",
         "run_dir": ROOT
         / "logs"
         / "tm_finetune_runs"
@@ -48,14 +48,14 @@ FINAL_RUNS = [
 ]
 
 COMPARISON_TIMES = [
-    ("Ľudský hráč", 17.89, "#2f9e44"),
-    ("Náš agent", 19.68000030517578, "#c92a2a"),
-    ("Bakalársky agent", 23.064, "#5c677d"),
+    ("Human player", 17.89, "#2f9e44"),
+    ("Diploma agent", 19.68000030517578, "#c92a2a"),
+    ("Bachelor agent", 23.064, "#5c677d"),
 ]
 
 
 def fmt(value: float) -> str:
-    return f"{value:.2f}".replace(".", ",")
+    return f"{value:.2f}"
 
 
 def save_figure(fig: plt.Figure, name: str) -> None:
@@ -83,8 +83,8 @@ def plot_small_map_comparison() -> dict[str, float]:
     fig, ax = plt.subplots(figsize=(8.2, 3.8))
     bars = ax.barh(labels, times, color=colors, height=0.58)
     ax.invert_yaxis()
-    ax.set_xlabel("Čas prejazdu [s]")
-    ax.set_title("Porovnanie na novej mape small_map")
+    ax.set_xlabel("Run time [s]")
+    ax.set_title("Comparison on the unseen small_map")
     ax.grid(axis="x", alpha=0.25)
     ax.set_axisbelow(True)
 
@@ -116,13 +116,13 @@ def plot_ranked_final_times() -> list[dict[str, object]]:
         y = finishers["time"].to_numpy()
         x = range(1, len(y) + 1)
 
-        ax.scatter(x, y, s=14, color="#2f6fbb", alpha=0.72, label="dokončujúci jedinec")
+        ax.scatter(x, y, s=14, color="#2f6fbb", alpha=0.72, label="finishing individual")
         if len(y) > 0:
-            ax.scatter([1], [y[0]], s=58, color="#c92a2a", zorder=5, label="vybraný agent")
+            ax.scatter([1], [y[0]], s=58, color="#c92a2a", zorder=5, label="selected agent")
             ax.text(
                 0.98,
                 0.05,
-                f"najlepší čas {fmt(float(y[0]))} s",
+                f"best time {fmt(float(y[0]))} s",
                 transform=ax.transAxes,
                 ha="right",
                 va="bottom",
@@ -131,7 +131,7 @@ def plot_ranked_final_times() -> list[dict[str, object]]:
             )
 
         ax.set_title(spec["title"])
-        ax.set_xlabel("Poradie podľa času")
+        ax.set_xlabel("Rank by time")
         ax.grid(alpha=0.2)
         ax.set_axisbelow(True)
         summaries.append(
@@ -145,10 +145,10 @@ def plot_ranked_final_times() -> list[dict[str, object]]:
             }
         )
 
-    axes[0].set_ylabel("Čas prejazdu [s]")
+    axes[0].set_ylabel("Run time [s]")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=2, frameon=False, bbox_to_anchor=(0.5, -0.04))
-    fig.suptitle("Časy dokončujúcich agentov počas finálnych tréningov", y=1.02)
+    fig.suptitle("Finished-agent times after final training", y=1.02)
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     save_figure(fig, "evaluation_final_training_ranked_times")
     return summaries
@@ -211,8 +211,8 @@ def write_summary(comparison: dict[str, float], ranked: list[dict[str, object]])
         "comparison": comparison,
         "ranked_final_training_times": ranked,
         "figures": [
-            "Diplomová práca/Latex/images/evaluation/evaluation_small_map_comparison.pdf",
-            "Diplomová práca/Latex/images/evaluation/evaluation_final_training_ranked_times.pdf",
+            "Masters thesis/Latex/images/evaluation/evaluation_small_map_comparison.pdf",
+            "Masters thesis/Latex/images/evaluation/evaluation_final_training_ranked_times.pdf",
         ],
     }
     (PACKAGE_DIR / "metadata.json").write_text(

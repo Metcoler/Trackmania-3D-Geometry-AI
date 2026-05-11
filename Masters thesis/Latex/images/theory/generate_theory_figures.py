@@ -306,9 +306,9 @@ def draw_agent_environment_loop() -> None:
     sensor_y = agent_top - gate_margin_y
     actuator_y = agent_bottom + gate_margin_y
     policy_y = agent_center_y - policy_h / 2.0
-    box(ax, (policy_cx - policy_w / 2, policy_y), policy_w, policy_h, "politika\n$\\pi_\\theta$", fc="white", ec=BLUE, fontsize=12, lw=1.6)
-    box(ax, (gate_x, sensor_y - 0.34), gate_w, 0.68, "senzory", fc="white", ec=BLUE, fontsize=10, lw=1.35)
-    box(ax, (gate_x, actuator_y - 0.34), gate_w, 0.68, "aktuátory", fc="white", ec=BLUE, fontsize=10, lw=1.35)
+    box(ax, (policy_cx - policy_w / 2, policy_y), policy_w, policy_h, "policy\n$\\pi_\\theta$", fc="white", ec=BLUE, fontsize=12, lw=1.6)
+    box(ax, (gate_x, sensor_y - 0.34), gate_w, 0.68, "sensors", fc="white", ec=BLUE, fontsize=10, lw=1.35)
+    box(ax, (gate_x, actuator_y - 0.34), gate_w, 0.68, "actuators", fc="white", ec=BLUE, fontsize=10, lw=1.35)
     env_x = 9.05
     env_w = 2.75
     env_patch = patches.FancyBboxPatch(
@@ -321,7 +321,7 @@ def draw_agent_environment_loop() -> None:
         facecolor=LIGHT_GREEN,
     )
     ax.add_patch(env_patch)
-    ax.text(env_x + 0.18, agent_top - 0.34, "Prostredie", ha="left", va="center", fontsize=11.5, color=GREEN, weight="bold")
+    ax.text(env_x + 0.18, agent_top - 0.34, "Environment", ha="left", va="center", fontsize=11.5, color=GREEN, weight="bold")
 
     # Percepts enter the agent through sensors.
     arrow(
@@ -337,7 +337,7 @@ def draw_agent_environment_loop() -> None:
     ax.text(
         label_x,
         sensor_y,
-        "pozorovanie $o_t$\nodmena $r_t$",
+        "observation $o_t$\nreward $r_t$",
         ha="center",
         va="center",
         fontsize=10,
@@ -351,7 +351,7 @@ def draw_agent_environment_loop() -> None:
     ax.text(
         label_x,
         actuator_y,
-        "akcia\n$a_t$",
+        "action\n$a_t$",
         ha="center",
         va="center",
         fontsize=10,
@@ -438,9 +438,9 @@ def draw_scalar_vs_lexicographic() -> None:
         clear_axes(ax, (0, 10), (-0.6, 5))
 
     ax = axes[0]
-    ax.set_title("Skalárne hodnotenie")
+    ax.set_title("Scalar evaluation")
     metric_y = [4.0, 3.0, 2.0]
-    labels = ["metrika $m_1$", "metrika $m_2$", "metrika $m_3$"]
+    labels = ["metric $m_1$", "metric $m_2$", "metric $m_3$"]
     weights = ["$w_1$", "$w_2$", "$w_3$"]
     for y, lab, w in zip(metric_y, labels, weights):
         box(ax, (0.7, y - 0.35), 2.4, 0.7, lab, fc=LIGHT_BLUE, ec=BLUE, fontsize=10)
@@ -448,18 +448,18 @@ def draw_scalar_vs_lexicographic() -> None:
         arrow(ax, (3.1, y), (3.7, y), color=GRAY, lw=1.2)
         arrow(ax, (4.7, y), (6.4, 2.5), color=GRAY, lw=1.2)
     box(ax, (6.4, 1.95), 2.6, 1.1, "$S = \\sum_i w_i m_i$", fc=LIGHT_GREEN, ec=GREEN, fontsize=12)
-    ax.text(5.0, 0.15, "všetky ciele sa zmiešajú\ndo jedného čísla", ha="center", fontsize=10, color=GRAY)
+    ax.text(5.0, 0.15, "all objectives are mixed\ninto one number", ha="center", fontsize=10, color=GRAY)
 
     ax = axes[1]
-    ax.set_title("Lexikografické poradie")
+    ax.set_title("Lexicographic ordering")
     tuple_boxes = [(0.7, 2.45, "$m_1$"), (2.3, 2.45, "$m_2$"), (3.9, 2.45, "$m_3$")]
     for i, (x, y, lab) in enumerate(tuple_boxes, start=1):
         box(ax, (x, y), 1.15, 0.9, lab, fc=LIGHT_BLUE if i == 1 else "white", ec=BLUE, fontsize=12)
         ax.text(x + 0.58, y - 0.35, f"{i}. priorita", ha="center", fontsize=9, color=GRAY)
     ax.text(2.9, 3.9, "$\\mathbf{m}(\\tau)=(m_1,m_2,m_3)$", ha="center", fontsize=12, color=INK)
     arrow(ax, (5.3, 2.9), (6.7, 2.9), label="porovnaj\npostupne", label_xy=(6.0, 3.45), color=ORANGE)
-    box(ax, (6.7, 2.25), 2.4, 1.3, "najprv $m_1$\npotom $m_2$\npotom $m_3$", fc=LIGHT_ORANGE, ec=ORANGE, fontsize=10)
-    ax.text(5.0, 0.15, "ciele ostávajú oddelené,\nporadie vyjadruje priority", ha="center", fontsize=10, color=GRAY)
+    box(ax, (6.7, 2.25), 2.4, 1.3, "first $m_1$\nthen $m_2$\nthen $m_3$", fc=LIGHT_ORANGE, ec=ORANGE, fontsize=10)
+    ax.text(5.0, 0.15, "objectives stay separate;\nthe order expresses priorities", ha="center", fontsize=10, color=GRAY)
 
     save(fig, "theory_scalar_vs_lexicographic.pdf")
 
@@ -494,9 +494,9 @@ def draw_blackbox_function() -> None:
         arrow(ax, (6.85, y), (8.5, y), color=GRAY, lw=1.15)
         ax.text(8.75, y, label, ha="left", va="center", fontsize=12, color=INK)
 
-    ax.text(2.25, 0.38, "vstupný vektor $\\mathbf{x}$", ha="center", va="center", fontsize=10, color=GRAY)
-    ax.text(7.75, 0.38, "výstupný vektor $\\mathbf{y}$", ha="center", va="center", fontsize=10, color=GRAY)
-    ax.text(5.15, 5.35, "Parametrický model ako mapovanie vstupov na výstupy", ha="center", va="center", fontsize=13, color=INK)
+    ax.text(2.25, 0.38, "input vector $\\mathbf{x}$", ha="center", va="center", fontsize=10, color=GRAY)
+    ax.text(7.75, 0.38, "output vector $\\mathbf{y}$", ha="center", va="center", fontsize=10, color=GRAY)
+    ax.text(5.15, 5.35, "Parametric model as a mapping from inputs to outputs", ha="center", va="center", fontsize=13, color=INK)
 
     save(fig, "theory_blackbox_function.pdf")
 
@@ -542,7 +542,7 @@ def draw_neuron_layer_mlp() -> None:
     ax.text(4.7, 0.8, "$\\mathbf{h}=\\sigma(W\\mathbf{x}+\\mathbf{b})$", ha="center", fontsize=11, color=INK)
 
     ax = axes[2]
-    ax.set_title("Viacvrstvová sieť")
+    ax.set_title("Multilayer network")
     layer_x = [1.0, 3.2, 5.4, 7.6]
     layers = [4, 4, 3, 2]
     colors = [LIGHT_BLUE, LIGHT_ORANGE, LIGHT_ORANGE, LIGHT_GREEN]
@@ -558,8 +558,8 @@ def draw_neuron_layer_mlp() -> None:
             for y2 in ys2:
                 ax.plot([x1 + 0.16, x2 - 0.16], [y1, y2], color="#CBD5E1", linewidth=0.7)
     ax.text(1.0, 0.75, "vstup", ha="center", fontsize=10, color=GRAY)
-    ax.text(4.3, 0.75, "skryté vrstvy", ha="center", fontsize=10, color=GRAY)
-    ax.text(7.6, 0.75, "výstup", ha="center", fontsize=10, color=GRAY)
+    ax.text(4.3, 0.75, "hidden layers", ha="center", fontsize=10, color=GRAY)
+    ax.text(7.6, 0.75, "output", ha="center", fontsize=10, color=GRAY)
 
     save(fig, "theory_neuron_layer_mlp.pdf")
 
@@ -583,7 +583,7 @@ def draw_activation_functions() -> None:
         ax.set_xlabel("vstup $z$")
         ax.grid(True, color="#E5E7EB", linewidth=0.8)
         ax.text(0.5, -0.26, formula, transform=ax.transAxes, ha="center", va="top", fontsize=9, color=INK)
-    axes[0].set_ylabel("výstup")
+    axes[0].set_ylabel("output")
     fig.tight_layout(w_pad=2.0)
     save(fig, "theory_activation_functions.pdf")
 
@@ -592,7 +592,7 @@ def draw_ga_initial_population() -> None:
     fig, ax = plt.subplots(figsize=(12.0, 4.8))
     clear_axes(ax, (0, 12.2), (0, 4.9))
 
-    ax.text(6.15, 4.55, "Náhodne vytvorená populácia", ha="center", va="center", fontsize=13, color=INK)
+    ax.text(6.15, 4.55, "Randomly created population", ha="center", va="center", fontsize=13, color=INK)
 
     xs = np.linspace(1.85, 11.25, len(GA_GENES))
     for i, (x, gene, fitness) in enumerate(zip(xs, GA_GENES, GA_FITNESS), start=1):
@@ -610,9 +610,9 @@ def draw_ga_selection() -> None:
 
     order = ga_selection_order()
     xs = np.linspace(1.05, 10.65, len(GA_GENES))
-    ax.text(5.85, 4.55, "Selekcia podľa hodnotenia", ha="center", va="center", fontsize=13, color=INK)
-    ax.text(3.05, 3.95, "vybraní rodičia", ha="center", va="center", fontsize=10.5, color=GREEN, weight="bold")
-    ax.text(8.65, 3.95, "vyradení jedinci", ha="center", va="center", fontsize=10.5, color=RED, weight="bold")
+    ax.text(5.85, 4.55, "Selection by evaluation", ha="center", va="center", fontsize=13, color=INK)
+    ax.text(3.05, 3.95, "selected parents", ha="center", va="center", fontsize=10.5, color=GREEN, weight="bold")
+    ax.text(8.65, 3.95, "discarded individuals", ha="center", va="center", fontsize=10.5, color=RED, weight="bold")
     ax.plot([5.85, 5.85], [0.45, 4.15], color="#CBD5E1", linewidth=1.0, linestyle="--")
 
     for rank, idx in enumerate(order):
@@ -641,9 +641,9 @@ def draw_ga_crossover() -> None:
     parent_y = 3.85
     child_y = 1.18
 
-    ax.text(6.1, 6.46, "Elitizmus a kríženie", ha="center", va="center", fontsize=13, color=INK)
-    ax.text(6.1, 4.85, "vybraní rodičia", ha="center", va="center", fontsize=10.5, color=GRAY)
-    ax.text(6.1, 0.28, "nová generácia", ha="center", va="center", fontsize=10.5, color=GRAY)
+    ax.text(6.1, 6.46, "Elitism and crossover", ha="center", va="center", fontsize=13, color=INK)
+    ax.text(6.1, 4.85, "selected parents", ha="center", va="center", fontsize=10.5, color=GRAY)
+    ax.text(6.1, 0.28, "new generation", ha="center", va="center", fontsize=10.5, color=GRAY)
 
     for rank, (x, idx, gene, fitness) in enumerate(zip(parent_xs, parent_idx, parent_genes, parent_fitness), start=1):
         draw_ga_individual(ax, x, parent_y, float(gene), fitness=int(fitness), label=f"$p_{rank}$", highlight=rank <= 2)
@@ -661,7 +661,7 @@ def draw_ga_crossover() -> None:
             (child_xs[dst_i], child_y + 0.47),
             color=RED,
             lw=1.75,
-            label="elitizmus" if src_i == 0 else None,
+            label="elitism" if src_i == 0 else None,
             label_xy=(1.35, 2.55),
         )
 
@@ -674,7 +674,7 @@ def draw_ga_crossover() -> None:
     ax.text(
         7.05,
         2.54,
-        "kríženie rodičov",
+        "parent crossover",
         ha="center",
         va="center",
         fontsize=10,
@@ -693,7 +693,7 @@ def draw_ga_mutation() -> None:
     after = np.clip(before + delta, 0.0, 1.0)
     xs = np.linspace(1.15, 11.05, len(before))
 
-    ax.text(6.1, 5.12, "Mutácia potomkov", ha="center", va="center", fontsize=13, color=INK)
+    ax.text(6.1, 5.12, "Offspring mutation", ha="center", va="center", fontsize=13, color=INK)
     ax.text(0.24, 3.65, "pred", ha="left", va="center", fontsize=10.5, color=GRAY)
     ax.text(0.24, 1.55, "po", ha="left", va="center", fontsize=10.5, color=GRAY)
 
@@ -731,7 +731,7 @@ def draw_neuroevolution_genome() -> None:
         [r"$w_{m1}$", r"$w_{m2}$", r"$w_{m3}$", r"$\cdots$", r"$w_{mn}$"],
     ]
 
-    ax.text(matrix_x + 1.55, 3.55, "matica váh $W$", ha="center", va="center", fontsize=10.5, color=INK)
+    ax.text(matrix_x + 1.55, 3.55, "weight matrix $W$", ha="center", va="center", fontsize=10.5, color=INK)
     for r, row in enumerate(rows):
         for c, value in enumerate(row):
             x = matrix_x + c * cell_w
@@ -749,7 +749,7 @@ def draw_neuroevolution_genome() -> None:
             ax.add_patch(rect)
             ax.text(x + cell_w / 2, y + cell_h / 2, value, ha="center", va="center", fontsize=9.4, color=INK)
 
-    arrow(ax, (4.05, 2.0), (5.2, 2.0), color=BLUE, lw=1.5, label="sploštenie", label_xy=(4.62, 2.36))
+    arrow(ax, (4.05, 2.0), (5.2, 2.0), color=BLUE, lw=1.5, label="flattening", label_xy=(4.62, 2.36))
 
     vector_x = 5.55
     vector_y = 1.72
@@ -861,7 +861,7 @@ def draw_bunny_mesh_overview() -> None:
     ax_mesh.set_xlim(-0.68, 0.68)
     ax_mesh.set_ylim(-0.68, 0.68)
     ax_mesh.set_zlim(-0.54, 0.70)
-    ax_mesh.text2D(0.5, 0.95, "Model zobrazený ako mesh", transform=ax_mesh.transAxes, ha="center", fontsize=12, color=INK)
+    ax_mesh.text2D(0.5, 0.95, "Model shown as a mesh", transform=ax_mesh.transAxes, ha="center", fontsize=12, color=INK)
 
     zoom_polys = [vertices[faces[i]] for i in nearest_faces]
     mesh_collection = Poly3DCollection(
@@ -876,7 +876,7 @@ def draw_bunny_mesh_overview() -> None:
     ax_zoom.set_xlim(target_center[0] - radius, target_center[0] + radius)
     ax_zoom.set_ylim(target_center[1] - radius, target_center[1] + radius)
     ax_zoom.set_zlim(target_center[2] - radius * 0.75, target_center[2] + radius * 0.75)
-    ax_zoom.text2D(0.5, 0.95, "Priblíženie trojuholníkov", transform=ax_zoom.transAxes, ha="center", fontsize=12, color=INK)
+    ax_zoom.text2D(0.5, 0.95, "Triangle detail", transform=ax_zoom.transAxes, ha="center", fontsize=12, color=INK)
 
     fig.subplots_adjust(left=0.02, right=0.99, top=0.93, bottom=0.01, wspace=-0.30)
     save(fig, "theory_bunny_mesh_overview.pdf")
@@ -933,11 +933,11 @@ def draw_mesh_raycasting_detail() -> None:
     ax.scatter([hit[0]], [hit[1]], color=RED, s=56, zorder=5)
 
     legend_handles = [
-        Line2D([0], [0], marker="o", color="none", markerfacecolor=INK, markeredgecolor=INK, markersize=6, label="počiatok lúča"),
-        Line2D([0], [0], color=RAY_BLUE, linewidth=2.4, label="vystrelený lúč"),
-        Line2D([0], [0], color=RAY_BLUE, linewidth=1.6, linestyle="--", label="pokračovanie lúča"),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=INK, markeredgecolor=INK, markersize=6, label="ray origin"),
+        Line2D([0], [0], color=RAY_BLUE, linewidth=2.4, label="cast ray"),
+        Line2D([0], [0], color=RAY_BLUE, linewidth=1.6, linestyle="--", label="ray continuation"),
         Line2D([0], [0], marker="o", color="none", markerfacecolor=RED, markeredgecolor=RED, markersize=6, label="bod prieniku"),
-        patches.Patch(facecolor=LIGHT_ORANGE, edgecolor=ORANGE, label="testovaný trojuholník"),
+        patches.Patch(facecolor=LIGHT_ORANGE, edgecolor=ORANGE, label="tested triangle"),
     ]
     ax.legend(
         handles=legend_handles,

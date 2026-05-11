@@ -31,8 +31,8 @@ from Map import Map
 RUNS = [
     {
         "key": "single_surface_flat",
-        "label": "Rovinná trať",
-        "description": "Rovinná trať s jedným povrchom",
+        "label": "Flat track",
+        "description": "Flat track s jedným povrchom",
         "run_dir": Path(
             "logs/tm_finetune_runs/"
             "20260510_092555_tm_finetune_map_single_surface_flat_v2d_asphalt_h48x24_p48_src_resume_population_gen_0170"
@@ -58,8 +58,8 @@ RUNS = [
     },
     {
         "key": "single_surface_height",
-        "label": "Výškové rozdiely",
-        "description": "Trať s výškovými rozdielmi",
+        "label": "Height changes",
+        "description": "Track with height changes",
         "run_dir": Path(
             "logs/tm_finetune_runs/"
             "20260506_160030_tm_seed_map_single_surface_height_v3d_asphalt_h48x24_p48_src_best_model"
@@ -67,8 +67,8 @@ RUNS = [
     },
     {
         "key": "multi_surface_flat",
-        "label": "Rôzne povrchy",
-        "description": "Rovinná trať s rôznymi povrchmi",
+        "label": "Different surfaces",
+        "description": "Flat track s rôznymi povrchmi",
         "run_dir": Path(
             "logs/tm_finetune_runs/"
             "20260507_090226_tm_seed_map_multi_surface_flat_v2d_surface_h48x24_p48_src_best_model"
@@ -77,8 +77,8 @@ RUNS = [
 ]
 
 
-OUTPUT_DIR = ROOT / "Diplomová práca" / "Experiments" / "final_ga_training_20260507"
-IMAGE_DIR = ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+OUTPUT_DIR = ROOT / "Masters thesis" / "Experiments" / "final_ga_training_20260507"
+IMAGE_DIR = ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 
 
 @dataclass
@@ -259,26 +259,26 @@ def _plot_progress(runs: list[RunData]) -> Path:
         mean = pd.to_numeric(df["mean_progress"], errors="coerce").to_numpy(dtype=np.float64)
         finish_count = pd.to_numeric(df["finish_count"], errors="coerce").fillna(0).to_numpy(dtype=np.float64)
 
-        axis.plot(x, best, color=colors["best"], linewidth=2.25, label="najlepší progres")
-        axis.plot(x, mean, color=colors["mean"], linewidth=1.8, linestyle="--", label="priemer populácie")
+        axis.plot(x, best, color=colors["best"], linewidth=2.25, label="best progress")
+        axis.plot(x, mean, color=colors["mean"], linewidth=1.8, linestyle="--", label="population mean")
         first_finish = run.summary["first_finish_generation"]
         if first_finish != "":
             generations = pd.to_numeric(df["generation"], errors="coerce").to_numpy(dtype=np.float64)
             finish_x = x[np.where(generations == float(first_finish))[0][0]]
-            axis.axvline(finish_x, color=colors["finish"], linewidth=1.35, linestyle=":", label="prvé dokončenie")
+            axis.axvline(finish_x, color=colors["finish"], linewidth=1.35, linestyle=":", label="first finish")
         if np.nanmax(finish_count) > 0:
             finish_scaled = finish_count / max(float(run.config.get("pop_size", 48)), 1.0) * 100.0
-            axis.fill_between(x, 0, finish_scaled, color="#16a34a", alpha=0.12, linewidth=0, label="podiel dokončení")
+            axis.fill_between(x, 0, finish_scaled, color="#16a34a", alpha=0.12, linewidth=0, label="finish rate")
 
         axis.set_title(run.label, fontsize=12)
-        axis.set_xlabel("Relatívny priebeh tréningu [%]")
+        axis.set_xlabel("Relative training progress [%]")
         axis.set_ylim(0, 103)
         axis.grid(True, alpha=0.22)
 
-    axes[0].set_ylabel("Progres [%]")
+    axes[0].set_ylabel("Progress [%]")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False, fontsize=9)
-    fig.suptitle("Finálne tréningové behy genetického algoritmu", fontsize=14, y=0.99)
+    fig.suptitle("Final genetic-algorithm training runs", fontsize=14, y=0.99)
     fig.subplots_adjust(left=0.055, right=0.995, top=0.82, bottom=0.22, wspace=0.12)
     output = IMAGE_DIR / "final_ga_training_progress.pdf"
     fig.savefig(output, bbox_inches="tight", pad_inches=0.035)
@@ -323,8 +323,8 @@ def _plot_trajectories(runs: list[RunData]) -> Path:
         collection_for_colorbar = collection
 
         time_text = f"{run.summary['best_trajectory_time_s']:.2f} s".replace(".", ",")
-        progress_text = f"{run.summary['best_trajectory_progress_pct']:.1f} %".replace(".", ",")
-        title = f"{run.label}\nčas {time_text}, progres {progress_text}"
+        progress_text = f"{run.summary['best_trajectory_progress_pct']:.1f} %"
+        title = f"{run.label}\ntime {time_text}, progress {progress_text}"
         axis.set_title(title, fontsize=11)
         axis.set_xlabel("")
         axis.set_ylabel("")
@@ -332,11 +332,11 @@ def _plot_trajectories(runs: list[RunData]) -> Path:
         axis.set_yticks([])
 
     block_legend = [
-        Patch(facecolor="#b9b9b9", edgecolor="#555555", label="asfalt"),
-        Patch(facecolor="#b7d984", edgecolor="#6b8f3a", label="tráva"),
-        Patch(facecolor="#a2642f", edgecolor="#6b3d1e", label="hlina"),
-        Patch(facecolor="#16a34a", edgecolor="#0f6f32", label="štart"),
-        Patch(facecolor="#dc2626", edgecolor="#8f1d1d", label="cieľ"),
+        Patch(facecolor="#b9b9b9", edgecolor="#555555", label="asphalt"),
+        Patch(facecolor="#b7d984", edgecolor="#6b8f3a", label="grass"),
+        Patch(facecolor="#a2642f", edgecolor="#6b3d1e", label="dirt"),
+        Patch(facecolor="#16a34a", edgecolor="#0f6f32", label="start"),
+        Patch(facecolor="#dc2626", edgecolor="#8f1d1d", label="finish"),
     ]
     fig.legend(
         handles=block_legend,
@@ -344,7 +344,7 @@ def _plot_trajectories(runs: list[RunData]) -> Path:
         bbox_to_anchor=(0.995, 0.48),
         frameon=True,
         fontsize=8,
-        title="Bloky",
+        title="Blocks",
         title_fontsize=9,
         borderpad=0.55,
         labelspacing=0.45,
@@ -360,9 +360,9 @@ def _plot_trajectories(runs: list[RunData]) -> Path:
             pad=0.04,
             aspect=52,
         )
-        colorbar.set_label("Rýchlosť [km/h]  (modrá = rýchlejšie, červená = pomalšie)", fontsize=8)
+        colorbar.set_label("Speed [km/h]  (blue = faster, red = slower)", fontsize=8)
         colorbar.ax.tick_params(labelsize=8)
-    fig.suptitle("Najlepšie zaznamenané trajektórie finálnych behov", fontsize=14, y=0.99)
+    fig.suptitle("Best recorded trajectories of final runs", fontsize=14, y=0.99)
     fig.subplots_adjust(left=0.02, right=0.89, top=0.82, bottom=0.14, wspace=0.18)
     output = IMAGE_DIR / "final_ga_training_trajectories.pdf"
     fig.savefig(output, bbox_inches="tight", pad_inches=0.035)

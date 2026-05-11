@@ -33,7 +33,7 @@ INPUT_DIR = (
     / "supervised_butterfly_sweep_20260507"
     / "single_surface_flat"
 )
-OUTPUT_DIR = REPO_ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+OUTPUT_DIR = REPO_ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 FIGURE_STEM = "supervised_behavior_cloning_butterfly_p04_left_120"
 MAP_NAME = "single_surface_flat"
 
@@ -85,10 +85,10 @@ def draw_path(ax, points: np.ndarray, *, color: str, linewidth: float, alpha: fl
 
 def add_slovak_map_legend(fig) -> None:
     handles = [
-        Patch(facecolor="#159947", edgecolor="none", label="štart"),
-        Patch(facecolor="#dc2626", edgecolor="none", label="cieľ"),
-        Patch(facecolor="#b7b7b7", edgecolor="none", label="cesta"),
-        Patch(facecolor="#2f2f2f", edgecolor="none", label="okraj trate"),
+        Patch(facecolor="#159947", edgecolor="none", label="start"),
+        Patch(facecolor="#dc2626", edgecolor="none", label="finish"),
+        Patch(facecolor="#b7b7b7", edgecolor="none", label="road"),
+        Patch(facecolor="#2f2f2f", edgecolor="none", label="track boundary"),
     ]
     fig.legend(
         handles=handles,
@@ -163,8 +163,8 @@ def build_figure() -> None:
         )
 
     handles = [
-        Line2D([0], [0], color=BASELINE_COLOR, lw=3.15, label="pôvodný prejazd"),
-        Line2D([0], [0], color=PERTURBED_COLOR, lw=3.45, label="prejazd po nanútenej zmene akcie"),
+        Line2D([0], [0], color=BASELINE_COLOR, lw=3.15, label="baseline run"),
+        Line2D([0], [0], color=PERTURBED_COLOR, lw=3.45, label="run after forced action change"),
         Line2D(
             [0],
             [0],
@@ -173,7 +173,7 @@ def build_figure() -> None:
             markerfacecolor=PERTURB_MARKER_COLOR,
             markeredgecolor="#111827",
             markersize=7,
-            label="začiatok zásahu",
+            label="perturbation start",
         ),
         Line2D(
             [0],
@@ -183,7 +183,7 @@ def build_figure() -> None:
             markerfacecolor=CRASH_COLOR,
             markeredgecolor=CRASH_COLOR,
             markersize=6,
-            label="kontakt so stenou",
+            label="wall contact",
         ),
     ]
     ax.legend(
@@ -198,10 +198,10 @@ def build_figure() -> None:
     fig.text(
         0.803,
         0.43,
-        "metriky prejazdu\n"
-        "zásah: doľava, 120 krokov\n"
-        f"pôvodný: {fmt_seconds(baseline_metrics['time'])} s, {int(float(baseline_metrics['crashes']))} kontaktov\n"
-        f"po zásahu: {fmt_seconds(perturbed_metrics['time'])} s, {int(float(perturbed_metrics['crashes']))} kontaktov",
+        "run metrics\n"
+        "forced action: left, 120 steps\n"
+        f"baseline: {fmt_seconds(baseline_metrics['time'])} s, {int(float(baseline_metrics['crashes']))} contacts\n"
+        f"after perturbation: {fmt_seconds(perturbed_metrics['time'])} s, {int(float(perturbed_metrics['crashes']))} contacts",
         ha="left",
         va="top",
         fontsize=9.4,

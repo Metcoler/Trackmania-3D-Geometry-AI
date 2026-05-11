@@ -127,9 +127,9 @@ def add_mesh(
 
 def draw_block_meshes() -> None:
     specs = [
-        ("RoadTechStraight.obj", "rovný blok"),
-        ("RoadTechCurve1.obj", "krátka zákruta"),
-        ("RoadTechCurve2.obj", "dlhšia zákruta"),
+        ("RoadTechStraight.obj", "straight block"),
+        ("RoadTechCurve1.obj", "short curve"),
+        ("RoadTechCurve2.obj", "longer curve"),
     ]
     fig = plt.figure(figsize=(12.5, 4.3), facecolor="white")
     for idx, (mesh_name, title) in enumerate(specs, start=1):
@@ -334,10 +334,10 @@ def draw_height_raycast_profile() -> None:
     ax.set_facecolor("white")
     ax.set_axis_off()
     proxy_handles = [
-        Line2D([0], [0], color=BLUE, lw=3.0, label="lúč po profile trate"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=INK, markersize=7, label="počiatok lúča"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=RED, markersize=8, label="koncový bod / stena"),
-        patches.Patch(facecolor="#f59e0b", edgecolor="#ea580c", alpha=0.45, label="lokálna plocha"),
+        Line2D([0], [0], color=BLUE, lw=3.0, label="ray along track profile"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=INK, markersize=7, label="ray origin"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor=RED, markersize=8, label="end point / wall"),
+        patches.Patch(facecolor="#f59e0b", edgecolor="#ea580c", alpha=0.45, label="local surface"),
     ]
     ax.legend(
         handles=proxy_handles,
@@ -374,7 +374,6 @@ def load_map_without_mesh_export(map_name: str) -> Map:
 def best_teacher_attempt() -> Path:
     summary_path = (
         ROOT
-        / "Diplomová práca"
         / "Experiments"
         / "supervised_map_specialists_20260505"
         / "analysis"
@@ -426,7 +425,7 @@ def draw_track_drive_preview() -> None:
     ax.text(
         0.02,
         0.96,
-        f"zaznamenaný prejazd: {finish_time:.2f} s",
+        f"recorded run: {finish_time:.2f} s",
         transform=ax.transAxes,
         ha="left",
         va="top",
@@ -445,7 +444,7 @@ def draw_track_drive_preview() -> None:
     speed_floor_kmh = speed_floor_mps * 3.6
     speed_ceiling_kmh = speed_ceiling_mps * 3.6
     cax.set_yticklabels([f"≤ {speed_floor_kmh:.0f} km/h", f"{speed_ceiling_kmh:.0f} km/h"], fontsize=10)
-    cax.set_title("rýchlosť", fontsize=10, pad=6)
+    cax.set_title("speed", fontsize=10, pad=6)
     for spine in cax.spines.values():
         spine.set_visible(False)
     fig.savefig(OUT_DIR / "solution_track_drive_preview.pdf", bbox_inches="tight", pad_inches=0.03)
@@ -457,7 +456,7 @@ def draw_game_vs_agent_view() -> None:
     game = mpimg.imread(OUT_DIR / "game_view.png")
     agent = mpimg.imread(OUT_DIR / "agent_view.png")
     fig, axes = plt.subplots(1, 2, figsize=(12.6, 4.7), facecolor="white")
-    for ax, image, title in zip(axes, (game, agent), ("pohľad hry", "virtuálna reprezentácia")):
+    for ax, image, title in zip(axes, (game, agent), ("game view", "virtual representation")):
         ax.imshow(image)
         ax.set_title(title, fontsize=12, pad=6)
         ax.axis("off")
@@ -524,12 +523,12 @@ def draw_dataflow_loop() -> None:
 
     for key, text, fc, ec in (
         ("tm", "Trackmania", env_fc, env_ec),
-        ("script", "herný\nskript", env_fc, env_ec),
+        ("script", "game\nscript", env_fc, env_ec),
         ("runtime", "Python\nruntime", py_fc, py_ec),
-        ("world", "virtuálna\nmapa", py_fc, py_ec),
-        ("obs", "pozorovanie", py_fc, py_ec),
-        ("policy", "politika", policy_fc, policy_ec),
-        ("action", "akcia", env_fc, env_ec),
+        ("world", "virtual\nmap", py_fc, py_ec),
+        ("obs", "observation", py_fc, py_ec),
+        ("policy", "policy", policy_fc, policy_ec),
+        ("action", "action", env_fc, env_ec),
     ):
         box(ax, positions[key], text, fc=fc, ec=ec, width=widths[key])
 
@@ -554,12 +553,12 @@ def draw_dataflow_loop() -> None:
         xytext=(tm_left, positions["tm"][1]),
         arrowprops=dict(arrowstyle="-|>", color=env_ec, lw=1.8),
     )
-    ax.text(6.22, 0.27, "akcia sa prejaví v hre a vznikne nový stav", ha="center", va="center", fontsize=9.5, color=env_ec)
+    ax.text(6.22, 0.27, "the action affects the game and creates a new state", ha="center", va="center", fontsize=9.5, color=env_ec)
 
-    ax.text(5.92, 2.48, "spracovanie v našom systéme", ha="center", va="center", fontsize=10, color=py_ec)
+    ax.text(5.92, 2.48, "processing in our system", ha="center", va="center", fontsize=10, color=py_ec)
     ax.plot([3.45, 9.38], [2.28, 2.28], color=py_ec, lw=1.1, alpha=0.55)
-    ax.text(0.85, 2.48, "cieľové prostredie", ha="center", va="center", fontsize=10, color=env_ec)
-    ax.text(10.66, 2.48, "rozhodnutie", ha="center", va="center", fontsize=10, color=policy_ec)
+    ax.text(0.85, 2.48, "target environment", ha="center", va="center", fontsize=10, color=env_ec)
+    ax.text(10.66, 2.48, "decision", ha="center", va="center", fontsize=10, color=policy_ec)
 
     fig.savefig(OUT_DIR / "solution_dataflow_loop.pdf", bbox_inches="tight", pad_inches=0.04)
     fig.savefig(OUT_DIR / "solution_dataflow_loop.png", dpi=180, bbox_inches="tight", pad_inches=0.04)
@@ -672,8 +671,8 @@ def draw_game_agent_loop() -> None:
     actuator_y = agent_bottom + gate_margin_y
     policy_y = agent_center_y - policy_h / 2.0
 
-    loop_box(ax, (policy_cx - policy_w / 2, policy_y), policy_w, policy_h, "politika\n$\\pi_\\theta$", fc="white", ec=blue, fontsize=12)
-    loop_box(ax, (gate_x, sensor_y - 0.39), gate_w, 0.78, "herný skript\n+ 3D projekcia", fc="white", ec=blue, fontsize=9.4, lw=1.35)
+    loop_box(ax, (policy_cx - policy_w / 2, policy_y), policy_w, policy_h, "policy\n$\\pi_\\theta$", fc="white", ec=blue, fontsize=12)
+    loop_box(ax, (gate_x, sensor_y - 0.39), gate_w, 0.78, "game script\n+ 3D projection", fc="white", ec=blue, fontsize=9.4, lw=1.35)
     loop_box(ax, (gate_x, actuator_y - 0.34), gate_w, 0.68, "Virtual\nGamepad", fc="white", ec=blue, fontsize=9.8, lw=1.35)
 
     env_x = 9.05
@@ -696,7 +695,7 @@ def draw_game_agent_loop() -> None:
     ax.text(
         4.60,
         sensor_y,
-        "pozorovanie $o_t$\nodmena $r_t$",
+        "observation $o_t$\nreward $r_t$",
         ha="center",
         va="center",
         fontsize=10,
@@ -709,7 +708,7 @@ def draw_game_agent_loop() -> None:
     ax.text(
         4.60,
         actuator_y,
-        "akcia\n$a_t$",
+        "action\n$a_t$",
         ha="center",
         va="center",
         fontsize=10,

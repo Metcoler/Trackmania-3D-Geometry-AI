@@ -33,7 +33,8 @@ FIELDS = [
 ]
 
 THIS_DIR = Path(__file__).resolve().parent
-THESIS_ROOT = THIS_DIR.parents[2]
+REPO_ROOT = THIS_DIR.parents[3]
+THESIS_ROOT = REPO_ROOT / "Masters thesis"
 IMAGE_DIR = THESIS_ROOT / "Latex" / "images" / "theory"
 
 RAW_JSON = THIS_DIR / "a01_race_replays_raw.json"
@@ -117,7 +118,17 @@ def compute_kde(values: np.ndarray, grid: np.ndarray) -> np.ndarray:
 
 
 def comma(value: float, digits: int = 2) -> str:
-    return f"{value:.{digits}f}".replace(".", ",")
+    return f"{value:.{digits}f}"
+
+
+def load_cached_rows() -> list[dict[str, Any]]:
+    if not FILTERED_CSV.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with FILTERED_CSV.open("r", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            rows.append({"ReplayTime": float(row["replay_time_ms"])})
+    return rows
 
 
 def write_filtered_csv(rows: list[dict[str, Any]]) -> None:
@@ -226,13 +237,13 @@ def draw_figure(rows: list[dict[str, Any]]) -> None:
         alpha=0.88,
         label="histogram top 1000",
     )
-    ax.plot(grid, density, color="#1F5F99", linewidth=2.4, label="vyhladený odhad hustoty")
+    ax.plot(grid, density, color="#1F5F99", linewidth=2.4, label="smoothed density estimate")
 
     ax.axvline(best, color="#C44E52", linewidth=2.0)
-    ax.text(best, ax.get_ylim()[1] * 0.92, f"najlepší\n{comma(best)} s", ha="left", va="top", color="#8F1D21", fontsize=9)
+    ax.text(best, ax.get_ylim()[1] * 0.92, f"best\n{comma(best)} s", ha="left", va="top", color="#8F1D21", fontsize=9)
 
     ax.axvline(median, color="#F58518", linewidth=2.0, linestyle="--")
-    ax.text(median, ax.get_ylim()[1] * 0.92, f"medián\n{comma(median)} s", ha="left", va="top", color="#9A4D00", fontsize=9)
+    ax.text(median, ax.get_ylim()[1] * 0.92, f"median\n{comma(median)} s", ha="left", va="top", color="#9A4D00", fontsize=9)
 
     y_arrow = ax.get_ylim()[1] * 0.78
     ax.annotate(
@@ -241,7 +252,7 @@ def draw_figure(rows: list[dict[str, Any]]) -> None:
         xytext=(best, y_arrow),
         arrowprops={"arrowstyle": "<->", "color": "#1F2937", "linewidth": 1.6},
     )
-    ax.text(best + 0.25, y_arrow * 1.04, "0,5 s", ha="center", va="bottom", color="#1F2937", fontsize=10)
+    ax.text(best + 0.25, y_arrow * 1.04, "0.5 s", ha="center", va="bottom", color="#1F2937", fontsize=10)
 
     ranges_text = (
         f"top 10: {comma(values[9] - values[0])} s\n"
@@ -260,9 +271,9 @@ def draw_figure(rows: list[dict[str, Any]]) -> None:
         bbox={"boxstyle": "round,pad=0.35", "facecolor": "#F8FAFC", "edgecolor": "#CBD5E1", "linewidth": 0.8},
     )
 
-    ax.set_title("Ľudské leaderboard časy na mape A01-Race")
-    ax.set_xlabel("čas prejazdu [s]")
-    ax.set_ylabel("hustota")
+    ax.set_title("Human leaderboard times on A01-Race")
+    ax.set_xlabel("run time [s]")
+    ax.set_ylabel("density")
     ax.set_xlim(x_min, x_max)
     ax.grid(True, axis="y", color="#E5E7EB", linewidth=0.8)
     ax.spines["top"].set_visible(False)
@@ -275,6 +286,11 @@ def draw_figure(rows: list[dict[str, Any]]) -> None:
 
 
 def main() -> None:
+    cached_rows = load_cached_rows()
+    if cached_rows:
+        draw_figure(cached_rows[:1000])
+        return
+
     pages = fetch_all_pages()
     raw_rows = flatten_pages(pages)
     latest_track_at = max(row["TrackAt"] for row in raw_rows if row.get("TrackAt"))

@@ -9,7 +9,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 ANALYSIS_DIR = ROOT / "analysis" / "rl_reward_equivalent_sweep_20260505"
-THESIS_IMAGE_DIR = ROOT.parents[1] / "Diplomová práca" / "Latex" / "images" / "training_policy"
+THESIS_IMAGE_DIR = ROOT.parents[1] / "Masters thesis" / "Latex" / "images" / "training_policy"
 
 
 RUN_ORDER = [
@@ -95,15 +95,15 @@ def plot_progress(combined: pd.DataFrame) -> None:
             linewidth=2.3,
         )
 
-    axes[0].set_title("Najlepší dosiahnutý progres")
-    axes[0].set_ylabel("Progres [%]")
+    axes[0].set_title("Best achieved progress")
+    axes[0].set_ylabel("Progress [%]")
     axes[0].set_ylim(-2, 104)
-    axes[0].set_xlabel("Epizóda")
+    axes[0].set_xlabel("Episode")
 
-    axes[1].set_title("Kĺzavý priemer progresu")
-    axes[1].set_ylabel("Progres [%]")
+    axes[1].set_title("Rolling mean progress")
+    axes[1].set_ylabel("Progress [%]")
     axes[1].set_ylim(-2, 104)
-    axes[1].set_xlabel("Epizóda")
+    axes[1].set_xlabel("Episode")
 
     for ax in axes:
         style_axes(ax)
@@ -147,8 +147,8 @@ def plot_results_summary(summary: pd.DataFrame) -> None:
 
     finish_counts = aggregated["finish_count"].astype(float).to_numpy()
     bars = axes[0].bar(x, finish_counts, color=colors, edgecolor="#303642", linewidth=0.8)
-    axes[0].set_title("Počet dokončení")
-    axes[0].set_ylabel("Počet epizód")
+    axes[0].set_title("Number of finishes")
+    axes[0].set_ylabel("Episode count")
     axes[0].set_xticks(x)
     axes[0].set_xticklabels(labels, rotation=24, ha="right")
     axes[0].set_ylim(0, max(50, finish_counts.max() * 1.22))
@@ -166,8 +166,8 @@ def plot_results_summary(summary: pd.DataFrame) -> None:
     finite_times = np.isfinite(best_times)
     plotted_times = np.where(finite_times, best_times, 0.0)
     bars = axes[1].bar(x, plotted_times, color=colors, edgecolor="#303642", linewidth=0.8)
-    axes[1].set_title("Najlepší dokončený čas")
-    axes[1].set_ylabel("Čas [s]")
+    axes[1].set_title("Best finished time")
+    axes[1].set_ylabel("Time [s]")
     axes[1].set_xticks(x)
     axes[1].set_xticklabels(labels, rotation=24, ha="right")
     axes[1].set_ylim(0, 31)
@@ -178,7 +178,7 @@ def plot_results_summary(summary: pd.DataFrame) -> None:
         else:
             bar.set_facecolor("#d8dbe2")
             bar.set_hatch("//")
-            axes[1].text(cx, 1.2, "bez\ncieľa", ha="center", va="bottom", fontsize=8, color="#333333")
+            axes[1].text(cx, 1.2, "no\nfinish", ha="center", va="bottom", fontsize=8, color="#333333")
 
     for ax in axes:
         style_axes(ax)
@@ -210,13 +210,13 @@ def plot_episode_outcomes(summary: pd.DataFrame) -> None:
     timeouts = aggregated["timeouts"].to_numpy()
 
     fig, ax = plt.subplots(figsize=(10.4, 5.2))
-    ax.bar(x, finished, label="dokončenie", color="#2ca25f", edgecolor="#303642", linewidth=0.6)
-    ax.bar(x, crashes, bottom=finished, label="náraz", color="#de5b49", edgecolor="#303642", linewidth=0.6)
+    ax.bar(x, finished, label="finish", color="#2ca25f", edgecolor="#303642", linewidth=0.6)
+    ax.bar(x, crashes, bottom=finished, label="crash", color="#de5b49", edgecolor="#303642", linewidth=0.6)
     ax.bar(x, timeouts, bottom=finished + crashes, label="timeout", color="#8da0cb", edgecolor="#303642", linewidth=0.6)
-    ax.set_ylabel("Počet epizód")
+    ax.set_ylabel("Episode count")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=22, ha="right")
-    ax.set_title("Výsledky epizód")
+    ax.set_title("Episode outcomes")
     style_axes(ax)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=3, frameon=False)
     fig.subplots_adjust(bottom=0.28)

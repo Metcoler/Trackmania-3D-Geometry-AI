@@ -8,7 +8,7 @@ from matplotlib.lines import Line2D
 
 
 ROOT = Path(__file__).resolve().parents[3]
-OUTPUT_DIR = ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+OUTPUT_DIR = ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 
 DIRECT_RUN = ROOT / (
     "Experiments/runs_ga_moo/"
@@ -24,13 +24,13 @@ ADJUSTED_RUN = ROOT / (
 
 RUNS = [
     {
-        "label": "priame metriky",
+        "label": "direct metrics",
         "generation": DIRECT_RUN / "generation_metrics.csv",
         "individual": DIRECT_RUN / "individual_metrics.csv",
         "color": "#ef4444",
     },
     {
-        "label": "metriky viazané na progres",
+        "label": "progress-weighted metrics",
         "generation": ADJUSTED_RUN / "generation_metrics.csv",
         "individual": ADJUSTED_RUN / "individual_metrics.csv",
         "color": "#2563eb",
@@ -78,9 +78,9 @@ def draw_progress_comparison() -> None:
             )
         axes[1].plot(x, df["mean_progress"], color=run["color"], linewidth=2.0, label=run["label"])
 
-    axes[0].set_ylabel("Najlepší progres [%]")
-    axes[1].set_ylabel("Priemerný progres [%]")
-    axes[1].set_xlabel("Generácia")
+    axes[0].set_ylabel("Best progress [%]")
+    axes[1].set_ylabel("Mean progress [%]")
+    axes[1].set_xlabel("Generation")
 
     for ax in axes:
         ax.set_ylim(-2, 104)
@@ -89,7 +89,7 @@ def draw_progress_comparison() -> None:
         ax.spines["right"].set_visible(False)
 
     axes[0].legend(loc="upper left", frameon=True, framealpha=0.94, fontsize=10)
-    fig.suptitle("Pareto porovnávanie cieľov: priebeh progresu", fontsize=14, y=0.985)
+    fig.suptitle("Pareto comparison: progress over generations", fontsize=14, y=0.985)
     fig.tight_layout(rect=[0, 0, 1, 0.965])
     save_figure(fig, "pareto_moo_progress_comparison")
 
@@ -149,19 +149,19 @@ def draw_front_diagnostic() -> None:
             )
 
         ax.set_title(run["label"], fontsize=12)
-        ax.set_xlabel("Progres [%]")
+        ax.set_xlabel("Progress [%]")
         ax.set_xlim(0, 104)
         ax.set_ylim(0, 31)
         ax.grid(True, alpha=0.24)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    axes[0].set_ylabel("Čas jazdy [s]")
+    axes[0].set_ylabel("Driving time [s]")
 
     legend_handles = [
-        Line2D([0], [0], marker="o", color="none", markerfacecolor="#d1d5db", markersize=7, label="mimo Pareto frontu"),
-        Line2D([0], [0], marker="X", color="none", markerfacecolor="#ef4444", markeredgecolor="#7f1d1d", markersize=8, label="Pareto front: náraz"),
-        Line2D([0], [0], marker="o", color="none", markerfacecolor="#16a34a", markeredgecolor="#14532d", markersize=8, label="Pareto front: cieľ"),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor="#d1d5db", markersize=7, label="outside Pareto front"),
+        Line2D([0], [0], marker="X", color="none", markerfacecolor="#ef4444", markeredgecolor="#7f1d1d", markersize=8, label="Pareto front: crash"),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor="#16a34a", markeredgecolor="#14532d", markersize=8, label="Pareto front: finish"),
     ]
     fig.legend(
         handles=legend_handles,
@@ -171,7 +171,7 @@ def draw_front_diagnostic() -> None:
         bbox_to_anchor=(0.5, -0.015),
         fontsize=10,
     )
-    fig.suptitle("Finálny Pareto front po 300 generáciách", fontsize=14, y=0.98)
+    fig.suptitle("Final Pareto front after 300 generations", fontsize=14, y=0.98)
     fig.tight_layout(rect=[0, 0.08, 1, 0.94])
     save_figure(fig, "pareto_moo_front_diagnostic")
 

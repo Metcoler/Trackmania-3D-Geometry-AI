@@ -12,7 +12,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 SUMMARY_CSV = PACKAGE_ROOT / "analysis" / "ga_hyperparam_refinement_20260504" / "summary.csv"
-OUT_DIR = ROOT / "Diplomová práca" / "Latex" / "images" / "training_policy"
+OUT_DIR = ROOT / "Masters thesis" / "Latex" / "images" / "training_policy"
 
 
 def _format_decimal(value: float, decimals: int = 1) -> str:
@@ -111,7 +111,7 @@ def draw_selection_pressure(summary: pd.DataFrame) -> None:
         finish_rate,
         parents,
         elites,
-        title="Dokončenia v posledných generáciách [%]",
+        title="Finishes in late generations [%]",
         cmap="YlGnBu",
         vmin=0,
         vmax=max(45, float(finish_rate.max().max())),
@@ -122,7 +122,7 @@ def draw_selection_pressure(summary: pd.DataFrame) -> None:
         first_finish,
         parents,
         elites,
-        title="Generácia prvého dokončenia",
+        title="First-finish generation",
         cmap="magma_r",
         vmin=80,
         vmax=205,
@@ -131,20 +131,20 @@ def draw_selection_pressure(summary: pd.DataFrame) -> None:
     )
 
     for ax in axes:
-        ax.set_xlabel("Počet rodičov")
-        ax.set_ylabel("Počet elitných jedincov")
+        ax.set_xlabel("Parent count")
+        ax.set_ylabel("Elite count")
         _highlight_cell(ax, parents, elites, 14, 1, color="#101010", dashed=False)
         _highlight_cell(ax, parents, elites, 14, 2, color="#FFB000", dashed=True)
 
     cbar0 = fig.colorbar(im0, ax=axes[0], shrink=0.86)
-    cbar0.set_label("Dokončenia [%]")
+    cbar0.set_label("Finishes [%]")
     cbar1 = fig.colorbar(im1, ax=axes[1], shrink=0.86)
-    cbar1.set_label("Generácia")
+    cbar1.set_label("Generation")
 
     fig.text(
         0.5,
         -0.02,
-        "Plný rámček označuje najlepší bod podľa refinementu (14 rodičov, 1 elita), prerušovaný rámček praktický baseline s dvoma elitami.",
+        "The solid frame marks the best refinement point (14 parents, 1 elite); the dashed frame marks the practical baseline with two elites.",
         ha="center",
         va="top",
         fontsize=9.2,
@@ -185,7 +185,7 @@ def draw_mutation_grid(summary: pd.DataFrame) -> None:
         finish_rate,
         probs,
         sigmas,
-        title="Dokončenia v posledných generáciách [%]",
+        title="Finishes in late generations [%]",
         cmap="YlGnBu",
         vmin=0,
         vmax=max(30, float(finish_rate.max().max())),
@@ -196,7 +196,7 @@ def draw_mutation_grid(summary: pd.DataFrame) -> None:
         penalized_time,
         probs,
         sigmas,
-        title="Penalizovaný priemerný čas [s]",
+        title="Penalized mean time [s]",
         cmap="YlOrRd",
         vmin=25,
         vmax=30,
@@ -204,15 +204,15 @@ def draw_mutation_grid(summary: pd.DataFrame) -> None:
     )
 
     for ax in axes:
-        ax.set_xlabel("Pravdepodobnosť mutácie")
-        ax.set_ylabel("Smerodajná odchýlka mutácie")
+        ax.set_xlabel("Mutation probability")
+        ax.set_ylabel("Mutation standard deviation")
         _highlight_cell(ax, probs, sigmas, 0.10, 0.25, color="#101010", dashed=False)
         _highlight_cell(ax, probs, sigmas, 0.05, 0.325, color="#FFB000", dashed=True)
 
     cbar0 = fig.colorbar(im0, ax=axes[0], shrink=0.86)
-    cbar0.set_label("Dokončenia [%]")
+    cbar0.set_label("Finishes [%]")
     cbar1 = fig.colorbar(im1, ax=axes[1], shrink=0.86)
-    cbar1.set_label("Čas [s]")
+    cbar1.set_label("Time [s]")
 
     fig.text(
         0.5,
